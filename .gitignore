@@ -75,3 +75,6 @@ DerivedDataCache/*
 
 # Local test maps and assets
 /Content/Balhwajeom/Maps/Test/
+
+# Per-user Unreal Engine sandbox content
+/Content/Developers/
