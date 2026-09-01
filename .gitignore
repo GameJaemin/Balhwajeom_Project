@@ -75,6 +75,7 @@ DerivedDataCache/*
 
 # Local test maps and assets
 /Content/Balhwajeom/Maps/Test/
+/Content/Fab/Megascans/Surfaces/Worn_Wooden_Table_Top_tdfhffuq/
 
 # Per-user Unreal Engine sandbox content
 /Content/Developers/

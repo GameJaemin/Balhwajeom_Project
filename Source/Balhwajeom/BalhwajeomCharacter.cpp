@@ -11,6 +11,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "Balhwajeom.h"
+#include "CameraSystem/BalhwajeomPhotoCameraComponent.h"
 
 ABalhwajeomCharacter::ABalhwajeomCharacter()
 {
@@ -92,6 +93,17 @@ void ABalhwajeomCharacter::Look(const FInputActionValue& Value)
 
 void ABalhwajeomCharacter::DoMove(float Right, float Forward)
 {
+	if (UBalhwajeomPhotoCameraComponent* PhotoCamera = FindComponentByClass<UBalhwajeomPhotoCameraComponent>())
+	{
+		if (PhotoCamera->IsInCameraMode())
+		{
+			// While the photo camera is active, WASD pans the shot instead of walking the character.
+			PhotoCamera->PanVertical(Forward);
+			PhotoCamera->PanHorizontal(Right);
+			return;
+		}
+	}
+
 	if (GetController() != nullptr)
 	{
 		// find out which way is forward
@@ -101,10 +113,10 @@ void ABalhwajeomCharacter::DoMove(float Right, float Forward)
 		// get forward vector
 		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 
-		// get right vector 
+		// get right vector
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-		// add movement 
+		// add movement
 		AddMovementInput(ForwardDirection, Forward);
 		AddMovementInput(RightDirection, Right);
 	}
@@ -112,6 +124,17 @@ void ABalhwajeomCharacter::DoMove(float Right, float Forward)
 
 void ABalhwajeomCharacter::DoLook(float Yaw, float Pitch)
 {
+	if (UBalhwajeomPhotoCameraComponent* PhotoCamera = FindComponentByClass<UBalhwajeomPhotoCameraComponent>())
+	{
+		if (PhotoCamera->IsInCameraMode())
+		{
+			// While the photo camera is active, mouse look aims the shot instead of orbiting the follow camera.
+			PhotoCamera->LookYaw(Yaw);
+			PhotoCamera->LookPitch(Pitch);
+			return;
+		}
+	}
+
 	if (GetController() != nullptr)
 	{
 		// add yaw and pitch input to controller
