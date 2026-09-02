@@ -2,6 +2,7 @@
 
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/PlayerController.h"
 #include "Interaction/InspectionComponent.h"
 
 
@@ -183,6 +184,61 @@ void UPlayerInteractionComponent::TickComponent(
 			BoundsOrigin
 		);
 	}
+
+	APlayerController* PlayerController =
+		Cast<APlayerController>(PlayerActor->GetInstigatorController());
+
+	if (!IsValid(PlayerController))
+	{
+		PlayerController = GetWorld()->GetFirstPlayerController();
+	}
+
+	if (!IsValid(PlayerController))
+	{
+		FocusedInspection = nullptr;
+		return;
+	}
+
+	FVector ViewLocation;
+	FRotator ViewRotation;
+
+	PlayerController->GetPlayerViewPoint(
+		ViewLocation,
+		ViewRotation
+	);
+
+	constexpr float FocusTraceDistance = 10000.0f;
+
+	const FVector TraceEnd =
+		ViewLocation +
+		ViewRotation.Vector() * FocusTraceDistance;
+
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(PlayerActor);
+
+	FHitResult HitResult;
+
+	const bool bHit = GetWorld()->LineTraceSingleByChannel(
+		HitResult,
+		ViewLocation,
+		TraceEnd,
+		ECC_Visibility,
+		QueryParams
+	);
+
+	UInspectionComponent* NewFocusedInspection = nullptr;
+
+	if (bHit && IsValid(HitResult.GetActor()))
+	{
+		UInspectionComponent* HitInspection =
+			HitResult.GetActor()->FindComponentByClass<UInspectionComponent>();
+
+		NewFocusedInspection =
+			ResolveFocusedInspection(HitInspection);
+	}
+
+	//FocusedInspection = NewFocusedInspection;
+	SetFocusedInspection(NewFocusedInspection);
 }
 
 
@@ -221,4 +277,63 @@ void UPlayerInteractionComponent::RefreshInspectableObjects()
 int32 UPlayerInteractionComponent::GetInspectableObjectCount() const
 {
 	return InspectableObjects.Num();
+}
+
+UInspectionComponent* UPlayerInteractionComponent::ResolveFocusedInspection(
+	UInspectionComponent* HitInspection
+) const
+{
+	if (!IsValid(HitInspection))
+	{
+		return nullptr;
+	}
+
+	const EPlayerInspectionDistanceState CurrentState =
+		GetDistanceStateForInspectable(HitInspection);
+
+	if (!CanInspectDistanceState(CurrentState))
+	{
+		return nullptr;
+	}
+
+	return HitInspection;
+}
+
+
+UInspectionComponent* UPlayerInteractionComponent::GetFocusedInspection() const
+{
+	return FocusedInspection;
+}
+
+void UPlayerInteractionComponent::SetFocusedInspection(
+	UInspectionComponent* NewFocusedInspection
+)
+{
+	FocusedInspection = NewFocusedInspection;
+}
+
+
+bool UPlayerInteractionComponent::TryInspect(
+	FText& OutInspectionText
+) 
+{
+	OutInspectionText = FText::GetEmpty();
+
+	if (!IsValid(FocusedInspection))
+	{
+		return false;
+	}
+
+	const EPlayerInspectionDistanceState CurrentState =
+		GetDistanceStateForInspectable(FocusedInspection);
+
+	if (!CanInspectDistanceState(CurrentState))
+	{
+		return false;
+	}
+
+	OutInspectionText =
+		FocusedInspection->InspectionText;
+
+	return true;
 }

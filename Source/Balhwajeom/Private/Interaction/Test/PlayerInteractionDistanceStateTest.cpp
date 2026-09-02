@@ -295,4 +295,117 @@ bool FPlayerInteractionCanInspectTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlayerInteractionFocusedInspectionTest,
+	"Balhwajeom.Interaction.Player.FocusedInspection",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FPlayerInteractionFocusedInspectionTest::RunTest(const FString& Parameters)
+{
+	UPlayerInteractionComponent* PlayerInteraction =
+		NewObject<UPlayerInteractionComponent>();
+
+	UInspectionComponent* Inspection =
+		NewObject<UInspectionComponent>();
+
+	Inspection->CloseDistance = 300.0f;
+	Inspection->MiddleDistance = 700.0f;
+	Inspection->MaxDisplayDistance = 1500.0f;
+
+	PlayerInteraction->UpdateDistanceStateForInspectable(
+		Inspection,
+		FVector::ZeroVector,
+		FVector(200.0f, 0.0f, 0.0f)
+	);
+
+	TestTrue(
+		TEXT("Close hit inspection should be accepted as focused"),
+		PlayerInteraction->ResolveFocusedInspection(Inspection)
+		== Inspection
+	);
+
+	PlayerInteraction->UpdateDistanceStateForInspectable(
+		Inspection,
+		FVector::ZeroVector,
+		FVector(500.0f, 0.0f, 0.0f)
+	);
+
+	TestNull(
+		TEXT("Middle hit inspection should not be accepted as focused"),
+		PlayerInteraction->ResolveFocusedInspection(Inspection)
+	);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlayerInteractionTryInspectTest,
+	"Balhwajeom.Interaction.Player.TryInspect",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FPlayerInteractionTryInspectTest::RunTest(const FString& Parameters)
+{
+	UPlayerInteractionComponent* PlayerInteraction =
+		NewObject<UPlayerInteractionComponent>();
+
+	UInspectionComponent* Inspection =
+		NewObject<UInspectionComponent>();
+
+	Inspection->CloseDistance = 300.0f;
+	Inspection->MiddleDistance = 700.0f;
+	Inspection->MaxDisplayDistance = 1500.0f;
+	Inspection->InspectionText =
+		FText::FromString(TEXT("Test Inspection Text"));
+
+	// Close 상태로 만든다.
+	PlayerInteraction->UpdateDistanceStateForInspectable(
+		Inspection,
+		FVector::ZeroVector,
+		FVector(200.0f, 0.0f, 0.0f)
+	);
+
+	PlayerInteraction->SetFocusedInspection(Inspection);
+
+	FText ResultText;
+
+	const bool bInspected =
+		PlayerInteraction->TryInspect(ResultText);
+
+	TestTrue(
+		TEXT("Focused Close inspection should be inspectable"),
+		bInspected
+	);
+
+	TestEqual(
+		TEXT("Inspection text should match"),
+		ResultText.ToString(),
+		FString(TEXT("Test Inspection Text"))
+	);
+
+	// 같은 대상을 Middle 거리로 변경한다.
+	PlayerInteraction->UpdateDistanceStateForInspectable(
+		Inspection,
+		FVector::ZeroVector,
+		FVector(500.0f, 0.0f, 0.0f)
+	);
+
+	ResultText = FText::GetEmpty();
+
+	const bool bMiddleInspected =
+		PlayerInteraction->TryInspect(ResultText);
+
+	TestFalse(
+		TEXT("Focused Middle inspection should not be inspectable"),
+		bMiddleInspected
+	);
+
+	return true;
+}
+
 #endif

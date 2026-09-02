@@ -70,10 +70,27 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Player Interaction")
 	int32 GetInspectableObjectCount() const;
 
+	void SetFocusedInspection(
+		UInspectionComponent* NewFocusedInspection
+	);
+
+	UFUNCTION(BlueprintCallable, Category = "Player Interaction")
+	bool TryInspect(FText& OutInspectionText);
+
+	UFUNCTION(BlueprintPure, Category = "Player Interaction")
+	UInspectionComponent* GetFocusedInspection() const;
+
+	UInspectionComponent* ResolveFocusedInspection(
+		UInspectionComponent* HitInspection
+	) const;
+
 private:
 	UPROPERTY()
 	TArray<TObjectPtr<UInspectionComponent>> InspectableObjects;
 
 	UPROPERTY()
 	TMap<TObjectPtr<UInspectionComponent>, EPlayerInspectionDistanceState> DistanceStates;
+
+	UPROPERTY()
+	TObjectPtr<UInspectionComponent> FocusedInspection = nullptr;
 };
