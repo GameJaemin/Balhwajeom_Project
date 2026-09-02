@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "BalhwajeomEvidenceTypes.h"
 #include "Components/ActorComponent.h"
+#include "Engine/Scene.h"
 #include "BalhwajeomPhotoCameraComponent.generated.h"
 
 class UCameraComponent;
@@ -19,6 +20,11 @@ class BALHWAJEOM_API UBalhwajeomPhotoCameraComponent
 
 public:
     UBalhwajeomPhotoCameraComponent();
+
+    virtual void TickComponent(
+        float DeltaTime,
+        ELevelTick TickType,
+        FActorComponentTickFunction* ThisTickFunction) override;
 
     /** Broadcast right when camera mode fully exits, so an active FixedCameraZone can reclaim the view target. */
     FOnCameraModeExited OnCameraModeExited;
@@ -56,6 +62,17 @@ public:
     UFUNCTION(BlueprintPure, Category = "Photo Camera")
     bool IsInCameraMode() const { return bIsInCameraMode; }
 
+    /** Returns the currently focused target's screen guide and object-authored response. */
+    UFUNCTION(BlueprintPure, Category = "Photo Camera|Focus")
+    bool GetActiveFocusGuide(
+        FVector2D& OutScreenPosition,
+        bool& bOutIsCentered,
+        FBalhwajeomCameraTargetInfo& OutTargetInfo,
+        float& OutOpacity) const;
+
+    UFUNCTION(BlueprintPure, Category = "Photo Camera|Focus")
+    AActor* GetActiveFocusTarget() const { return ActiveFocusTarget.Get(); }
+
     UFUNCTION(BlueprintCallable, Category = "Evidence")
     bool AddEvidence(const FBalhwajeomEvidenceData& NewEvidence);
 
@@ -75,6 +92,12 @@ protected:
     void FinishCameraTransition();
     void PanCamera(const FVector& ScreenDirection, float Value);
     void ShowPhotoFeedback(const FString& Message, const FColor& Color) const;
+    void UpdateEvidenceFocus(float DeltaTime);
+    void RefreshDisplayedGuideSnapshot();
+    bool IsDisplayedGuideSurfaceVisible() const;
+    void ApplyDepthOfField(float DeltaTime, float DesiredFocalDistance, bool bHasFocusedTarget);
+    void ResetEvidenceFocus();
+    bool TryCaptureActiveFocusTarget();
 
     UPROPERTY(Transient)
     TObjectPtr<UCameraComponent> PhotoCamera;
@@ -88,6 +111,61 @@ protected:
     /** Prevents repeated RMB input from restarting or reversing an active fade. */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
     bool bIsCameraTransitioning = false;
+
+    /** Off by default so existing camera Blueprints keep their previous behavior. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus")
+    bool bEnableEvidenceFocusSystem = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus", meta = (ClampMin = "100.0"))
+    float FocusTargetScanDistance = 5000.0f;
+
+    /** Radius around screen center, expressed as a fraction of the shorter viewport edge. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus", meta = (ClampMin = "0.005", ClampMax = "0.5"))
+    float CenterToleranceRatio = 0.075f;
+
+    /** Moves the yellow guide slightly from the traced silhouette edge toward the authored focus point. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Silhouette", meta = (ClampMin = "0.0", ClampMax = "0.5"))
+    float YellowGuideInsetRatio = 0.12f;
+
+    /** Coarse screen-space step used to find the visible complex-collision silhouette. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Silhouette", meta = (ClampMin = "1.0", ClampMax = "64.0"))
+    float SilhouetteTracePixelStep = 12.0f;
+
+    /** Per-target trace budget for one guide update. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Silhouette", meta = (ClampMin = "16", ClampMax = "2048"))
+    int32 SilhouetteTraceMaxSamples = 384;
+
+    /** The guide takes one tracking snapshot per cycle, then fades in and out. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Silhouette", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float FocusGuideTraceInterval = 1.0f;
+
+    /** Minimum delay between event-driven rescans when the cached surface turns away or becomes occluded. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Silhouette", meta = (ClampMin = "0.01", ClampMax = "1.0"))
+    float GuideEarlyRescanCooldown = 0.15f;
+
+    /** Allowed difference between the cached anchor and the first complex trace impact. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Silhouette", meta = (ClampMin = "0.1", ClampMax = "50.0"))
+    float GuideVisibilityImpactTolerance = 5.0f;
+
+    /** Surface normal must face the camera by at least this dot-product value. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Silhouette", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
+    float GuideFacingDotThreshold = 0.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Depth Of Field")
+    bool bEnableEvidenceDepthOfField = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Depth Of Field", meta = (ClampMin = "0.0"))
+    float UnfocusedFocalDistance = 300.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Depth Of Field", meta = (ClampMin = "0.1", ClampMax = "32.0"))
+    float EvidenceFocusFStop = 4.0f;
+
+    /** Higher F-stop keeps the unfocused view readable instead of heavily blurred. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Depth Of Field", meta = (ClampMin = "0.1", ClampMax = "32.0"))
+    float UnfocusedFStop = 5.6f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Depth Of Field", meta = (ClampMin = "0.0"))
+    float FocusInterpolationSpeed = 8.0f;
 
     /** Total fade-out + fade-in time for a camera mode change. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.1"))
@@ -124,6 +202,31 @@ protected:
     FVector CameraModeEntryWorldLocation = FVector::ZeroVector;
     FVector CameraPanWorldOffset = FVector::ZeroVector;
     float SavedFirstPersonFieldOfView = 90.0f;
+
+    FPostProcessSettings SavedPhotoPostProcessSettings;
+    float SavedPostProcessBlendWeight = 1.0f;
+    float CurrentFocalDistance = 300.0f;
+    float FocusGuideTraceElapsed = 0.0f;
+    float EarlyGuideRescanElapsed = 0.0f;
+
+    TWeakObjectPtr<AActor> ActiveFocusTarget;
+    FBalhwajeomCameraTargetInfo ActiveFocusTargetInfo;
+    FVector2D ActiveFocusScreenPosition = FVector2D::ZeroVector;
+    bool bActiveFocusTargetCentered = false;
+    FVector ActiveFocusGuideLocalPosition = FVector::ZeroVector;
+    FVector ActiveFocusGuideLocalNormal = FVector::ZeroVector;
+    bool bActiveFocusGuideLocationValid = false;
+
+    /** Frozen HUD snapshot. It is replaced only while the previous pulse is fully invisible. */
+    TWeakObjectPtr<AActor> DisplayedFocusTarget;
+    FBalhwajeomCameraTargetInfo DisplayedFocusTargetInfo;
+    FVector DisplayedFocusGuideLocalPosition = FVector::ZeroVector;
+    FVector DisplayedFocusGuideLocalNormal = FVector::ZeroVector;
+    bool bDisplayedFocusGuideLocationValid = false;
+    bool bDisplayedFocusGuideVisibilityValid = false;
+
+    /** Captured state is per placed Actor, so copies sharing one EvidenceID remain independent. */
+    TSet<TWeakObjectPtr<AActor>> CapturedFocusTargets;
 
 private:
 
