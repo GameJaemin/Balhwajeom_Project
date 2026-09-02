@@ -59,6 +59,14 @@ EPlayerInspectionDistanceState UPlayerInteractionComponent::ClassifyDistanceBetw
 }
 
 
+bool UPlayerInteractionComponent::CanInspectDistanceState(
+	EPlayerInspectionDistanceState DistanceState
+)
+{
+	return DistanceState == EPlayerInspectionDistanceState::Close;
+}
+
+
 bool UPlayerInteractionComponent::UpdateDistanceStateForInspectable(
 	UInspectionComponent* InspectionComponent,
 	const FVector& PlayerLocation,

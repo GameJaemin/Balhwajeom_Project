@@ -254,4 +254,45 @@ bool FPlayerInteractionDistanceStateChangeTest::RunTest(const FString& Parameter
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlayerInteractionCanInspectTest,
+	"Balhwajeom.Interaction.Player.CanInspect",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FPlayerInteractionCanInspectTest::RunTest(const FString& Parameters)
+{
+	TestFalse(
+		TEXT("OutOfRange should not be inspectable"),
+		UPlayerInteractionComponent::CanInspectDistanceState(
+			EPlayerInspectionDistanceState::OutOfRange
+		)
+	);
+
+	TestFalse(
+		TEXT("Far should not be inspectable"),
+		UPlayerInteractionComponent::CanInspectDistanceState(
+			EPlayerInspectionDistanceState::Far
+		)
+	);
+
+	TestFalse(
+		TEXT("Middle should not be inspectable"),
+		UPlayerInteractionComponent::CanInspectDistanceState(
+			EPlayerInspectionDistanceState::Middle
+		)
+	);
+
+	TestTrue(
+		TEXT("Close should be inspectable"),
+		UPlayerInteractionComponent::CanInspectDistanceState(
+			EPlayerInspectionDistanceState::Close
+		)
+	);
+
+	return true;
+}
+
 #endif

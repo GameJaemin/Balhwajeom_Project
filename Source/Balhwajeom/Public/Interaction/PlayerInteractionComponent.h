@@ -39,6 +39,10 @@ public:
 		float MaxDisplayDistance
 	);
 
+	static bool CanInspectDistanceState(
+		EPlayerInspectionDistanceState DistanceState
+	);
+
 	bool UpdateDistanceStateForInspectable(
 		UInspectionComponent* InspectionComponent,
 		const FVector& PlayerLocation,
