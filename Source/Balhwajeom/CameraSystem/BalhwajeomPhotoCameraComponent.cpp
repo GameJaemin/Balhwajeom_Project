@@ -6,11 +6,13 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
+#include "EngineUtils.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
 #include "TimerManager.h"
 #include "BalhwajeomEvidenceActor.h"
 #include "BalhwajeomEvidenceCameraHUD.h"
+#include "BalhwajeomCameraTargetInterface.h"
 
 namespace
 {
@@ -24,11 +26,270 @@ namespace
 		APawn* OwnerPawn = GetOwningPawn(Component);
 		return OwnerPawn ? OwnerPawn->GetController() : nullptr;
 	}
+
+	bool ProjectActorBoundsToScreen(
+		const AActor* Actor,
+		APlayerController* PlayerController,
+		int32 ViewportWidth,
+		int32 ViewportHeight,
+		FVector2D& OutScreenMin,
+		FVector2D& OutScreenMax)
+	{
+		if (!Actor || !PlayerController)
+		{
+			return false;
+		}
+
+		const FBox Bounds = Actor->GetComponentsBoundingBox(true);
+		if (!Bounds.IsValid)
+		{
+			return false;
+		}
+
+		const FVector Min = Bounds.Min;
+		const FVector Max = Bounds.Max;
+		const FVector Corners[8] =
+		{
+			FVector(Min.X, Min.Y, Min.Z), FVector(Min.X, Min.Y, Max.Z),
+			FVector(Min.X, Max.Y, Min.Z), FVector(Min.X, Max.Y, Max.Z),
+			FVector(Max.X, Min.Y, Min.Z), FVector(Max.X, Min.Y, Max.Z),
+			FVector(Max.X, Max.Y, Min.Z), FVector(Max.X, Max.Y, Max.Z)
+		};
+
+		FVector2D ScreenMin(TNumericLimits<float>::Max(), TNumericLimits<float>::Max());
+		FVector2D ScreenMax(TNumericLimits<float>::Lowest(), TNumericLimits<float>::Lowest());
+		bool bProjectedAnyCorner = false;
+		for (const FVector& Corner : Corners)
+		{
+			FVector2D ScreenCorner;
+			if (PlayerController->ProjectWorldLocationToScreen(Corner, ScreenCorner, false))
+			{
+				ScreenMin.X = FMath::Min(ScreenMin.X, ScreenCorner.X);
+				ScreenMin.Y = FMath::Min(ScreenMin.Y, ScreenCorner.Y);
+				ScreenMax.X = FMath::Max(ScreenMax.X, ScreenCorner.X);
+				ScreenMax.Y = FMath::Max(ScreenMax.Y, ScreenCorner.Y);
+				bProjectedAnyCorner = true;
+			}
+		}
+
+		if (!bProjectedAnyCorner || ScreenMax.X < 0.0f || ScreenMax.Y < 0.0f ||
+			ScreenMin.X > ViewportWidth || ScreenMin.Y > ViewportHeight)
+		{
+			return false;
+		}
+
+		OutScreenMin.X = FMath::Clamp(ScreenMin.X, 0.0f, static_cast<float>(ViewportWidth));
+		OutScreenMin.Y = FMath::Clamp(ScreenMin.Y, 0.0f, static_cast<float>(ViewportHeight));
+		OutScreenMax.X = FMath::Clamp(ScreenMax.X, 0.0f, static_cast<float>(ViewportWidth));
+		OutScreenMax.Y = FMath::Clamp(ScreenMax.Y, 0.0f, static_cast<float>(ViewportHeight));
+		return true;
+	}
+
+	bool FindClosestVisibleSilhouettePoint(
+		AActor* Actor,
+		APlayerController* PlayerController,
+		UWorld* World,
+		AActor* TraceOwner,
+		const FVector2D& ViewportCenter,
+		const FVector2D& ScreenBoundsMin,
+		const FVector2D& ScreenBoundsMax,
+		float TraceDistance,
+		float PixelStep,
+		int32 MaxSamples,
+		FVector2D& OutScreenPosition,
+		FVector& OutWorldPosition,
+		FVector& OutWorldNormal)
+	{
+		if (!Actor || !PlayerController || !World || MaxSamples <= 0)
+		{
+			return false;
+		}
+
+		const float Step = FMath::Max(PixelStep, 1.0f);
+		const FVector2D SearchOrigin(
+			FMath::Clamp(ViewportCenter.X, ScreenBoundsMin.X, ScreenBoundsMax.X),
+			FMath::Clamp(ViewportCenter.Y, ScreenBoundsMin.Y, ScreenBoundsMax.Y));
+		int32 SamplesUsed = 0;
+
+		auto TraceScreenPoint = [&] (
+			const FVector2D& ScreenPoint,
+			FVector& OutHitWorldPosition,
+			FVector& OutHitWorldNormal) -> bool
+		{
+			if (ScreenPoint.X < ScreenBoundsMin.X ||
+				ScreenPoint.X > ScreenBoundsMax.X || ScreenPoint.Y < ScreenBoundsMin.Y ||
+				ScreenPoint.Y > ScreenBoundsMax.Y)
+			{
+				return false;
+			}
+			if (++SamplesUsed > MaxSamples)
+			{
+				return false;
+			}
+
+			FVector RayOrigin;
+			FVector RayDirection;
+			if (!PlayerController->DeprojectScreenPositionToWorld(
+				ScreenPoint.X, ScreenPoint.Y, RayOrigin, RayDirection))
+			{
+				return false;
+			}
+
+			FCollisionQueryParams Params(SCENE_QUERY_STAT(EvidenceSilhouetteTrace), true, TraceOwner);
+			Params.bTraceComplex = true;
+			FHitResult Hit;
+			const bool bHitTarget = World->LineTraceSingleByChannel(
+				Hit,
+				RayOrigin,
+				RayOrigin + RayDirection * TraceDistance,
+				ECC_Visibility,
+				Params) && Hit.GetActor() == Actor;
+			if (bHitTarget)
+			{
+				OutHitWorldPosition = Hit.ImpactPoint;
+				OutHitWorldNormal = Hit.ImpactNormal.GetSafeNormal();
+			}
+			return bHitTarget;
+		};
+
+		FVector SearchOriginHit = FVector::ZeroVector;
+		FVector SearchOriginNormal = FVector::ZeroVector;
+		if (TraceScreenPoint(SearchOrigin, SearchOriginHit, SearchOriginNormal))
+		{
+			OutScreenPosition = SearchOrigin;
+			OutWorldPosition = SearchOriginHit;
+			OutWorldNormal = SearchOriginNormal;
+			return true;
+		}
+
+		const float MaxRadius = FVector2D::Distance(ScreenBoundsMin, ScreenBoundsMax);
+		const int32 MaxRings = FMath::CeilToInt(MaxRadius / Step);
+		for (int32 Ring = 1; Ring <= MaxRings && SamplesUsed < MaxSamples; ++Ring)
+		{
+			const float Radius = Ring * Step;
+			FVector2D BestPointThisRing = FVector2D::ZeroVector;
+			FVector BestWorldPointThisRing = FVector::ZeroVector;
+			FVector BestWorldNormalThisRing = FVector::ZeroVector;
+			float BestDistanceThisRing = TNumericLimits<float>::Max();
+
+			auto TryPoint = [&](const FVector2D& Point)
+			{
+				FVector HitWorldPosition = FVector::ZeroVector;
+				FVector HitWorldNormal = FVector::ZeroVector;
+				if (SamplesUsed < MaxSamples &&
+					TraceScreenPoint(Point, HitWorldPosition, HitWorldNormal))
+				{
+					const float Distance = FVector2D::Distance(Point, ViewportCenter);
+					if (Distance < BestDistanceThisRing)
+					{
+						BestDistanceThisRing = Distance;
+						BestPointThisRing = Point;
+						BestWorldPointThisRing = HitWorldPosition;
+						BestWorldNormalThisRing = HitWorldNormal;
+					}
+				}
+			};
+
+			for (float Offset = -Radius; Offset <= Radius && SamplesUsed < MaxSamples; Offset += Step)
+			{
+				TryPoint(SearchOrigin + FVector2D(Offset, -Radius));
+				TryPoint(SearchOrigin + FVector2D(Offset, Radius));
+			}
+			for (float Offset = -Radius + Step; Offset < Radius && SamplesUsed < MaxSamples; Offset += Step)
+			{
+				TryPoint(SearchOrigin + FVector2D(-Radius, Offset));
+				TryPoint(SearchOrigin + FVector2D(Radius, Offset));
+			}
+
+			if (BestDistanceThisRing < TNumericLimits<float>::Max())
+			{
+				// Refine around the first coarse hit so the dot hugs thin or angled edges.
+				FVector2D RefinedPoint = BestPointThisRing;
+				FVector RefinedWorldPoint = BestWorldPointThisRing;
+				FVector RefinedWorldNormal = BestWorldNormalThisRing;
+				for (float RefineStep = Step * 0.5f; RefineStep >= 1.0f && SamplesUsed < MaxSamples;
+					RefineStep *= 0.5f)
+				{
+					FVector2D BestRefinedPoint = RefinedPoint;
+					FVector BestRefinedWorldPoint = RefinedWorldPoint;
+					FVector BestRefinedWorldNormal = RefinedWorldNormal;
+					float BestRefinedDistance = FVector2D::Distance(RefinedPoint, ViewportCenter);
+					for (int32 Y = -1; Y <= 1 && SamplesUsed < MaxSamples; ++Y)
+					{
+						for (int32 X = -1; X <= 1 && SamplesUsed < MaxSamples; ++X)
+						{
+							const FVector2D Point = RefinedPoint + FVector2D(X * RefineStep, Y * RefineStep);
+							FVector HitWorldPosition = FVector::ZeroVector;
+							FVector HitWorldNormal = FVector::ZeroVector;
+							if (TraceScreenPoint(Point, HitWorldPosition, HitWorldNormal))
+							{
+								const float Distance = FVector2D::Distance(Point, ViewportCenter);
+								if (Distance < BestRefinedDistance)
+								{
+									BestRefinedDistance = Distance;
+									BestRefinedPoint = Point;
+									BestRefinedWorldPoint = HitWorldPosition;
+									BestRefinedWorldNormal = HitWorldNormal;
+								}
+							}
+						}
+					}
+					RefinedPoint = BestRefinedPoint;
+					RefinedWorldPoint = BestRefinedWorldPoint;
+					RefinedWorldNormal = BestRefinedWorldNormal;
+				}
+
+				OutScreenPosition = RefinedPoint;
+				OutWorldPosition = RefinedWorldPoint;
+				OutWorldNormal = RefinedWorldNormal;
+				return true;
+			}
+		}
+
+		return false;
+	}
 }
 
 UBalhwajeomPhotoCameraComponent::UBalhwajeomPhotoCameraComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = false;
+}
+
+void UBalhwajeomPhotoCameraComponent::TickComponent(
+	float DeltaTime,
+	ELevelTick TickType,
+	FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (bIsInCameraMode && bEnableEvidenceFocusSystem)
+	{
+		EarlyGuideRescanElapsed += DeltaTime;
+		if (DisplayedFocusTarget.IsValid() && bDisplayedFocusGuideLocationValid &&
+			!IsDisplayedGuideSurfaceVisible())
+		{
+			bDisplayedFocusGuideVisibilityValid = false;
+			if (EarlyGuideRescanElapsed >= GuideEarlyRescanCooldown)
+			{
+				UpdateEvidenceFocus(DeltaTime);
+				RefreshDisplayedGuideSnapshot();
+				FocusGuideTraceElapsed = 0.0f;
+				EarlyGuideRescanElapsed = 0.0f;
+				bDisplayedFocusGuideVisibilityValid = IsDisplayedGuideSurfaceVisible();
+			}
+			return;
+		}
+		bDisplayedFocusGuideVisibilityValid = true;
+
+		FocusGuideTraceElapsed += DeltaTime;
+		if (FocusGuideTraceInterval <= 0.0f || FocusGuideTraceElapsed >= FocusGuideTraceInterval)
+		{
+			UpdateEvidenceFocus(FocusGuideTraceElapsed);
+			RefreshDisplayedGuideSnapshot();
+			FocusGuideTraceElapsed = 0.0f;
+		}
+	}
 }
 
 void UBalhwajeomPhotoCameraComponent::SetPhotoCamera(UCameraComponent* Camera)
@@ -148,6 +409,15 @@ void UBalhwajeomPhotoCameraComponent::TakePhoto()
 		}
 	}
 
+	// The shutter always works. Evidence collection, however, requires a visible target
+	// inside the focus-distance band and the center guide.
+	if (bEnableEvidenceFocusSystem)
+	{
+		UpdateEvidenceFocus(0.0f);
+		TryCaptureActiveFocusTarget();
+		return;
+	}
+
 	const FVector TraceStart = PhotoCamera->GetComponentLocation();
 	const FVector TraceEnd = TraceStart + PhotoCamera->GetForwardVector() * PhotoTraceDistance;
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(EvidencePhotoTrace), true, Owner);
@@ -210,6 +480,8 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 	bIsInCameraMode = true;
 	SavedFirstPersonRelativeTransform = PhotoCamera->GetRelativeTransform();
 	SavedFirstPersonFieldOfView = PhotoCamera->FieldOfView;
+	SavedPhotoPostProcessSettings = PhotoCamera->PostProcessSettings;
+	SavedPostProcessBlendWeight = PhotoCamera->PostProcessBlendWeight;
 	CameraModeEntryWorldLocation = PhotoCamera->GetComponentLocation();
 	CameraPanWorldOffset = FVector::ZeroVector;
 	NormalCamera->SetActive(false);
@@ -227,12 +499,19 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 	{
 		// Reclaim the view target from an active FixedCameraZone so camera mode is always visible,
 		// even while standing inside a zone. The switch happens while the screen is faded to black.
+		// Control rotation is intentionally left untouched (pitch included) so whatever direction
+		// the player was already looking (e.g. from orbit mode) carries straight into camera mode.
 		PlayerController->SetViewTargetWithBlend(GetOwner(), 0.0f);
+	}
 
-		if (const AActor* Owner = GetOwner())
-		{
-			PlayerController->SetControlRotation(FRotator(0.0f, Owner->GetActorRotation().Yaw, 0.0f));
-		}
+	if (bEnableEvidenceFocusSystem)
+	{
+		CurrentFocalDistance = UnfocusedFocalDistance;
+		FocusGuideTraceElapsed = 0.0f;
+		EarlyGuideRescanElapsed = GuideEarlyRescanCooldown;
+		SetComponentTickEnabled(true);
+		UpdateEvidenceFocus(0.0f);
+		RefreshDisplayedGuideSnapshot();
 	}
 }
 
@@ -251,8 +530,17 @@ void UBalhwajeomPhotoCameraComponent::ExitCameraMode()
 	{
 		PhotoCamera->SetRelativeTransform(SavedFirstPersonRelativeTransform);
 		PhotoCamera->SetFieldOfView(SavedFirstPersonFieldOfView);
+		if (bEnableEvidenceFocusSystem)
+		{
+			PhotoCamera->PostProcessSettings = SavedPhotoPostProcessSettings;
+			PhotoCamera->PostProcessBlendWeight = SavedPostProcessBlendWeight;
+		}
 	}
 	CameraPanWorldOffset = FVector::ZeroVector;
+	FocusGuideTraceElapsed = 0.0f;
+	EarlyGuideRescanElapsed = 0.0f;
+	SetComponentTickEnabled(false);
+	ResetEvidenceFocus();
 
 	bIsInCameraMode = false;
 	if (PhotoCamera)
@@ -331,4 +619,358 @@ void UBalhwajeomPhotoCameraComponent::ShowPhotoFeedback(const FString& Message, 
 	{
 		GEngine->AddOnScreenDebugMessage(INDEX_NONE, 3.0f, Color, Message);
 	}
+}
+
+bool UBalhwajeomPhotoCameraComponent::GetActiveFocusGuide(
+	FVector2D& OutScreenPosition,
+	bool& bOutIsCentered,
+	FBalhwajeomCameraTargetInfo& OutTargetInfo,
+	float& OutOpacity) const
+{
+	if (!bEnableEvidenceFocusSystem || !DisplayedFocusTarget.IsValid() ||
+		!bDisplayedFocusGuideVisibilityValid)
+	{
+		OutOpacity = 0.0f;
+		return false;
+	}
+
+	AActor* DisplayedTarget = DisplayedFocusTarget.Get();
+	APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
+	if (!DisplayedTarget || !PlayerController || !bDisplayedFocusGuideLocationValid)
+	{
+		OutOpacity = 0.0f;
+		return false;
+	}
+
+	const FVector SilhouetteGuideWorldPosition = DisplayedTarget->GetActorTransform().TransformPosition(
+		DisplayedFocusGuideLocalPosition);
+	FVector2D SilhouetteGuideScreenPosition;
+	if (!PlayerController->ProjectWorldLocationToScreen(
+		SilhouetteGuideWorldPosition, SilhouetteGuideScreenPosition, false))
+	{
+		OutOpacity = 0.0f;
+		return false;
+	}
+
+	int32 ViewportWidth = 0;
+	int32 ViewportHeight = 0;
+	PlayerController->GetViewportSize(ViewportWidth, ViewportHeight);
+	const FVector2D ViewportCenter(ViewportWidth * 0.5f, ViewportHeight * 0.5f);
+	const float ShortViewportEdge = static_cast<float>(FMath::Min(ViewportWidth, ViewportHeight));
+	bOutIsCentered = ShortViewportEdge > 0.0f &&
+		FVector2D::Distance(SilhouetteGuideScreenPosition, ViewportCenter) <=
+		ShortViewportEdge * CenterToleranceRatio;
+
+	// Pull the yellow guide slightly inside the silhouette toward the authored center.
+	// Once aligned, use that center directly for the fixed green confirmation.
+	OutScreenPosition = SilhouetteGuideScreenPosition;
+	if (DisplayedTarget->GetClass()->ImplementsInterface(UBalhwajeomCameraTargetInterface::StaticClass()))
+	{
+		const FVector CenterWorldPosition =
+			IBalhwajeomCameraTargetInterface::Execute_RequestCameraFocusLocation(DisplayedTarget);
+		FVector2D CenterScreenPosition;
+		if (PlayerController->ProjectWorldLocationToScreen(
+			CenterWorldPosition, CenterScreenPosition, false))
+		{
+			OutScreenPosition = bOutIsCentered
+				? CenterScreenPosition
+				: FMath::Lerp(
+					SilhouetteGuideScreenPosition,
+					CenterScreenPosition,
+					FMath::Clamp(YellowGuideInsetRatio, 0.0f, 0.5f));
+		}
+	}
+	OutTargetInfo = DisplayedFocusTargetInfo;
+	if (bOutIsCentered || FocusGuideTraceInterval <= KINDA_SMALL_NUMBER)
+	{
+		// Green confirmation stays fully visible instead of using the scan pulse.
+		OutOpacity = 1.0f;
+	}
+	else
+	{
+		const float Phase = FMath::Clamp(FocusGuideTraceElapsed / FocusGuideTraceInterval, 0.0f, 1.0f);
+		OutOpacity = FMath::Sin(Phase * PI);
+	}
+	return true;
+}
+
+void UBalhwajeomPhotoCameraComponent::RefreshDisplayedGuideSnapshot()
+{
+	DisplayedFocusTarget = ActiveFocusTarget;
+	DisplayedFocusTargetInfo = ActiveFocusTargetInfo;
+	DisplayedFocusGuideLocalPosition = ActiveFocusGuideLocalPosition;
+	DisplayedFocusGuideLocalNormal = ActiveFocusGuideLocalNormal;
+	bDisplayedFocusGuideLocationValid = bActiveFocusGuideLocationValid;
+	bDisplayedFocusGuideVisibilityValid = bDisplayedFocusGuideLocationValid;
+}
+
+bool UBalhwajeomPhotoCameraComponent::IsDisplayedGuideSurfaceVisible() const
+{
+	AActor* Target = DisplayedFocusTarget.Get();
+	if (!Target || !PhotoCamera || !GetWorld() || !bDisplayedFocusGuideLocationValid)
+	{
+		return false;
+	}
+
+	const FTransform TargetTransform = Target->GetActorTransform();
+	const FVector GuideWorldPosition = TargetTransform.TransformPosition(DisplayedFocusGuideLocalPosition);
+	const FVector GuideWorldNormal = TargetTransform.TransformVectorNoScale(
+		DisplayedFocusGuideLocalNormal).GetSafeNormal();
+	const FVector CameraLocation = PhotoCamera->GetComponentLocation();
+	const FVector ToGuide = GuideWorldPosition - CameraLocation;
+	const float GuideDistance = ToGuide.Size();
+	if (GuideDistance <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	const FVector ViewDirectionFromSurface = (CameraLocation - GuideWorldPosition).GetSafeNormal();
+	if (FVector::DotProduct(GuideWorldNormal, ViewDirectionFromSurface) < GuideFacingDotThreshold)
+	{
+		return false;
+	}
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(EvidenceGuideOcclusion), true, GetOwner());
+	Params.bTraceComplex = true;
+	FHitResult Hit;
+	const FVector TraceEnd = CameraLocation + ToGuide.GetSafeNormal() *
+		(GuideDistance + GuideVisibilityImpactTolerance * 2.0f);
+	if (!GetWorld()->LineTraceSingleByChannel(
+		Hit, CameraLocation, TraceEnd, ECC_Visibility, Params))
+	{
+		return false;
+	}
+
+	return Hit.GetActor() == Target &&
+		FVector::Distance(Hit.ImpactPoint, GuideWorldPosition) <= GuideVisibilityImpactTolerance;
+}
+
+void UBalhwajeomPhotoCameraComponent::UpdateEvidenceFocus(float DeltaTime)
+{
+	if (!PhotoCamera || !GetWorld())
+	{
+		ResetEvidenceFocus();
+		return;
+	}
+
+	APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
+	if (!PlayerController)
+	{
+		ResetEvidenceFocus();
+		return;
+	}
+
+	int32 ViewportWidth = 0;
+	int32 ViewportHeight = 0;
+	PlayerController->GetViewportSize(ViewportWidth, ViewportHeight);
+	if (ViewportWidth <= 0 || ViewportHeight <= 0)
+	{
+		ResetEvidenceFocus();
+		return;
+	}
+
+	const FVector CameraLocation = PhotoCamera->GetComponentLocation();
+	const FVector CameraForward = PhotoCamera->GetForwardVector();
+	const FVector2D ViewportCenter(ViewportWidth * 0.5f, ViewportHeight * 0.5f);
+	const float ShortViewportEdge = static_cast<float>(FMath::Min(ViewportWidth, ViewportHeight));
+	const float ZoomRatio = SavedFirstPersonFieldOfView /
+		FMath::Max(PhotoCamera->FieldOfView, 1.0f);
+
+	AActor* BestTarget = nullptr;
+	FBalhwajeomCameraTargetInfo BestInfo;
+	FVector2D BestScreenPosition = FVector2D::ZeroVector;
+	FVector BestFocusLocation = FVector::ZeroVector;
+	FVector BestGuideWorldPosition = FVector::ZeroVector;
+	FVector BestGuideWorldNormal = FVector::ZeroVector;
+	float BestScreenDistance = TNumericLimits<float>::Max();
+
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		AActor* Candidate = *It;
+		if (!IsValid(Candidate) || Candidate == GetOwner() ||
+			!Candidate->GetClass()->ImplementsInterface(UBalhwajeomCameraTargetInterface::StaticClass()))
+		{
+			continue;
+		}
+
+		FBalhwajeomCameraTargetInfo CandidateInfo;
+		if (!IBalhwajeomCameraTargetInterface::Execute_RequestCameraTargetInfo(Candidate, CandidateInfo))
+		{
+			continue;
+		}
+
+		if (CandidateInfo.EvidenceData.bAlreadyCollected || CapturedFocusTargets.Contains(Candidate))
+		{
+			continue;
+		}
+
+		const FVector FocusLocation =
+			IBalhwajeomCameraTargetInterface::Execute_RequestCameraFocusLocation(Candidate);
+		const FVector ToTarget = FocusLocation - CameraLocation;
+		const float TargetDistance = ToTarget.Size();
+		if (TargetDistance > FocusTargetScanDistance ||
+			FVector::DotProduct(CameraForward, ToTarget.GetSafeNormal()) <= 0.0f)
+		{
+			continue;
+		}
+
+		const float DistanceScale = CandidateInfo.bScaleFocusDistanceWithZoom ? ZoomRatio : 1.0f;
+		const float PreferredDistance = CandidateInfo.PreferredFocusDistanceAt1x * DistanceScale;
+		const float DistanceTolerance = CandidateInfo.FocusDistanceToleranceAt1x * DistanceScale;
+		if (FMath::Abs(TargetDistance - PreferredDistance) > DistanceTolerance)
+		{
+			continue;
+		}
+
+		FVector2D ScreenBoundsMin;
+		FVector2D ScreenBoundsMax;
+		if (!ProjectActorBoundsToScreen(
+			Candidate,
+			PlayerController,
+			ViewportWidth,
+			ViewportHeight,
+			ScreenBoundsMin,
+			ScreenBoundsMax))
+		{
+			continue;
+		}
+
+		// Use the projected bounds only as a search region. Complex visibility traces
+		// then reject holes and empty space inside concave silhouettes.
+		FVector2D ScreenPosition;
+		FVector GuideWorldPosition;
+		FVector GuideWorldNormal;
+		if (!FindClosestVisibleSilhouettePoint(
+			Candidate,
+			PlayerController,
+			GetWorld(),
+			GetOwner(),
+			ViewportCenter,
+			ScreenBoundsMin,
+			ScreenBoundsMax,
+			FocusTargetScanDistance,
+			SilhouetteTracePixelStep,
+			SilhouetteTraceMaxSamples,
+			ScreenPosition,
+			GuideWorldPosition,
+			GuideWorldNormal))
+		{
+			continue;
+		}
+
+		const float ScreenDistance = FVector2D::Distance(ScreenPosition, ViewportCenter);
+		if (ScreenDistance < BestScreenDistance)
+		{
+			BestScreenDistance = ScreenDistance;
+			BestTarget = Candidate;
+			BestInfo = MoveTemp(CandidateInfo);
+			BestScreenPosition = ScreenPosition;
+			BestFocusLocation = GuideWorldPosition;
+			BestGuideWorldPosition = GuideWorldPosition;
+			BestGuideWorldNormal = GuideWorldNormal;
+		}
+	}
+
+	ActiveFocusTarget = BestTarget;
+	ActiveFocusTargetInfo = BestInfo;
+	ActiveFocusScreenPosition = BestScreenPosition;
+	bActiveFocusTargetCentered = BestTarget &&
+		BestScreenDistance <= ShortViewportEdge * CenterToleranceRatio;
+	bActiveFocusGuideLocationValid = BestTarget != nullptr;
+	ActiveFocusGuideLocalPosition = BestTarget
+		? BestTarget->GetActorTransform().InverseTransformPosition(BestGuideWorldPosition)
+		: FVector::ZeroVector;
+	ActiveFocusGuideLocalNormal = BestTarget
+		? BestTarget->GetActorTransform().InverseTransformVectorNoScale(BestGuideWorldNormal).GetSafeNormal()
+		: FVector::ZeroVector;
+
+	const float DesiredFocalDistance = BestTarget
+		? FMath::Max(FVector::DotProduct(BestFocusLocation - CameraLocation, CameraForward), 1.0f)
+		: UnfocusedFocalDistance;
+	ApplyDepthOfField(DeltaTime, DesiredFocalDistance, BestTarget != nullptr);
+}
+
+void UBalhwajeomPhotoCameraComponent::ApplyDepthOfField(
+	float DeltaTime,
+	float DesiredFocalDistance,
+	bool bHasFocusedTarget)
+{
+	if (!bEnableEvidenceDepthOfField || !PhotoCamera)
+	{
+		return;
+	}
+
+	CurrentFocalDistance = DeltaTime > 0.0f
+		? FMath::FInterpTo(CurrentFocalDistance, DesiredFocalDistance, DeltaTime, FocusInterpolationSpeed)
+		: DesiredFocalDistance;
+
+	FPostProcessSettings& Settings = PhotoCamera->PostProcessSettings;
+	Settings.bOverride_DepthOfFieldFocalDistance = true;
+	Settings.bOverride_DepthOfFieldFstop = true;
+	Settings.bOverride_DepthOfFieldMinFstop = true;
+	Settings.bOverride_DepthOfFieldSensorWidth = true;
+	Settings.DepthOfFieldFocalDistance = CurrentFocalDistance;
+	Settings.DepthOfFieldFstop = bHasFocusedTarget ? EvidenceFocusFStop : UnfocusedFStop;
+	Settings.DepthOfFieldMinFstop = 0.1f;
+	Settings.DepthOfFieldSensorWidth = 36.0f;
+	PhotoCamera->PostProcessBlendWeight = 1.0f;
+}
+
+void UBalhwajeomPhotoCameraComponent::ResetEvidenceFocus()
+{
+	ActiveFocusTarget.Reset();
+	ActiveFocusTargetInfo = FBalhwajeomCameraTargetInfo();
+	ActiveFocusScreenPosition = FVector2D::ZeroVector;
+	bActiveFocusTargetCentered = false;
+	ActiveFocusGuideLocalPosition = FVector::ZeroVector;
+	ActiveFocusGuideLocalNormal = FVector::ZeroVector;
+	bActiveFocusGuideLocationValid = false;
+	DisplayedFocusTarget.Reset();
+	DisplayedFocusTargetInfo = FBalhwajeomCameraTargetInfo();
+	DisplayedFocusGuideLocalPosition = FVector::ZeroVector;
+	DisplayedFocusGuideLocalNormal = FVector::ZeroVector;
+	bDisplayedFocusGuideLocationValid = false;
+	bDisplayedFocusGuideVisibilityValid = false;
+}
+
+bool UBalhwajeomPhotoCameraComponent::TryCaptureActiveFocusTarget()
+{
+	AActor* Target = ActiveFocusTarget.Get();
+	if (!Target)
+	{
+		ShowPhotoFeedback(TEXT("초점이 맞지 않았다."), FColor::Silver);
+		return false;
+	}
+
+	if (!bActiveFocusTargetCentered)
+	{
+		ShowPhotoFeedback(TEXT("대상을 화면 중앙에 맞춰야 한다."), FColor::Yellow);
+		return false;
+	}
+
+	FBalhwajeomCameraTargetInfo TargetInfo;
+	if (!IBalhwajeomCameraTargetInterface::Execute_RequestCameraTargetInfo(Target, TargetInfo) ||
+		!TargetInfo.bCanBeCaptured || TargetInfo.EvidenceData.EvidenceID.IsNone())
+	{
+		ShowPhotoFeedback(TEXT("촬영할 수 없는 대상이다."), FColor::Silver);
+		return false;
+	}
+
+	if (CapturedFocusTargets.Contains(Target) || TargetInfo.EvidenceData.bAlreadyCollected)
+	{
+		ShowPhotoFeedback(TEXT("이미 기록한 대상이다."), FColor::Yellow);
+		return false;
+	}
+
+	FBalhwajeomEvidenceData CollectedData = TargetInfo.EvidenceData;
+	CollectedData.bAlreadyCollected = true;
+	CollectedEvidence.Add(MoveTemp(CollectedData));
+	CapturedFocusTargets.Add(Target);
+
+	IBalhwajeomCameraTargetInterface::Execute_NotifyCameraCaptureSucceeded(Target);
+	ShowPhotoFeedback(
+		FString::Printf(TEXT("증거 획득: %s"), *TargetInfo.EvidenceData.EvidenceName.ToString()),
+		FColor::Green);
+	ResetEvidenceFocus();
+	return true;
 }
