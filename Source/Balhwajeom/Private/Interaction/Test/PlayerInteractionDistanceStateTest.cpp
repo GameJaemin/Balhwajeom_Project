@@ -3,6 +3,8 @@
 #include "Misc/AutomationTest.h"
 #include "Interaction/PlayerInteractionComponent.h"
 #include "Interaction/InspectionComponent.h"
+#include "InputAction.h"
+
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FPlayerInteractionDistanceStateTest,
@@ -95,6 +97,7 @@ bool FPlayerInteractionDistanceStateTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FPlayerInteractionDistanceBetweenPointsTest,
 	"Balhwajeom.Interaction.Player.DistanceBetweenPoints",
@@ -103,7 +106,9 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 )
 
 
-bool FPlayerInteractionDistanceBetweenPointsTest::RunTest(const FString& Parameters)
+bool FPlayerInteractionDistanceBetweenPointsTest::RunTest(
+	const FString& Parameters
+)
 {
 	constexpr float CloseDistance = 300.0f;
 	constexpr float MiddleDistance = 700.0f;
@@ -158,6 +163,7 @@ bool FPlayerInteractionDistanceBetweenPointsTest::RunTest(const FString& Paramet
 	return true;
 }
 
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FPlayerInteractionDistanceStateCacheTest,
 	"Balhwajeom.Interaction.Player.DistanceStateCache",
@@ -166,7 +172,9 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 )
 
 
-bool FPlayerInteractionDistanceStateCacheTest::RunTest(const FString& Parameters)
+bool FPlayerInteractionDistanceStateCacheTest::RunTest(
+	const FString& Parameters
+)
 {
 	UPlayerInteractionComponent* PlayerInteraction =
 		NewObject<UPlayerInteractionComponent>();
@@ -193,6 +201,7 @@ bool FPlayerInteractionDistanceStateCacheTest::RunTest(const FString& Parameters
 	return true;
 }
 
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FPlayerInteractionDistanceStateChangeTest,
 	"Balhwajeom.Interaction.Player.DistanceStateChange",
@@ -201,7 +210,9 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 )
 
 
-bool FPlayerInteractionDistanceStateChangeTest::RunTest(const FString& Parameters)
+bool FPlayerInteractionDistanceStateChangeTest::RunTest(
+	const FString& Parameters
+)
 {
 	UPlayerInteractionComponent* PlayerInteraction =
 		NewObject<UPlayerInteractionComponent>();
@@ -254,6 +265,7 @@ bool FPlayerInteractionDistanceStateChangeTest::RunTest(const FString& Parameter
 	return true;
 }
 
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FPlayerInteractionCanInspectTest,
 	"Balhwajeom.Interaction.Player.CanInspect",
@@ -262,7 +274,9 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 )
 
 
-bool FPlayerInteractionCanInspectTest::RunTest(const FString& Parameters)
+bool FPlayerInteractionCanInspectTest::RunTest(
+	const FString& Parameters
+)
 {
 	TestFalse(
 		TEXT("OutOfRange should not be inspectable"),
@@ -295,6 +309,7 @@ bool FPlayerInteractionCanInspectTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FPlayerInteractionFocusedInspectionTest,
 	"Balhwajeom.Interaction.Player.FocusedInspection",
@@ -303,7 +318,9 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 )
 
 
-bool FPlayerInteractionFocusedInspectionTest::RunTest(const FString& Parameters)
+bool FPlayerInteractionFocusedInspectionTest::RunTest(
+	const FString& Parameters
+)
 {
 	UPlayerInteractionComponent* PlayerInteraction =
 		NewObject<UPlayerInteractionComponent>();
@@ -341,6 +358,7 @@ bool FPlayerInteractionFocusedInspectionTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FPlayerInteractionTryInspectTest,
 	"Balhwajeom.Interaction.Player.TryInspect",
@@ -349,7 +367,9 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 )
 
 
-bool FPlayerInteractionTryInspectTest::RunTest(const FString& Parameters)
+bool FPlayerInteractionTryInspectTest::RunTest(
+	const FString& Parameters
+)
 {
 	UPlayerInteractionComponent* PlayerInteraction =
 		NewObject<UPlayerInteractionComponent>();
@@ -403,6 +423,109 @@ bool FPlayerInteractionTryInspectTest::RunTest(const FString& Parameters)
 	TestFalse(
 		TEXT("Focused Middle inspection should not be inspectable"),
 		bMiddleInspected
+	);
+
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlayerInteractionRequestInspectTest,
+	"Balhwajeom.Interaction.Player.RequestInspect",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FPlayerInteractionRequestInspectTest::RunTest(
+	const FString& Parameters
+)
+{
+	UPlayerInteractionComponent* PlayerInteraction =
+		NewObject<UPlayerInteractionComponent>();
+
+	UInspectionComponent* Inspection =
+		NewObject<UInspectionComponent>();
+
+	Inspection->CloseDistance = 300.0f;
+	Inspection->MiddleDistance = 700.0f;
+	Inspection->MaxDisplayDistance = 1500.0f;
+	Inspection->InspectionText =
+		FText::FromString(TEXT("Test Inspection Text"));
+
+	PlayerInteraction->UpdateDistanceStateForInspectable(
+		Inspection,
+		FVector::ZeroVector,
+		FVector(200.0f, 0.0f, 0.0f)
+	);
+
+	PlayerInteraction->SetFocusedInspection(Inspection);
+
+	TestTrue(
+		TEXT("RequestInspect should succeed for a focused Close target"),
+		PlayerInteraction->RequestInspect()
+	);
+
+	PlayerInteraction->UpdateDistanceStateForInspectable(
+		Inspection,
+		FVector::ZeroVector,
+		FVector(500.0f, 0.0f, 0.0f)
+	);
+
+	TestFalse(
+		TEXT("RequestInspect should fail outside Close range"),
+		PlayerInteraction->RequestInspect()
+	);
+
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FPlayerInteractionInputStartedTest,
+	"Balhwajeom.Interaction.Player.InputStarted",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FPlayerInteractionInputStartedTest::RunTest(
+	const FString& Parameters
+)
+{
+	UPlayerInteractionComponent* PlayerInteraction =
+		NewObject<UPlayerInteractionComponent>();
+
+	UInspectionComponent* Inspection =
+		NewObject<UInspectionComponent>();
+
+	Inspection->CloseDistance = 300.0f;
+	Inspection->MiddleDistance = 700.0f;
+	Inspection->MaxDisplayDistance = 1500.0f;
+	Inspection->InspectionText =
+		FText::FromString(TEXT("Test Inspection Text"));
+
+	PlayerInteraction->UpdateDistanceStateForInspectable(
+		Inspection,
+		FVector::ZeroVector,
+		FVector(200.0f, 0.0f, 0.0f)
+	);
+
+	PlayerInteraction->SetFocusedInspection(Inspection);
+
+	// Input Action이 설정되지 않았다면
+	// Input 경로에서는 아무것도 실행하지 않아야 한다.
+	TestFalse(
+		TEXT("Missing InteractAction should not trigger inspection"),
+		PlayerInteraction->HandleInteractStarted()
+	);
+
+	PlayerInteraction->InteractAction =
+		NewObject<UInputAction>();
+
+	TestTrue(
+		TEXT("Configured interaction input should request inspection"),
+		PlayerInteraction->HandleInteractStarted()
 	);
 
 	return true;

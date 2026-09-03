@@ -1,8 +1,14 @@
 #include "Interaction/PlayerInteractionComponent.h"
 
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "Engine/LocalPlayer.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
 #include "Interaction/InspectionComponent.h"
 
 
@@ -133,6 +139,7 @@ void UPlayerInteractionComponent::BeginPlay()
 	Super::BeginPlay();
 
 	RefreshInspectableObjects();
+	SetupInteractionInput();
 }
 
 
@@ -143,6 +150,11 @@ void UPlayerInteractionComponent::TickComponent(
 )
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (!bInteractionInputInitialized)
+	{
+		SetupInteractionInput();
+	}
 
 	AActor* PlayerActor = GetOwner();
 
@@ -336,4 +348,102 @@ bool UPlayerInteractionComponent::TryInspect(
 		FocusedInspection->InspectionText;
 
 	return true;
+}
+
+bool UPlayerInteractionComponent::RequestInspect()
+{
+	FText InspectionText;
+
+	if (!TryInspect(InspectionText))
+	{
+		return false;
+	}
+
+	OnInspectionSucceeded.Broadcast(InspectionText);
+
+	return true;
+}
+
+bool UPlayerInteractionComponent::HandleInteractStarted()
+{
+	if (!IsValid(InteractAction.Get()))
+	{
+		return false;
+	}
+
+	return RequestInspect();
+}
+
+void UPlayerInteractionComponent::SetupInteractionInput()
+{
+	if (bInteractionInputInitialized)
+	{
+		return;
+	}
+
+	if (!IsValid(InteractionMappingContext.Get()) ||
+		!IsValid(InteractAction.Get()))
+	{
+		return;
+	}
+
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+
+	if (!IsValid(OwnerPawn))
+	{
+		return;
+	}
+
+	APlayerController* PlayerController =
+		Cast<APlayerController>(OwnerPawn->GetController());
+
+	if (!IsValid(PlayerController) ||
+		!PlayerController->IsLocalController())
+	{
+		return;
+	}
+
+	ULocalPlayer* LocalPlayer =
+		PlayerController->GetLocalPlayer();
+
+	if (!IsValid(LocalPlayer))
+	{
+		return;
+	}
+
+	UEnhancedInputLocalPlayerSubsystem* InputSubsystem =
+		LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+
+	if (!IsValid(InputSubsystem))
+	{
+		return;
+	}
+
+	UEnhancedInputComponent* EnhancedInputComponent =
+		OwnerPawn->FindComponentByClass<UEnhancedInputComponent>();
+
+	if (!IsValid(EnhancedInputComponent))
+	{
+		return;
+	}
+
+	InputSubsystem->AddMappingContext(
+		InteractionMappingContext.Get(),
+		InteractionMappingPriority
+	);
+
+	EnhancedInputComponent->BindAction(
+		InteractAction.Get(),
+		ETriggerEvent::Started,
+		this,
+		&UPlayerInteractionComponent::OnInteractActionStarted
+	);
+
+	bInteractionInputInitialized = true;
+}
+
+
+void UPlayerInteractionComponent::OnInteractActionStarted()
+{
+	HandleInteractStarted();
 }

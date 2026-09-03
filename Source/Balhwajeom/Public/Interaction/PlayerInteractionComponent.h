@@ -6,9 +6,20 @@
 #include "PlayerInteractionComponent.generated.h"
 
 class UInspectionComponent;
+class UInputAction;
+class UInputMappingContext;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FOnInspectionSucceeded,
+	FText,
+	InspectionText
+);
 
-UCLASS(ClassGroup = (Interaction), meta = (BlueprintSpawnableComponent))
+UCLASS(
+	Blueprintable,
+	ClassGroup = (Interaction),
+	meta = (BlueprintSpawnableComponent)
+)
 class BALHWAJEOM_API UPlayerInteractionComponent : public UActorComponent
 {
 	GENERATED_BODY()
@@ -65,6 +76,12 @@ protected:
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Player Interaction")
+	bool RequestInspect();
+
+	UPROPERTY(BlueprintAssignable, Category = "Player Interaction|Events")
+	FOnInspectionSucceeded OnInspectionSucceeded;
+
+	UFUNCTION(BlueprintCallable, Category = "Player Interaction")
 	void RefreshInspectableObjects();
 
 	UFUNCTION(BlueprintPure, Category = "Player Interaction")
@@ -84,6 +101,21 @@ public:
 		UInspectionComponent* HitInspection
 	) const;
 
+	// Interaction input settings
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Interaction|Input")
+	TObjectPtr<UInputMappingContext> InteractionMappingContext = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Interaction|Input")
+	TObjectPtr<UInputAction> InteractAction = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Interaction|Input")
+	int32 InteractionMappingPriority = 1;
+
+
+	// Enhanced Input에서 Started가 발생했을 때 사용할 실제 처리 함수.
+	// 자동 테스트에서도 이 함수를 직접 검증합니다.
+	bool HandleInteractStarted();
+
 private:
 	UPROPERTY()
 	TArray<TObjectPtr<UInspectionComponent>> InspectableObjects;
@@ -93,4 +125,9 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UInspectionComponent> FocusedInspection = nullptr;
+
+	void SetupInteractionInput();
+	void OnInteractActionStarted();
+
+	bool bInteractionInputInitialized = false;
 };
