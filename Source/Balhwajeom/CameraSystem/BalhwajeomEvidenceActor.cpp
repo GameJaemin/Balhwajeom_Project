@@ -4,6 +4,9 @@
 
 #include "Components/StaticMeshComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/WidgetComponent.h"
+#include "Interaction/InspectionComponent.h"
+#include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
 
 ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
@@ -13,6 +16,23 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 	EvidenceMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("EvidenceMesh"));
 	SetRootComponent(EvidenceMesh);
 	EvidenceMesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+
+	InspectionComponent = CreateDefaultSubobject<UInspectionComponent>(TEXT("InspectionComponent"));
+
+	ObjectLabelWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("ObjectLabelWidget"));
+	ObjectLabelWidget->SetupAttachment(EvidenceMesh);
+	ObjectLabelWidget->SetRelativeLocation(FVector::ZeroVector);
+	ObjectLabelWidget->SetWidgetSpace(EWidgetSpace::Screen);
+	ObjectLabelWidget->SetDrawAtDesiredSize(true);
+	ObjectLabelWidget->SetVisibility(false);
+	ObjectLabelWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	static ConstructorHelpers::FClassFinder<UUserWidget> ObjectLabelWidgetClass(
+		TEXT("/Game/Balhwajeom/Blueprints/UI/WBP_ObjectLabel"));
+	if (ObjectLabelWidgetClass.Succeeded())
+	{
+		ObjectLabelWidget->SetWidgetClass(ObjectLabelWidgetClass.Class);
+	}
 
 	CameraFocusPoint = CreateDefaultSubobject<USceneComponent>(TEXT("CameraFocusPoint"));
 	CameraFocusPoint->SetupAttachment(EvidenceMesh);
@@ -24,6 +44,102 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 		EvidenceMesh->SetStaticMesh(DefaultMesh.Object);
 		EvidenceMesh->SetRelativeScale3D(FVector(0.5f));
 	}
+}
+
+void ABalhwajeomEvidenceActor::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (ObjectLabelWidget)
+	{
+		// Bounds.Origin is the visible mesh center even when the mesh asset's pivot is off-center.
+		const FVector WorldOffset = EvidenceMesh
+			? EvidenceMesh->GetComponentTransform().TransformVectorNoScale(ObjectLabelOffset)
+			: GetActorTransform().TransformVectorNoScale(ObjectLabelOffset);
+		const FVector LabelCenter = EvidenceMesh ? EvidenceMesh->Bounds.Origin : GetActorLocation();
+		ObjectLabelWidget->SetWorldLocation(LabelCenter + WorldOffset);
+		ObjectLabelWidget->SetVisibility(false);
+	}
+
+	if (InspectionComponent)
+	{
+		InspectionComponent->OnPlayerDistanceStateChanged.AddDynamic(
+			this,
+			&ABalhwajeomEvidenceActor::HandlePlayerDistanceStateChanged);
+	}
+}
+
+void ABalhwajeomEvidenceActor::HandlePlayerDistanceStateChanged(
+	EPlayerInspectionDistanceState NewState)
+{
+	if (!InspectionComponent)
+	{
+		SetInspectionLabel(FText::GetEmpty(), false);
+		return;
+	}
+
+	switch (NewState)
+	{
+	case EPlayerInspectionDistanceState::Far:
+		SetInspectionLabel(InspectionComponent->FarLabel, true);
+		break;
+
+	case EPlayerInspectionDistanceState::Middle:
+		SetInspectionLabel(InspectionComponent->MidLabel, true);
+		break;
+
+	case EPlayerInspectionDistanceState::Close:
+		SetInspectionLabel(InspectionComponent->NearLabel, true);
+		break;
+
+	case EPlayerInspectionDistanceState::OutOfRange:
+	default:
+		SetInspectionLabel(FText::GetEmpty(), false);
+		break;
+	}
+}
+
+void ABalhwajeomEvidenceActor::SetInspectionLabel(
+	const FText& LabelText,
+	bool bVisible)
+{
+	if (!ObjectLabelWidget)
+	{
+		return;
+	}
+
+	const bool bShouldDisplay = bVisible && !LabelText.IsEmptyOrWhitespace();
+	ObjectLabelWidget->SetVisibility(bShouldDisplay);
+	if (!bShouldDisplay)
+	{
+		return;
+	}
+
+	ObjectLabelWidget->InitWidget();
+	UUserWidget* LabelWidget = ObjectLabelWidget->GetUserWidgetObject();
+	if (!IsValid(LabelWidget))
+	{
+		return;
+	}
+
+	UFunction* SetLabelTextFunction = LabelWidget->FindFunction(TEXT("SetLabelText"));
+	if (!SetLabelTextFunction)
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("%s: WBP_ObjectLabel does not provide SetLabelText(FText)."),
+			*GetName());
+		return;
+	}
+
+	struct FSetLabelTextParameters
+	{
+		FText NewText;
+	};
+
+	FSetLabelTextParameters Parameters{LabelText};
+	LabelWidget->ProcessEvent(SetLabelTextFunction, &Parameters);
 }
 
 void ABalhwajeomEvidenceActor::MarkAsCollected()
