@@ -29,6 +29,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Evidence")
 	void MarkAsCollected();
 
+	/** Hides the normal distance label while the dedicated photo camera HUD is active. */
+	void SetInspectionLabelSuppressed(bool bSuppressed);
+
 	/** Per-object distance thresholds and text used by the normal inspection system. */
 	UFUNCTION(BlueprintPure, Category = "Inspection")
 	UInspectionComponent* GetInspectionComponent() const { return InspectionComponent; }
@@ -44,6 +47,7 @@ protected:
 	void HandlePlayerDistanceStateChanged(EPlayerInspectionDistanceState NewState);
 
 	void SetInspectionLabel(const FText& LabelText, bool bVisible);
+	void ApplyInspectionDistanceState(EPlayerInspectionDistanceState DistanceState);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Evidence")
 	TObjectPtr<UStaticMeshComponent> EvidenceMesh;
@@ -62,6 +66,10 @@ protected:
 	/** Optional local offset from the evidence mesh's actual bounds center. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inspection|UI")
 	FVector ObjectLabelOffset = FVector::ZeroVector;
+
+	EPlayerInspectionDistanceState LastInspectionDistanceState =
+		EPlayerInspectionDistanceState::OutOfRange;
+	bool bInspectionLabelSuppressed = false;
 
 	/** Move this point in a derived Blueprint to choose the precise focus/guide location. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera Target")

@@ -265,6 +265,10 @@ void UBalhwajeomPhotoCameraComponent::TickComponent(
 
 	if (bIsInCameraMode && bEnableEvidenceFocusSystem)
 	{
+		// Silhouette discovery remains interval-based, but center entry must react
+		// immediately to the exact pixel under the camera reticle.
+		bActiveFocusTargetCentered = IsViewportCenterOverTarget(ActiveFocusTarget.Get());
+
 		EarlyGuideRescanElapsed += DeltaTime;
 		if (DisplayedFocusTarget.IsValid() && bDisplayedFocusGuideLocationValid &&
 			!IsDisplayedGuideSurfaceVisible())
@@ -440,6 +444,13 @@ void UBalhwajeomPhotoCameraComponent::TakePhoto()
 	if (AddEvidence(EvidenceData))
 	{
 		Evidence->MarkAsCollected();
+		if (const APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this)))
+		{
+			if (ABalhwajeomEvidenceCameraHUD* CameraHUD = Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD()))
+			{
+				CameraHUD->TriggerEvidenceSavedAnimation(EvidenceData.EvidenceName);
+			}
+		}
 		ShowPhotoFeedback(FString::Printf(TEXT("증거 획득: %s"), *EvidenceData.EvidenceName.ToString()), FColor::Green);
 	}
 	else
@@ -478,6 +489,7 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 	}
 
 	bIsInCameraMode = true;
+	SetWorldInspectionLabelsSuppressed(true);
 	SavedFirstPersonRelativeTransform = PhotoCamera->GetRelativeTransform();
 	SavedFirstPersonFieldOfView = PhotoCamera->FieldOfView;
 	SavedPhotoPostProcessSettings = PhotoCamera->PostProcessSettings;
@@ -543,6 +555,7 @@ void UBalhwajeomPhotoCameraComponent::ExitCameraMode()
 	ResetEvidenceFocus();
 
 	bIsInCameraMode = false;
+	SetWorldInspectionLabelsSuppressed(false);
 	if (PhotoCamera)
 	{
 		PhotoCamera->SetActive(false);
@@ -562,6 +575,21 @@ void UBalhwajeomPhotoCameraComponent::ExitCameraMode()
 
 	// Let an active FixedCameraZone (if any) reclaim the view target now that the screen is faded to black.
 	OnCameraModeExited.Broadcast();
+}
+
+void UBalhwajeomPhotoCameraComponent::SetWorldInspectionLabelsSuppressed(
+	bool bSuppressed) const
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	for (TActorIterator<ABalhwajeomEvidenceActor> It(World); It; ++It)
+	{
+		It->SetInspectionLabelSuppressed(bSuppressed);
+	}
 }
 
 void UBalhwajeomPhotoCameraComponent::SwitchCameraAtFadeOut()
@@ -652,17 +680,10 @@ bool UBalhwajeomPhotoCameraComponent::GetActiveFocusGuide(
 		return false;
 	}
 
-	int32 ViewportWidth = 0;
-	int32 ViewportHeight = 0;
-	PlayerController->GetViewportSize(ViewportWidth, ViewportHeight);
-	const FVector2D ViewportCenter(ViewportWidth * 0.5f, ViewportHeight * 0.5f);
-	const float ShortViewportEdge = static_cast<float>(FMath::Min(ViewportWidth, ViewportHeight));
-	bOutIsCentered = ShortViewportEdge > 0.0f &&
-		FVector2D::Distance(SilhouetteGuideScreenPosition, ViewportCenter) <=
-		ShortViewportEdge * CenterToleranceRatio;
+	bOutIsCentered = IsViewportCenterOverTarget(DisplayedTarget);
 
-	// Pull the yellow guide slightly inside the silhouette toward the authored center.
-	// Once aligned, use that center directly for the fixed green confirmation.
+	// Pull the edge guide slightly inside the silhouette toward the authored center.
+	// Once the reticle ray actually hits the target, use that center directly.
 	OutScreenPosition = SilhouetteGuideScreenPosition;
 	if (DisplayedTarget->GetClass()->ImplementsInterface(UBalhwajeomCameraTargetInterface::StaticClass()))
 	{
@@ -745,6 +766,45 @@ bool UBalhwajeomPhotoCameraComponent::IsDisplayedGuideSurfaceVisible() const
 		FVector::Distance(Hit.ImpactPoint, GuideWorldPosition) <= GuideVisibilityImpactTolerance;
 }
 
+bool UBalhwajeomPhotoCameraComponent::IsViewportCenterOverTarget(const AActor* Target) const
+{
+	APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
+	UWorld* World = GetWorld();
+	if (!Target || !PlayerController || !World)
+	{
+		return false;
+	}
+
+	int32 ViewportWidth = 0;
+	int32 ViewportHeight = 0;
+	PlayerController->GetViewportSize(ViewportWidth, ViewportHeight);
+	if (ViewportWidth <= 0 || ViewportHeight <= 0)
+	{
+		return false;
+	}
+
+	FVector RayOrigin;
+	FVector RayDirection;
+	if (!PlayerController->DeprojectScreenPositionToWorld(
+		ViewportWidth * 0.5f,
+		ViewportHeight * 0.5f,
+		RayOrigin,
+		RayDirection))
+	{
+		return false;
+	}
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(EvidenceCenterTrace), true, GetOwner());
+	Params.bTraceComplex = true;
+	FHitResult Hit;
+	return World->LineTraceSingleByChannel(
+		Hit,
+		RayOrigin,
+		RayOrigin + RayDirection * FocusTargetScanDistance,
+		ECC_Visibility,
+		Params) && Hit.GetActor() == Target;
+}
+
 void UBalhwajeomPhotoCameraComponent::UpdateEvidenceFocus(float DeltaTime)
 {
 	if (!PhotoCamera || !GetWorld())
@@ -772,7 +832,6 @@ void UBalhwajeomPhotoCameraComponent::UpdateEvidenceFocus(float DeltaTime)
 	const FVector CameraLocation = PhotoCamera->GetComponentLocation();
 	const FVector CameraForward = PhotoCamera->GetForwardVector();
 	const FVector2D ViewportCenter(ViewportWidth * 0.5f, ViewportHeight * 0.5f);
-	const float ShortViewportEdge = static_cast<float>(FMath::Min(ViewportWidth, ViewportHeight));
 	const float ZoomRatio = SavedFirstPersonFieldOfView /
 		FMath::Max(PhotoCamera->FieldOfView, 1.0f);
 
@@ -795,11 +854,6 @@ void UBalhwajeomPhotoCameraComponent::UpdateEvidenceFocus(float DeltaTime)
 
 		FBalhwajeomCameraTargetInfo CandidateInfo;
 		if (!IBalhwajeomCameraTargetInterface::Execute_RequestCameraTargetInfo(Candidate, CandidateInfo))
-		{
-			continue;
-		}
-
-		if (CandidateInfo.EvidenceData.bAlreadyCollected || CapturedFocusTargets.Contains(Candidate))
 		{
 			continue;
 		}
@@ -874,8 +928,7 @@ void UBalhwajeomPhotoCameraComponent::UpdateEvidenceFocus(float DeltaTime)
 	ActiveFocusTarget = BestTarget;
 	ActiveFocusTargetInfo = BestInfo;
 	ActiveFocusScreenPosition = BestScreenPosition;
-	bActiveFocusTargetCentered = BestTarget &&
-		BestScreenDistance <= ShortViewportEdge * CenterToleranceRatio;
+	bActiveFocusTargetCentered = IsViewportCenterOverTarget(BestTarget);
 	bActiveFocusGuideLocationValid = BestTarget != nullptr;
 	ActiveFocusGuideLocalPosition = BestTarget
 		? BestTarget->GetActorTransform().InverseTransformPosition(BestGuideWorldPosition)
@@ -968,9 +1021,20 @@ bool UBalhwajeomPhotoCameraComponent::TryCaptureActiveFocusTarget()
 	CapturedFocusTargets.Add(Target);
 
 	IBalhwajeomCameraTargetInterface::Execute_NotifyCameraCaptureSucceeded(Target);
+	if (const APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this)))
+	{
+		if (ABalhwajeomEvidenceCameraHUD* CameraHUD = Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD()))
+		{
+			CameraHUD->TriggerEvidenceSavedAnimation(TargetInfo.EvidenceData.EvidenceName);
+		}
+	}
 	ShowPhotoFeedback(
 		FString::Printf(TEXT("증거 획득: %s"), *TargetInfo.EvidenceData.EvidenceName.ToString()),
 		FColor::Green);
-	ResetEvidenceFocus();
+
+	// Keep the guide on the photographed object. The HUD reads the Actor's updated
+	// collected state and changes the centered question mark to a check immediately.
+	ActiveFocusTargetInfo.EvidenceData.bAlreadyCollected = true;
+	DisplayedFocusTargetInfo.EvidenceData.bAlreadyCollected = true;
 	return true;
 }

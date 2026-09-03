@@ -73,6 +73,10 @@ public:
     UFUNCTION(BlueprintPure, Category = "Photo Camera|Focus")
     AActor* GetActiveFocusTarget() const { return ActiveFocusTarget.Get(); }
 
+    /** Target that owns the currently rendered (possibly frozen) HUD guide. */
+    UFUNCTION(BlueprintPure, Category = "Photo Camera|Focus")
+    AActor* GetDisplayedFocusTarget() const { return DisplayedFocusTarget.Get(); }
+
     UFUNCTION(BlueprintCallable, Category = "Evidence")
     bool AddEvidence(const FBalhwajeomEvidenceData& NewEvidence);
 
@@ -95,9 +99,11 @@ protected:
     void UpdateEvidenceFocus(float DeltaTime);
     void RefreshDisplayedGuideSnapshot();
     bool IsDisplayedGuideSurfaceVisible() const;
+    bool IsViewportCenterOverTarget(const AActor* Target) const;
     void ApplyDepthOfField(float DeltaTime, float DesiredFocalDistance, bool bHasFocusedTarget);
     void ResetEvidenceFocus();
     bool TryCaptureActiveFocusTarget();
+    void SetWorldInspectionLabelsSuppressed(bool bSuppressed) const;
 
     UPROPERTY(Transient)
     TObjectPtr<UCameraComponent> PhotoCamera;
@@ -119,11 +125,7 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus", meta = (ClampMin = "100.0"))
     float FocusTargetScanDistance = 5000.0f;
 
-    /** Radius around screen center, expressed as a fraction of the shorter viewport edge. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus", meta = (ClampMin = "0.005", ClampMax = "0.5"))
-    float CenterToleranceRatio = 0.075f;
-
-    /** Moves the yellow guide slightly from the traced silhouette edge toward the authored focus point. */
+    /** Moves the edge guide slightly from the traced silhouette edge toward the authored focus point. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Silhouette", meta = (ClampMin = "0.0", ClampMax = "0.5"))
     float YellowGuideInsetRatio = 0.12f;
 

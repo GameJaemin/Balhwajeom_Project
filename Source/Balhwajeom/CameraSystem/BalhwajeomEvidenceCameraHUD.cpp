@@ -5,6 +5,8 @@
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "BalhwajeomPhotoCameraComponent.h"
+#include "BalhwajeomEvidenceActor.h"
+#include "Interaction/InspectionComponent.h"
 #include "GameFramework/Pawn.h"
 
 void ABalhwajeomEvidenceCameraHUD::DrawHUD()
@@ -77,28 +79,48 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 			DisplayedGuidePosition = GuidePosition;
 		}
 
-		const FLinearColor YellowGuideColor(1.0f, 0.85f, 0.2f, 1.0f);
-		const FLinearColor GreenGuideColor(0.25f, 1.0f, 0.35f, 1.0f);
-		const FLinearColor BaseGuideColor = bGuideCentered
-			? FMath::Lerp(YellowGuideColor, GreenGuideColor, TransitionAlpha)
-			: FMath::Lerp(GreenGuideColor, YellowGuideColor, TransitionAlpha);
-		FLinearColor GuideColor = BaseGuideColor;
-		GuideColor.A = GuideOpacity;
-		const float GuideSize = bGuideCentered ? 14.0f : 9.0f;
-		DrawRect(
-			GuideColor,
-			DisplayedGuidePosition.X - GuideSize * 0.5f,
-			DisplayedGuidePosition.Y - GuideSize * 0.5f,
-			GuideSize,
-			GuideSize);
+		const bool bCenterTransitionFinished =
+			GuideTransitionElapsed >= GuideCenterTransitionDuration;
+		const bool bShowCenteredText = bGuideCentered && bCenterTransitionFinished;
 
-		if (bGuideCentered)
+		FLinearColor GuideColor = FLinearColor::White;
+		GuideColor.A = GuideOpacity;
+		const ABalhwajeomEvidenceActor* DisplayedEvidence =
+			Cast<ABalhwajeomEvidenceActor>(PhotoCamera->GetDisplayedFocusTarget());
+		const bool bAlreadyCaptured = DisplayedEvidence &&
+			DisplayedEvidence->GetEvidenceData().bAlreadyCollected;
+		const FString GuideSymbol = bAlreadyCaptured ? TEXT("✓") : TEXT("?");
+		DrawText(
+			GuideSymbol,
+			GuideColor,
+			DisplayedGuidePosition.X - 6.0f,
+			DisplayedGuidePosition.Y - 12.0f,
+			GEngine->GetMediumFont(),
+			1.0f,
+			false);
+
+		if (bShowCenteredText)
 		{
+			const UInspectionComponent* Inspection = DisplayedEvidence
+				? DisplayedEvidence->GetInspectionComponent()
+				: nullptr;
+			if (Inspection && !Inspection->NearLabel.IsEmptyOrWhitespace())
+			{
+				DrawText(
+					Inspection->NearLabel.ToString(),
+					GuideColor,
+					DisplayedGuidePosition.X + 15.0f,
+					DisplayedGuidePosition.Y - 9.0f,
+					GEngine->GetSmallFont(),
+					1.0f,
+					false);
+			}
+
 			float TextY = 95.0f;
 			const float TextX = Canvas->ClipX - 420.0f;
 			DrawText(
 				TargetInfo.EvidenceData.EvidenceName.ToString(),
-				BaseGuideColor,
+				GuideColor,
 				TextX,
 				TextY,
 				GEngine->GetMediumFont(),
@@ -126,6 +148,8 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 		GuideTransitionElapsed = 0.0f;
 	}
 
+	DrawEvidenceSavedAnimation();
+
 	if (PhotoFlashEndTime > 0.0f && GetWorld())
 	{
 		const float Remaining = PhotoFlashEndTime - GetWorld()->GetTimeSeconds();
@@ -142,5 +166,80 @@ void ABalhwajeomEvidenceCameraHUD::TriggerPhotoFlash()
 	if (GetWorld())
 	{
 		PhotoFlashEndTime = GetWorld()->GetTimeSeconds() + PhotoFlashDuration;
+	}
+}
+
+void ABalhwajeomEvidenceCameraHUD::TriggerEvidenceSavedAnimation(const FText& EvidenceName)
+{
+	if (GetWorld())
+	{
+		EvidenceSavedAnimationStartTime = GetWorld()->GetTimeSeconds();
+		EvidenceSavedAnimationName = EvidenceName.ToString();
+	}
+}
+
+void ABalhwajeomEvidenceCameraHUD::DrawEvidenceSavedAnimation()
+{
+	if (!Canvas || !GetWorld() || EvidenceSavedAnimationStartTime < 0.0f)
+	{
+		return;
+	}
+
+	const float Duration = FMath::Max(EvidenceSavedAnimationDuration, KINDA_SMALL_NUMBER);
+	const float Elapsed = GetWorld()->GetTimeSeconds() - EvidenceSavedAnimationStartTime;
+	if (Elapsed >= Duration)
+	{
+		EvidenceSavedAnimationStartTime = -1.0f;
+		EvidenceSavedAnimationName.Reset();
+		return;
+	}
+
+	const float NormalizedTime = FMath::Clamp(Elapsed / Duration, 0.0f, 1.0f);
+	// Keep the freshly captured card in the center briefly, then ease it into the
+	// lower-right gallery slot. The final fade makes the slot feel like it accepted it.
+	constexpr float HoldRatio = 0.15f;
+	const float MoveLinearAlpha = FMath::Clamp(
+		(NormalizedTime - HoldRatio) / (1.0f - HoldRatio), 0.0f, 1.0f);
+	const float MoveAlpha = FMath::InterpEaseInOut(0.0f, 1.0f, MoveLinearAlpha, 2.0f);
+	const float FadeAlpha = NormalizedTime > 0.82f
+		? 1.0f - FMath::Clamp((NormalizedTime - 0.82f) / 0.18f, 0.0f, 1.0f)
+		: 1.0f;
+
+	const float StartWidth = FMath::Min(Canvas->ClipX * 0.46f, 560.0f);
+	const FVector2D StartSize(StartWidth, StartWidth * 0.625f);
+	const FVector2D EndSize(88.0f, 55.0f);
+	const FVector2D StartCenter(Canvas->ClipX * 0.5f, Canvas->ClipY * 0.5f);
+	const FVector2D EndCenter(Canvas->ClipX - 88.0f, Canvas->ClipY - 78.0f);
+	const FVector2D CardSize = FMath::Lerp(StartSize, EndSize, MoveAlpha);
+	const FVector2D CardCenter = FMath::Lerp(StartCenter, EndCenter, MoveAlpha);
+	const FVector2D CardTopLeft = CardCenter - CardSize * 0.5f;
+
+	// Gallery destination stays visible behind the moving card during the animation.
+	const FVector2D SlotTopLeft = EndCenter - EndSize * 0.5f - FVector2D(5.0f, 5.0f);
+	DrawText(TEXT("GALLERY"), FLinearColor(0.75f, 0.85f, 0.85f, FadeAlpha),
+		SlotTopLeft.X, SlotTopLeft.Y - 19.0f, GEngine->GetSmallFont(), 0.75f, false);
+	DrawRect(FLinearColor(0.02f, 0.04f, 0.05f, 0.7f * FadeAlpha),
+		SlotTopLeft.X, SlotTopLeft.Y, EndSize.X + 10.0f, EndSize.Y + 10.0f);
+
+	const FLinearColor CardColor(0.035f, 0.055f, 0.065f, 0.94f * FadeAlpha);
+	const FLinearColor BorderColor(0.25f, 1.0f, 0.45f, FadeAlpha);
+	DrawRect(CardColor, CardTopLeft.X, CardTopLeft.Y, CardSize.X, CardSize.Y);
+	DrawLine(CardTopLeft.X, CardTopLeft.Y, CardTopLeft.X + CardSize.X, CardTopLeft.Y, BorderColor, 2.0f);
+	DrawLine(CardTopLeft.X + CardSize.X, CardTopLeft.Y,
+		CardTopLeft.X + CardSize.X, CardTopLeft.Y + CardSize.Y, BorderColor, 2.0f);
+	DrawLine(CardTopLeft.X + CardSize.X, CardTopLeft.Y + CardSize.Y,
+		CardTopLeft.X, CardTopLeft.Y + CardSize.Y, BorderColor, 2.0f);
+	DrawLine(CardTopLeft.X, CardTopLeft.Y + CardSize.Y, CardTopLeft.X, CardTopLeft.Y, BorderColor, 2.0f);
+
+	if (MoveAlpha < 0.58f)
+	{
+		const float TextAlpha = (1.0f - MoveAlpha / 0.58f) * FadeAlpha;
+		DrawText(TEXT("✓  EVIDENCE SAVED"), FLinearColor(0.25f, 1.0f, 0.45f, TextAlpha),
+			CardTopLeft.X + 24.0f, CardTopLeft.Y + 22.0f, GEngine->GetMediumFont(), 1.0f, false);
+		if (!EvidenceSavedAnimationName.IsEmpty())
+		{
+			DrawText(EvidenceSavedAnimationName, FLinearColor(1.0f, 1.0f, 1.0f, TextAlpha),
+				CardTopLeft.X + 24.0f, CardTopLeft.Y + 58.0f, GEngine->GetSmallFont(), 1.0f, false);
+		}
 	}
 }

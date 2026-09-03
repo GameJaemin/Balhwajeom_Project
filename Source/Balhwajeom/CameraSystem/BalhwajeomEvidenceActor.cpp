@@ -72,13 +72,32 @@ void ABalhwajeomEvidenceActor::BeginPlay()
 void ABalhwajeomEvidenceActor::HandlePlayerDistanceStateChanged(
 	EPlayerInspectionDistanceState NewState)
 {
+	LastInspectionDistanceState = NewState;
+	ApplyInspectionDistanceState(NewState);
+}
+
+void ABalhwajeomEvidenceActor::SetInspectionLabelSuppressed(bool bSuppressed)
+{
+	bInspectionLabelSuppressed = bSuppressed;
+	ApplyInspectionDistanceState(LastInspectionDistanceState);
+}
+
+void ABalhwajeomEvidenceActor::ApplyInspectionDistanceState(
+	EPlayerInspectionDistanceState DistanceState)
+{
+	if (bInspectionLabelSuppressed)
+	{
+		SetInspectionLabel(FText::GetEmpty(), false);
+		return;
+	}
+
 	if (!InspectionComponent)
 	{
 		SetInspectionLabel(FText::GetEmpty(), false);
 		return;
 	}
 
-	switch (NewState)
+	switch (DistanceState)
 	{
 	case EPlayerInspectionDistanceState::Far:
 		SetInspectionLabel(InspectionComponent->FarLabel, true);
