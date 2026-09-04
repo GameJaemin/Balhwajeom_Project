@@ -11,6 +11,7 @@
 class UCameraComponent;
 
 DECLARE_MULTICAST_DELEGATE(FOnCameraModeExited);
+DECLARE_MULTICAST_DELEGATE(FOnCameraTransitionFinished);
 
 UCLASS(ClassGroup = (Camera), meta = (BlueprintSpawnableComponent))
 class BALHWAJEOM_API UBalhwajeomPhotoCameraComponent
@@ -28,6 +29,9 @@ public:
 
     /** Broadcast right when camera mode fully exits, so an active FixedCameraZone can reclaim the view target. */
     FOnCameraModeExited OnCameraModeExited;
+
+    /** Broadcast after the fade-out/switch/fade-in sequence has fully completed. */
+    FOnCameraTransitionFinished OnCameraTransitionFinished;
 
     UFUNCTION(BlueprintCallable, Category = "Photo Camera")
     void SetPhotoCamera(UCameraComponent* Camera);
@@ -61,6 +65,9 @@ public:
 
     UFUNCTION(BlueprintPure, Category = "Photo Camera")
     bool IsInCameraMode() const { return bIsInCameraMode; }
+
+    UFUNCTION(BlueprintPure, Category = "Photo Camera")
+    bool IsCameraTransitioning() const { return bIsCameraTransitioning; }
 
     /** Returns the currently focused target's screen guide and object-authored response. */
     UFUNCTION(BlueprintPure, Category = "Photo Camera|Focus")

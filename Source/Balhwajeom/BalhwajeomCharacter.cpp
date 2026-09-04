@@ -12,6 +12,7 @@
 #include "InputActionValue.h"
 #include "Balhwajeom.h"
 #include "CameraSystem/BalhwajeomPhotoCameraComponent.h"
+#include "Tablet/BalhwajeomTabletComponent.h"
 
 ABalhwajeomCharacter::ABalhwajeomCharacter()
 {
@@ -46,6 +47,8 @@ ABalhwajeomCharacter::ABalhwajeomCharacter()
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
+
+	TabletComponent = CreateDefaultSubobject<UBalhwajeomTabletComponent>(TEXT("TabletComponent"));
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)

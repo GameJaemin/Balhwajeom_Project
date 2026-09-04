@@ -11,6 +11,7 @@ class UCameraComponent;
 class USpringArmComponent;
 class ABalhwajeomFixedCameraZone;
 class UBalhwajeomPhotoCameraComponent;
+class UBalhwajeomTabletComponent;
 
 /** A keyboard-driven top-down character with hold-to-sprint movement. */
 UCLASS()
@@ -88,4 +89,8 @@ protected:
 		Category = "Camera",
 		meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UBalhwajeomPhotoCameraComponent> PhotoCameraComponent;
+
+	/** Reusable tablet UI/input component. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "UI", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UBalhwajeomTabletComponent> TabletComponent;
 };

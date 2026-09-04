@@ -626,6 +626,7 @@ void UBalhwajeomPhotoCameraComponent::SwitchCameraAtFadeOut()
 void UBalhwajeomPhotoCameraComponent::FinishCameraTransition()
 {
 	bIsCameraTransitioning = false;
+	OnCameraTransitionFinished.Broadcast();
 }
 
 void UBalhwajeomPhotoCameraComponent::PanCamera(const FVector& ScreenDirection, float Value)

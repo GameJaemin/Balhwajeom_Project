@@ -9,6 +9,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Tablet/BalhwajeomTabletComponent.h"
 
 ABalhwajeomCameraCharacter::ABalhwajeomCameraCharacter()
 {
@@ -51,6 +52,8 @@ ABalhwajeomCameraCharacter::ABalhwajeomCameraCharacter()
 	PhotoCameraComponent = CreateDefaultSubobject<UBalhwajeomPhotoCameraComponent>(TEXT("PhotoCameraComponent"));
 	PhotoCameraComponent->SetNormalCamera(TopDownCamera);
 	PhotoCameraComponent->SetPhotoCamera(FirstPersonCamera);
+
+	TabletComponent = CreateDefaultSubobject<UBalhwajeomTabletComponent>(TEXT("TabletComponent"));
 	PhotoCameraComponent->OnCameraModeExited.AddLambda([this]()
 	{
 		// Camera mode grabbed the view target away from the active zone; hand it back now that we're done.
