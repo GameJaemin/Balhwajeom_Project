@@ -371,7 +371,7 @@ void UBalhwajeomPhotoCameraComponent::PanHorizontal(float Value)
 {
 	if (PhotoCamera)
 	{
-		PanCamera(PhotoCamera->GetRightVector(), Value);
+		PanCamera(CameraPanRightDirection, Value);
 	}
 }
 
@@ -379,7 +379,28 @@ void UBalhwajeomPhotoCameraComponent::PanVertical(float Value)
 {
 	if (PhotoCamera)
 	{
-		PanCamera(PhotoCamera->GetUpVector(), Value);
+		const float AbsolutePitch = FMath::Abs(
+			FRotator::NormalizeAxis(PhotoCamera->GetComponentRotation().Pitch));
+		const float SlowdownStart = FMath::Min(
+			VerticalPanSlowdownStartPitch, VerticalPanDisablePitch);
+		const float DisablePitch = FMath::Max(
+			VerticalPanSlowdownStartPitch, VerticalPanDisablePitch);
+
+		float SpeedScale = 1.0f;
+		if (FMath::IsNearlyEqual(SlowdownStart, DisablePitch))
+		{
+			SpeedScale = AbsolutePitch < SlowdownStart ? 1.0f : 0.0f;
+		}
+		else
+		{
+			const float SlowdownAlpha = FMath::Clamp(
+				(AbsolutePitch - SlowdownStart) / (DisablePitch - SlowdownStart),
+				0.0f,
+				1.0f);
+			SpeedScale = 1.0f - FMath::SmoothStep(0.0f, 1.0f, SlowdownAlpha);
+		}
+
+		PanCamera(FVector::UpVector, Value * SpeedScale);
 	}
 }
 
@@ -496,6 +517,12 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 	SavedPostProcessBlendWeight = PhotoCamera->PostProcessBlendWeight;
 	CameraModeEntryWorldLocation = PhotoCamera->GetComponentLocation();
 	CameraPanWorldOffset = FVector::ZeroVector;
+	CameraPanRightDirection = PhotoCamera->GetRightVector();
+	CameraPanRightDirection.Z = 0.0f;
+	if (!CameraPanRightDirection.Normalize())
+	{
+		CameraPanRightDirection = FVector::RightVector;
+	}
 	NormalCamera->SetActive(false);
 	PhotoCamera->SetActive(true);
 

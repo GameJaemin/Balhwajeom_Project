@@ -173,13 +173,21 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.1"))
     float CameraTransitionDuration = 0.5f;
 
-    /** Camera pan speed along the current screen Right/Up axes, in cm/s. */
+    /** Camera pan speed along the fixed entry Right axis and world Up axis, in cm/s. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Pan", meta = (ClampMin = "0.0"))
     float CameraPanSpeed = 80.0f;
 
     /** Maximum distance the camera may be panned from its entry position. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Pan", meta = (ClampMin = "0.0"))
     float CameraPanMaxDistance = 150.0f;
+
+    /** W/S begins slowing down when the absolute camera pitch reaches this angle. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Pan", meta = (ClampMin = "0.0", ClampMax = "89.0"))
+    float VerticalPanSlowdownStartPitch = 45.0f;
+
+    /** W/S is fully disabled at and beyond this absolute camera pitch. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Pan", meta = (ClampMin = "0.0", ClampMax = "89.0"))
+    float VerticalPanDisablePitch = 70.0f;
 
     /** Mouse-wheel zoom step in degrees of field of view. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Zoom", meta = (ClampMin = "0.1"))
@@ -203,6 +211,7 @@ protected:
     FTransform SavedFirstPersonRelativeTransform;
     FVector CameraModeEntryWorldLocation = FVector::ZeroVector;
     FVector CameraPanWorldOffset = FVector::ZeroVector;
+    FVector CameraPanRightDirection = FVector::RightVector;
     float SavedFirstPersonFieldOfView = 90.0f;
 
     FPostProcessSettings SavedPhotoPostProcessSettings;
