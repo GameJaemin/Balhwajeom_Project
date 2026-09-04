@@ -157,7 +157,34 @@ void ABalhwajeomEvidenceActor::SetInspectionLabel(
 		FText NewText;
 	};
 
-	FSetLabelTextParameters Parameters{LabelText};
+	const FText StatusText = EvidenceData.bAlreadyCollected
+		? FText::FromString(TEXT("V"))
+		: FText::FromString(TEXT("?"));
+
+	FText DisplayText;
+	if (LastInspectionDistanceState == EPlayerInspectionDistanceState::Far) {
+		DisplayText = FText::Format(
+			NSLOCTEXT(
+				"Evidence",
+				"InspectionLabelWithStatus",
+				"{0}"
+			),
+			StatusText
+		);
+	}
+	else {
+		DisplayText = FText::Format(
+			NSLOCTEXT(
+				"Evidence",
+				"InspectionLabelWithStatus",
+				"{0}  {1}"
+			),
+			StatusText,
+			LabelText
+		);
+	}
+
+	FSetLabelTextParameters Parameters{ DisplayText };
 	LabelWidget->ProcessEvent(SetLabelTextFunction, &Parameters);
 }
 
