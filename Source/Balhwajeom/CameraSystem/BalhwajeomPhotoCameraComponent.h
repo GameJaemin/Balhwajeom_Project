@@ -107,6 +107,7 @@ protected:
     void RefreshDisplayedGuideSnapshot();
     bool IsDisplayedGuideSurfaceVisible() const;
     bool IsViewportCenterOverTarget(const AActor* Target) const;
+    bool CalculateTargetFrameCoverage(const AActor* Target, float& OutCoverageRatio) const;
     void ApplyDepthOfField(float DeltaTime, float DesiredFocalDistance, bool bHasFocusedTarget);
     void ResetEvidenceFocus();
     bool TryCaptureActiveFocusTarget();
@@ -160,6 +161,10 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Silhouette", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
     float GuideFacingDotThreshold = 0.0f;
 
+    /** Fraction of the target's projected framing bounds that must be inside the viewport. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Framing", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MinimumCaptureCoverageRatio = 0.7f;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Depth Of Field")
     bool bEnableEvidenceDepthOfField = true;
 
@@ -180,13 +185,21 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.1"))
     float CameraTransitionDuration = 0.5f;
 
-    /** Camera pan speed along the current screen Right/Up axes, in cm/s. */
+    /** Camera pan speed along the fixed entry Right axis and world Up axis, in cm/s. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Pan", meta = (ClampMin = "0.0"))
     float CameraPanSpeed = 80.0f;
 
-    /** Maximum distance the camera may be panned from its entry position. */
+    /** Half-size of the square pan area on both the horizontal and vertical axes. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Pan", meta = (ClampMin = "0.0"))
     float CameraPanMaxDistance = 150.0f;
+
+    /** W/S begins slowing down when the absolute camera pitch reaches this angle. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Pan", meta = (ClampMin = "0.0", ClampMax = "89.0"))
+    float VerticalPanSlowdownStartPitch = 45.0f;
+
+    /** W/S is fully disabled at and beyond this absolute camera pitch. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Pan", meta = (ClampMin = "0.0", ClampMax = "89.0"))
+    float VerticalPanDisablePitch = 70.0f;
 
     /** Mouse-wheel zoom step in degrees of field of view. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Zoom", meta = (ClampMin = "0.1"))
@@ -210,6 +223,7 @@ protected:
     FTransform SavedFirstPersonRelativeTransform;
     FVector CameraModeEntryWorldLocation = FVector::ZeroVector;
     FVector CameraPanWorldOffset = FVector::ZeroVector;
+    FVector CameraPanRightDirection = FVector::RightVector;
     float SavedFirstPersonFieldOfView = 90.0f;
 
     FPostProcessSettings SavedPhotoPostProcessSettings;
@@ -222,6 +236,8 @@ protected:
     FBalhwajeomCameraTargetInfo ActiveFocusTargetInfo;
     FVector2D ActiveFocusScreenPosition = FVector2D::ZeroVector;
     bool bActiveFocusTargetCentered = false;
+    bool bActiveFocusTargetFramedEnough = false;
+    float ActiveFocusCoverageRatio = 0.0f;
     FVector ActiveFocusGuideLocalPosition = FVector::ZeroVector;
     FVector ActiveFocusGuideLocalNormal = FVector::ZeroVector;
     bool bActiveFocusGuideLocationValid = false;

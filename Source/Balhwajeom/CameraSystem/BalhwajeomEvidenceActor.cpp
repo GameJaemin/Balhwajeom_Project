@@ -157,7 +157,34 @@ void ABalhwajeomEvidenceActor::SetInspectionLabel(
 		FText NewText;
 	};
 
-	FSetLabelTextParameters Parameters{LabelText};
+	const FText StatusText = EvidenceData.bAlreadyCollected
+		? FText::FromString(TEXT("V"))
+		: FText::FromString(TEXT("?"));
+
+	FText DisplayText;
+	if (LastInspectionDistanceState == EPlayerInspectionDistanceState::Far) {
+		DisplayText = FText::Format(
+			NSLOCTEXT(
+				"Evidence",
+				"InspectionLabelWithStatus",
+				"{0}"
+			),
+			StatusText
+		);
+	}
+	else {
+		DisplayText = FText::Format(
+			NSLOCTEXT(
+				"Evidence",
+				"InspectionLabelWithStatus",
+				"{0}  {1}"
+			),
+			StatusText,
+			LabelText
+		);
+	}
+
+	FSetLabelTextParameters Parameters{ DisplayText };
 	LabelWidget->ProcessEvent(SetLabelTextFunction, &Parameters);
 }
 
@@ -181,6 +208,11 @@ bool ABalhwajeomEvidenceActor::RequestCameraTargetInfo_Implementation(
 FVector ABalhwajeomEvidenceActor::RequestCameraFocusLocation_Implementation() const
 {
 	return CameraFocusPoint ? CameraFocusPoint->GetComponentLocation() : GetActorLocation();
+}
+
+UPrimitiveComponent* ABalhwajeomEvidenceActor::RequestCameraFramingComponent_Implementation() const
+{
+	return EvidenceMesh;
 }
 
 void ABalhwajeomEvidenceActor::NotifyCameraCaptureSucceeded_Implementation()

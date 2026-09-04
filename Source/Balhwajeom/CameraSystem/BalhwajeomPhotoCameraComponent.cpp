@@ -4,6 +4,7 @@
 
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Components/PrimitiveComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
 #include "EngineUtils.h"
@@ -268,6 +269,9 @@ void UBalhwajeomPhotoCameraComponent::TickComponent(
 		// Silhouette discovery remains interval-based, but center entry must react
 		// immediately to the exact pixel under the camera reticle.
 		bActiveFocusTargetCentered = IsViewportCenterOverTarget(ActiveFocusTarget.Get());
+		bActiveFocusTargetFramedEnough = CalculateTargetFrameCoverage(
+			ActiveFocusTarget.Get(), ActiveFocusCoverageRatio) &&
+			ActiveFocusCoverageRatio >= FMath::Clamp(MinimumCaptureCoverageRatio, 0.0f, 1.0f);
 
 		EarlyGuideRescanElapsed += DeltaTime;
 		if (DisplayedFocusTarget.IsValid() && bDisplayedFocusGuideLocationValid &&
@@ -371,7 +375,7 @@ void UBalhwajeomPhotoCameraComponent::PanHorizontal(float Value)
 {
 	if (PhotoCamera)
 	{
-		PanCamera(PhotoCamera->GetRightVector(), Value);
+		PanCamera(CameraPanRightDirection, Value);
 	}
 }
 
@@ -379,7 +383,28 @@ void UBalhwajeomPhotoCameraComponent::PanVertical(float Value)
 {
 	if (PhotoCamera)
 	{
-		PanCamera(PhotoCamera->GetUpVector(), Value);
+		const float AbsolutePitch = FMath::Abs(
+			FRotator::NormalizeAxis(PhotoCamera->GetComponentRotation().Pitch));
+		const float SlowdownStart = FMath::Min(
+			VerticalPanSlowdownStartPitch, VerticalPanDisablePitch);
+		const float DisablePitch = FMath::Max(
+			VerticalPanSlowdownStartPitch, VerticalPanDisablePitch);
+
+		float SpeedScale = 1.0f;
+		if (FMath::IsNearlyEqual(SlowdownStart, DisablePitch))
+		{
+			SpeedScale = AbsolutePitch < SlowdownStart ? 1.0f : 0.0f;
+		}
+		else
+		{
+			const float SlowdownAlpha = FMath::Clamp(
+				(AbsolutePitch - SlowdownStart) / (DisablePitch - SlowdownStart),
+				0.0f,
+				1.0f);
+			SpeedScale = 1.0f - FMath::SmoothStep(0.0f, 1.0f, SlowdownAlpha);
+		}
+
+		PanCamera(FVector::UpVector, Value * SpeedScale);
 	}
 }
 
@@ -496,6 +521,12 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 	SavedPostProcessBlendWeight = PhotoCamera->PostProcessBlendWeight;
 	CameraModeEntryWorldLocation = PhotoCamera->GetComponentLocation();
 	CameraPanWorldOffset = FVector::ZeroVector;
+	CameraPanRightDirection = PhotoCamera->GetRightVector();
+	CameraPanRightDirection.Z = 0.0f;
+	if (!CameraPanRightDirection.Normalize())
+	{
+		CameraPanRightDirection = FVector::RightVector;
+	}
 	NormalCamera->SetActive(false);
 	PhotoCamera->SetActive(true);
 
@@ -638,7 +669,20 @@ void UBalhwajeomPhotoCameraComponent::PanCamera(const FVector& ScreenDirection, 
 
 	const FVector Delta = ScreenDirection.GetSafeNormal() * Value * CameraPanSpeed * GetWorld()->GetDeltaSeconds();
 	CameraPanWorldOffset += Delta;
-	CameraPanWorldOffset = CameraPanWorldOffset.GetClampedToMaxSize(CameraPanMaxDistance);
+
+	// Clamp each axis independently. A vector-length clamp creates a circular
+	// boundary; independent horizontal/vertical limits create a square pan area.
+	const float PanLimit = FMath::Max(CameraPanMaxDistance, 0.0f);
+	const float HorizontalOffset = FMath::Clamp(
+		FVector::DotProduct(CameraPanWorldOffset, CameraPanRightDirection),
+		-PanLimit,
+		PanLimit);
+	const float VerticalOffset = FMath::Clamp(
+		FVector::DotProduct(CameraPanWorldOffset, FVector::UpVector),
+		-PanLimit,
+		PanLimit);
+	CameraPanWorldOffset =
+		CameraPanRightDirection * HorizontalOffset + FVector::UpVector * VerticalOffset;
 	PhotoCamera->SetWorldLocation(CameraModeEntryWorldLocation + CameraPanWorldOffset);
 }
 
@@ -681,7 +725,11 @@ bool UBalhwajeomPhotoCameraComponent::GetActiveFocusGuide(
 		return false;
 	}
 
-	bOutIsCentered = IsViewportCenterOverTarget(DisplayedTarget);
+	float DisplayedCoverageRatio = 0.0f;
+	const bool bDisplayedTargetFramedEnough = CalculateTargetFrameCoverage(
+		DisplayedTarget, DisplayedCoverageRatio) &&
+		DisplayedCoverageRatio >= FMath::Clamp(MinimumCaptureCoverageRatio, 0.0f, 1.0f);
+	bOutIsCentered = IsViewportCenterOverTarget(DisplayedTarget) && bDisplayedTargetFramedEnough;
 
 	// Pull the edge guide slightly inside the silhouette toward the authored center.
 	// Once the reticle ray actually hits the target, use that center directly.
@@ -705,7 +753,7 @@ bool UBalhwajeomPhotoCameraComponent::GetActiveFocusGuide(
 	OutTargetInfo = DisplayedFocusTargetInfo;
 	if (bOutIsCentered || FocusGuideTraceInterval <= KINDA_SMALL_NUMBER)
 	{
-		// Green confirmation stays fully visible instead of using the scan pulse.
+		// Centered confirmation stays fully visible instead of using the scan pulse.
 		OutOpacity = 1.0f;
 	}
 	else
@@ -804,6 +852,91 @@ bool UBalhwajeomPhotoCameraComponent::IsViewportCenterOverTarget(const AActor* T
 		RayOrigin + RayDirection * FocusTargetScanDistance,
 		ECC_Visibility,
 		Params) && Hit.GetActor() == Target;
+}
+
+bool UBalhwajeomPhotoCameraComponent::CalculateTargetFrameCoverage(
+	const AActor* Target,
+	float& OutCoverageRatio) const
+{
+	OutCoverageRatio = 0.0f;
+	APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
+	if (!Target || !PlayerController ||
+		!Target->GetClass()->ImplementsInterface(UBalhwajeomCameraTargetInterface::StaticClass()))
+	{
+		return false;
+	}
+
+	UPrimitiveComponent* FramingComponent =
+		IBalhwajeomCameraTargetInterface::Execute_RequestCameraFramingComponent(
+			const_cast<AActor*>(Target));
+	if (!IsValid(FramingComponent))
+	{
+		return false;
+	}
+
+	int32 ViewportWidth = 0;
+	int32 ViewportHeight = 0;
+	PlayerController->GetViewportSize(ViewportWidth, ViewportHeight);
+	if (ViewportWidth <= 0 || ViewportHeight <= 0)
+	{
+		return false;
+	}
+
+	// Calculate local bounds and project all eight corners. Using the component
+	// supplied by the target excludes label widgets, focus points and helper objects.
+	const FBox LocalBounds = FramingComponent->CalcBounds(FTransform::Identity).GetBox();
+	if (!LocalBounds.IsValid)
+	{
+		return false;
+	}
+
+	const FVector Min = LocalBounds.Min;
+	const FVector Max = LocalBounds.Max;
+	const FVector LocalCorners[8] =
+	{
+		FVector(Min.X, Min.Y, Min.Z), FVector(Min.X, Min.Y, Max.Z),
+		FVector(Min.X, Max.Y, Min.Z), FVector(Min.X, Max.Y, Max.Z),
+		FVector(Max.X, Min.Y, Min.Z), FVector(Max.X, Min.Y, Max.Z),
+		FVector(Max.X, Max.Y, Min.Z), FVector(Max.X, Max.Y, Max.Z)
+	};
+
+	FVector2D ScreenMin(TNumericLimits<float>::Max(), TNumericLimits<float>::Max());
+	FVector2D ScreenMax(TNumericLimits<float>::Lowest(), TNumericLimits<float>::Lowest());
+	for (const FVector& LocalCorner : LocalCorners)
+	{
+		const FVector WorldCorner = FramingComponent->GetComponentTransform().TransformPosition(LocalCorner);
+		FVector2D ScreenCorner;
+		if (!PlayerController->ProjectWorldLocationToScreen(WorldCorner, ScreenCorner, false))
+		{
+			return false;
+		}
+
+		ScreenMin.X = FMath::Min(ScreenMin.X, ScreenCorner.X);
+		ScreenMin.Y = FMath::Min(ScreenMin.Y, ScreenCorner.Y);
+		ScreenMax.X = FMath::Max(ScreenMax.X, ScreenCorner.X);
+		ScreenMax.Y = FMath::Max(ScreenMax.Y, ScreenCorner.Y);
+	}
+
+	const float FullWidth = ScreenMax.X - ScreenMin.X;
+	const float FullHeight = ScreenMax.Y - ScreenMin.Y;
+	const float FullArea = FullWidth * FullHeight;
+	if (FullWidth <= KINDA_SMALL_NUMBER || FullHeight <= KINDA_SMALL_NUMBER ||
+		FullArea <= KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	const float VisibleMinX = FMath::Clamp(ScreenMin.X, 0.0f, static_cast<float>(ViewportWidth));
+	const float VisibleMinY = FMath::Clamp(ScreenMin.Y, 0.0f, static_cast<float>(ViewportHeight));
+	const float VisibleMaxX = FMath::Clamp(ScreenMax.X, 0.0f, static_cast<float>(ViewportWidth));
+	const float VisibleMaxY = FMath::Clamp(ScreenMax.Y, 0.0f, static_cast<float>(ViewportHeight));
+	const float VisibleWidth = FMath::Max(VisibleMaxX - VisibleMinX, 0.0f);
+	const float VisibleHeight = FMath::Max(VisibleMaxY - VisibleMinY, 0.0f);
+	OutCoverageRatio = FMath::Clamp(
+		(VisibleWidth * VisibleHeight) / FullArea,
+		0.0f,
+		1.0f);
+	return true;
 }
 
 void UBalhwajeomPhotoCameraComponent::UpdateEvidenceFocus(float DeltaTime)
@@ -930,6 +1063,9 @@ void UBalhwajeomPhotoCameraComponent::UpdateEvidenceFocus(float DeltaTime)
 	ActiveFocusTargetInfo = BestInfo;
 	ActiveFocusScreenPosition = BestScreenPosition;
 	bActiveFocusTargetCentered = IsViewportCenterOverTarget(BestTarget);
+	bActiveFocusTargetFramedEnough = CalculateTargetFrameCoverage(
+		BestTarget, ActiveFocusCoverageRatio) &&
+		ActiveFocusCoverageRatio >= FMath::Clamp(MinimumCaptureCoverageRatio, 0.0f, 1.0f);
 	bActiveFocusGuideLocationValid = BestTarget != nullptr;
 	ActiveFocusGuideLocalPosition = BestTarget
 		? BestTarget->GetActorTransform().InverseTransformPosition(BestGuideWorldPosition)
@@ -976,6 +1112,8 @@ void UBalhwajeomPhotoCameraComponent::ResetEvidenceFocus()
 	ActiveFocusTargetInfo = FBalhwajeomCameraTargetInfo();
 	ActiveFocusScreenPosition = FVector2D::ZeroVector;
 	bActiveFocusTargetCentered = false;
+	bActiveFocusTargetFramedEnough = false;
+	ActiveFocusCoverageRatio = 0.0f;
 	ActiveFocusGuideLocalPosition = FVector::ZeroVector;
 	ActiveFocusGuideLocalNormal = FVector::ZeroVector;
 	bActiveFocusGuideLocationValid = false;
@@ -993,6 +1131,16 @@ bool UBalhwajeomPhotoCameraComponent::TryCaptureActiveFocusTarget()
 	if (!Target)
 	{
 		ShowPhotoFeedback(TEXT("초점이 맞지 않았다."), FColor::Silver);
+		return false;
+	}
+
+	if (!bActiveFocusTargetFramedEnough)
+	{
+		const int32 RequiredPercent = FMath::RoundToInt(
+			FMath::Clamp(MinimumCaptureCoverageRatio, 0.0f, 1.0f) * 100.0f);
+		ShowPhotoFeedback(
+			FString::Printf(TEXT("대상을 화면 안에 %d%% 이상 담아야 한다."), RequiredPercent),
+			FColor::Yellow);
 		return false;
 	}
 

@@ -10,6 +10,7 @@
 #include "BalhwajeomEvidenceActor.generated.h"
 
 class UStaticMeshComponent;
+class UPrimitiveComponent;
 class USceneComponent;
 class UInspectionComponent;
 class UWidgetComponent;
@@ -38,6 +39,7 @@ public:
 
 	virtual bool RequestCameraTargetInfo_Implementation(FBalhwajeomCameraTargetInfo& OutInfo) const override;
 	virtual FVector RequestCameraFocusLocation_Implementation() const override;
+	virtual UPrimitiveComponent* RequestCameraFramingComponent_Implementation() const override;
 	virtual void NotifyCameraCaptureSucceeded_Implementation() override;
 
 protected:
