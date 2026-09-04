@@ -183,6 +183,11 @@ FVector ABalhwajeomEvidenceActor::RequestCameraFocusLocation_Implementation() co
 	return CameraFocusPoint ? CameraFocusPoint->GetComponentLocation() : GetActorLocation();
 }
 
+UPrimitiveComponent* ABalhwajeomEvidenceActor::RequestCameraFramingComponent_Implementation() const
+{
+	return EvidenceMesh;
+}
+
 void ABalhwajeomEvidenceActor::NotifyCameraCaptureSucceeded_Implementation()
 {
 	MarkAsCollected();

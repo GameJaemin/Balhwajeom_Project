@@ -7,6 +7,8 @@
 #include "BalhwajeomEvidenceTypes.h"
 #include "BalhwajeomCameraTargetInterface.generated.h"
 
+class UPrimitiveComponent;
+
 UINTERFACE(BlueprintType)
 class BALHWAJEOM_API UBalhwajeomCameraTargetInterface : public UInterface
 {
@@ -26,6 +28,10 @@ public:
 	/** A designer-positioned point used for distance, visibility and screen-center tests. */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Camera Target")
 	FVector RequestCameraFocusLocation() const;
+
+	/** Visible component whose projected bounds determine how much of the target is inside the photo frame. */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Camera Target")
+	UPrimitiveComponent* RequestCameraFramingComponent() const;
 
 	/** Notification sent only after a focused, centered, valid photo succeeds. */
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Camera Target")

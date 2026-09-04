@@ -100,6 +100,7 @@ protected:
     void RefreshDisplayedGuideSnapshot();
     bool IsDisplayedGuideSurfaceVisible() const;
     bool IsViewportCenterOverTarget(const AActor* Target) const;
+    bool CalculateTargetFrameCoverage(const AActor* Target, float& OutCoverageRatio) const;
     void ApplyDepthOfField(float DeltaTime, float DesiredFocalDistance, bool bHasFocusedTarget);
     void ResetEvidenceFocus();
     bool TryCaptureActiveFocusTarget();
@@ -152,6 +153,10 @@ protected:
     /** Surface normal must face the camera by at least this dot-product value. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Silhouette", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
     float GuideFacingDotThreshold = 0.0f;
+
+    /** Fraction of the target's projected framing bounds that must be inside the viewport. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Framing", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MinimumCaptureCoverageRatio = 0.7f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Depth Of Field")
     bool bEnableEvidenceDepthOfField = true;
@@ -224,6 +229,8 @@ protected:
     FBalhwajeomCameraTargetInfo ActiveFocusTargetInfo;
     FVector2D ActiveFocusScreenPosition = FVector2D::ZeroVector;
     bool bActiveFocusTargetCentered = false;
+    bool bActiveFocusTargetFramedEnough = false;
+    float ActiveFocusCoverageRatio = 0.0f;
     FVector ActiveFocusGuideLocalPosition = FVector::ZeroVector;
     FVector ActiveFocusGuideLocalNormal = FVector::ZeroVector;
     bool bActiveFocusGuideLocationValid = false;
