@@ -6,6 +6,7 @@
 #include "Components/TextBlock.h"
 #include "Components/WidgetSwitcher.h"
 #include "Animation/WidgetAnimation.h"
+#include "Tablet/BalhwajeomMessengerWidget.h"
 
 namespace
 {
@@ -28,6 +29,17 @@ namespace
 		}
 	}
 }
+
+#if WITH_EDITOR
+void UBalhwajeomTabletWidget::InitializeForAutomatedTest()
+{
+	NativeOnInitialized();
+	if (WBP_Messenger)
+	{
+		WBP_Messenger->InitializeForAutomatedTest();
+	}
+}
+#endif
 
 bool UBalhwajeomTabletWidget::PlayTabletOpenAnimation()
 {
@@ -109,10 +121,6 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 	{
 		BTN_FolderBack->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBackClicked);
 	}
-	if (BTN_MessengerBack)
-	{
-		BTN_MessengerBack->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBackClicked);
-	}
 	if (BTN_InternetBack)
 	{
 		BTN_InternetBack->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBackClicked);
@@ -140,6 +148,17 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 	if (BTN_PopupClose)
 	{
 		BTN_PopupClose->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePopupCloseClicked);
+	}
+	if (WBP_Messenger)
+	{
+		WBP_Messenger->OnBackRequested.AddUniqueDynamic(
+			this,
+			&ThisClass::HandleMessengerBackRequested);
+		WBP_Messenger->OnTotalUnreadChanged.AddUniqueDynamic(
+			this,
+			&ThisClass::HandleMessengerUnreadChanged);
+		WBP_Messenger->InitializeMessenger();
+		SetUnreadMessageCount(WBP_Messenger->GetTotalUnreadCount());
 	}
 
 	CurrentPage = ETabletPage::Home;
@@ -262,7 +281,21 @@ void UBalhwajeomTabletWidget::HandleMotherClicked()
 
 void UBalhwajeomTabletWidget::HandleMessengerClicked()
 {
+	if (WBP_Messenger)
+	{
+		WBP_Messenger->InitializeMessenger();
+	}
 	SetTabletPage(ETabletPage::Messenger);
+}
+
+void UBalhwajeomTabletWidget::HandleMessengerBackRequested()
+{
+	NavigateBack();
+}
+
+void UBalhwajeomTabletWidget::HandleMessengerUnreadChanged(const int32 TotalUnreadCount)
+{
+	SetUnreadMessageCount(TotalUnreadCount);
 }
 
 void UBalhwajeomTabletWidget::HandleInternetClicked()

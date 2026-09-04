@@ -5,6 +5,7 @@
 #include "BalhwajeomTabletWidget.generated.h"
 
 class UBorder;
+class UBalhwajeomMessengerWidget;
 class UButton;
 class UOverlay;
 class UTextBlock;
@@ -60,6 +61,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
 	int32 GetUnreadMessageCount() const { return UnreadMessageCount; }
 
+	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
+	UBalhwajeomMessengerWidget* GetMessengerWidget() const { return WBP_Messenger; }
+
 	UFUNCTION(BlueprintPure, Category = "Tablet|Navigation")
 	ETabletPage GetCurrentPage() const { return CurrentPage; }
 
@@ -68,7 +72,7 @@ public:
 
 #if WITH_EDITOR
 	/** Commandlet-created widgets have no local player, so UMG skips NativeOnInitialized. */
-	void InitializeForAutomatedTest() { NativeOnInitialized(); }
+	void InitializeForAutomatedTest();
 #endif
 
 protected:
@@ -110,6 +114,12 @@ private:
 	void HandleMessengerClicked();
 
 	UFUNCTION()
+	void HandleMessengerBackRequested();
+
+	UFUNCTION()
+	void HandleMessengerUnreadChanged(int32 TotalUnreadCount);
+
+	UFUNCTION()
 	void HandleInternetClicked();
 
 	UFUNCTION()
@@ -135,6 +145,9 @@ private:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidgetSwitcher> WidgetSwitcher_TabletPage;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UBalhwajeomMessengerWidget> WBP_Messenger;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UOverlay> PopupLayer;
@@ -174,9 +187,6 @@ private:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_FolderBack;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> BTN_MessengerBack;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_InternetBack;

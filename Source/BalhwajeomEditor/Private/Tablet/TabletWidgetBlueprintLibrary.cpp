@@ -12,15 +12,26 @@
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
 #include "Components/ScaleBox.h"
+#include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
+#include "Components/Spacer.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Components/WidgetSwitcher.h"
+#include "Components/WrapBox.h"
 #include "Editor.h"
 #include "Engine/Texture2D.h"
+#include "Factories/DataAssetFactory.h"
 #include "IAssetTools.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/PackageName.h"
+#include "Tablet/BalhwajeomMessengerDataAssets.h"
+#include "Tablet/BalhwajeomMessengerKeywordWidget.h"
+#include "Tablet/BalhwajeomMessengerMessageWidget.h"
+#include "Tablet/BalhwajeomMessengerRoomWidget.h"
+#include "Tablet/BalhwajeomMessengerWidget.h"
 #include "Tablet/BalhwajeomTabletWidget.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
@@ -32,6 +43,20 @@ namespace TabletDesigner
 	const TCHAR* AssetFolder = TEXT("/Game/Balhwajeom/UI/Tablet");
 	const TCHAR* AssetName = TEXT("WBP_Tablet");
 	const TCHAR* AssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_Tablet.WBP_Tablet");
+	const TCHAR* MessengerAssetName = TEXT("WBP_Messenger");
+	const TCHAR* MessengerAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_Messenger.WBP_Messenger");
+	const TCHAR* MessengerClassPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_Messenger.WBP_Messenger_C");
+	const TCHAR* RoomAssetName = TEXT("WBP_MessengerRoom");
+	const TCHAR* RoomAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_MessengerRoom.WBP_MessengerRoom");
+	const TCHAR* MessageAssetName = TEXT("WBP_MessengerMessage");
+	const TCHAR* MessageAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_MessengerMessage.WBP_MessengerMessage");
+	const TCHAR* KeywordAssetName = TEXT("WBP_MessengerKeyword");
+	const TCHAR* KeywordAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_MessengerKeyword.WBP_MessengerKeyword");
+	const TCHAR* MessengerDataFolder = TEXT("/Game/Balhwajeom/Data/Messenger");
+	const TCHAR* MessengerRoomDataFolder = TEXT("/Game/Balhwajeom/Data/Messenger/Rooms");
+	const TCHAR* MessengerCatalogAssetName = TEXT("DA_MessengerCatalog");
+	const TCHAR* MessengerCatalogAssetPath =
+		TEXT("/Game/Balhwajeom/Data/Messenger/DA_MessengerCatalog.DA_MessengerCatalog");
 
 	const TCHAR* TabletBodyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Tablet_Body.Tablet_Body");
 	const TCHAR* FamilyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Family.Family");
@@ -49,6 +74,7 @@ namespace TabletDesigner
 	const FLinearColor PageBackground(0.12f, 0.085f, 0.055f, 0.96f);
 	const FLinearColor PagePanel(0.22f, 0.15f, 0.09f, 0.92f);
 	const FLinearColor RedBadge(0.78f, 0.08f, 0.06f, 1.0f);
+	const FLinearColor MessengerAccent(0.91f, 0.60f, 0.18f, 1.0f);
 
 	bool SaveAndCompile(UWidgetBlueprint* Blueprint)
 	{
@@ -67,6 +93,71 @@ namespace TabletDesigner
 		return UPackage::SavePackage(Package, Blueprint, *PackageFilename, SaveArgs);
 	}
 
+	bool SaveDataAsset(UDataAsset* Asset)
+	{
+		if (!Asset)
+		{
+			return false;
+		}
+
+		UPackage* Package = Asset->GetOutermost();
+		Package->MarkPackageDirty();
+		const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+			Package->GetName(),
+			FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		SaveArgs.SaveFlags = SAVE_NoError;
+		SaveArgs.bSlowTask = false;
+		return UPackage::SavePackage(Package, Asset, *PackageFilename, SaveArgs);
+	}
+
+	template <typename T>
+	T* LoadOrCreateDataAsset(
+		const TCHAR* InAssetName,
+		const TCHAR* InAssetFolder,
+		bool& bOutCreated)
+	{
+		const FString DataAssetPath = FString::Printf(
+			TEXT("%s/%s.%s"),
+			InAssetFolder,
+			InAssetName,
+			InAssetName);
+		if (T* Existing = LoadObject<T>(nullptr, *DataAssetPath))
+		{
+			bOutCreated = false;
+			return Existing;
+		}
+
+		UDataAssetFactory* Factory = NewObject<UDataAssetFactory>();
+		Factory->DataAssetClass = T::StaticClass();
+		IAssetTools& AssetTools =
+			FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+		T* Created = Cast<T>(AssetTools.CreateAsset(
+			InAssetName,
+			InAssetFolder,
+			T::StaticClass(),
+			Factory));
+		bOutCreated = Created != nullptr;
+		return Created;
+	}
+
+	FST_MessengerMessage MakeArchivedMessage(
+		const TCHAR* Sender,
+		const TCHAR* Message,
+		const bool bIsPlayer,
+		const TCHAR* Keyword = TEXT(""),
+		const TCHAR* WordID = TEXT(""))
+	{
+		FST_MessengerMessage Result;
+		Result.SenderName = FText::FromString(Sender);
+		Result.Message = FText::FromString(Message);
+		Result.bIsPlayer = bIsPlayer;
+		Result.KeywordText = FText::FromString(Keyword);
+		Result.WordID = WordID;
+		return Result;
+	}
+
 	struct FBuilder
 	{
 		explicit FBuilder(UWidgetBlueprint* InBlueprint)
@@ -80,6 +171,19 @@ namespace TabletDesigner
 		{
 			T* Widget = Tree->ConstructWidget<T>(T::StaticClass(), Name);
 			Widget->bIsVariable = bVariable;
+			Blueprint->OnVariableAdded(Widget->GetFName());
+			return Widget;
+		}
+
+		UUserWidget* MakeUserWidget(UClass* WidgetClass, const FName Name, const bool bVariable = false) const
+		{
+			if (!WidgetClass || !WidgetClass->IsChildOf(UUserWidget::StaticClass()))
+			{
+				return nullptr;
+			}
+			UUserWidget* Widget = Tree->ConstructWidget<UUserWidget>(WidgetClass, Name);
+			Widget->bIsVariable = bVariable;
+			Blueprint->OnVariableAdded(Widget->GetFName());
 			return Widget;
 		}
 
@@ -381,6 +485,161 @@ namespace TabletDesigner
 			return Page;
 		}
 
+		void BuildMessengerKeyword() const
+		{
+			UButton* Root = MakeTransparentButton(TEXT("BTN_Keyword"));
+			UTextBlock* Label = MakeText(
+				TEXT("TXT_Keyword"), TEXT("단서"), 22, MessengerAccent, true);
+			Label->SetShadowOffset(FVector2D(0.0f, 1.0f));
+			Root->SetContent(Label);
+			Tree->RootWidget = Root;
+		}
+
+		void BuildMessengerRoom() const
+		{
+			UButton* Root = MakeTransparentButton(TEXT("BTN_Room"));
+			USizeBox* RowSize = Make<USizeBox>(TEXT("SB_RoomSize"));
+			RowSize->SetWidthOverride(350.0f);
+			RowSize->SetHeightOverride(118.0f);
+			Root->SetContent(RowSize);
+
+			UCanvasPanel* Canvas = Make<UCanvasPanel>(TEXT("Canvas_Room"));
+			RowSize->SetContent(Canvas);
+			UBorder* Background = MakeBorder(
+				TEXT("BRD_RoomBackground"), FLinearColor(0.15f, 0.105f, 0.065f, 0.96f));
+			Background->SetVisibility(ESlateVisibility::HitTestInvisible);
+			FillCanvas(Canvas, Background);
+
+			UBorder* Selected = MakeBorder(
+				TEXT("BRD_Selected"), FLinearColor(0.48f, 0.29f, 0.09f, 0.72f), FMargin(0.0f), true);
+			Selected->SetVisibility(ESlateVisibility::Collapsed);
+			FillCanvas(Canvas, Selected, 1);
+
+			UTextBlock* RoomName = MakeText(
+				TEXT("TXT_RoomName"), TEXT("대화방"), 25, WarmWhite, true);
+			RoomName->SetVisibility(ESlateVisibility::HitTestInvisible);
+			Place(Canvas, RoomName, 18, 12, 275, 38, 2);
+
+			UTextBlock* Preview = MakeText(
+				TEXT("TXT_LastMessage"), TEXT("마지막 메시지"), 18, WarmMuted, true);
+			Preview->SetClipping(EWidgetClipping::ClipToBounds);
+			Preview->SetVisibility(ESlateVisibility::HitTestInvisible);
+			Place(Canvas, Preview, 18, 60, 300, 34, 2);
+
+			UBorder* Badge = MakeBorder(
+				TEXT("BRD_UnreadBadge"), RedBadge, FMargin(2.0f), true);
+			FSlateBrush BadgeBrush;
+			BadgeBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
+			BadgeBrush.OutlineSettings.CornerRadii = FVector4(16.0f);
+			BadgeBrush.TintColor = FSlateColor(RedBadge);
+			Badge->SetBrush(BadgeBrush);
+			Badge->SetVisibility(ESlateVisibility::HitTestInvisible);
+			UTextBlock* Unread = MakeText(
+				TEXT("TXT_UnreadCount"), TEXT("1"), 17, FLinearColor::White, true);
+			Unread->SetJustification(ETextJustify::Center);
+			Unread->SetVisibility(ESlateVisibility::HitTestInvisible);
+			Badge->SetContent(Unread);
+			Place(Canvas, Badge, 304, 14, 32, 32, 3);
+
+			Tree->RootWidget = Root;
+		}
+
+		void BuildMessengerMessage() const
+		{
+			UVerticalBox* Root = Make<UVerticalBox>(TEXT("VB_MessageRoot"));
+			UTextBlock* Sender = MakeText(
+				TEXT("TXT_SenderName"), TEXT("보낸 사람"), 17, WarmMuted, true);
+			Sender->SetVisibility(ESlateVisibility::HitTestInvisible);
+			UVerticalBoxSlot* SenderSlot = Root->AddChildToVerticalBox(Sender);
+			SenderSlot->SetPadding(FMargin(22.0f, 8.0f, 22.0f, 4.0f));
+
+			UHorizontalBox* Alignment = Make<UHorizontalBox>(TEXT("HB_MessageAlignment"));
+			UVerticalBoxSlot* AlignmentSlot = Root->AddChildToVerticalBox(Alignment);
+			AlignmentSlot->SetPadding(FMargin(18.0f, 0.0f, 18.0f, 12.0f));
+
+			USpacer* LeftSpacer = Make<USpacer>(TEXT("Spacer_Left"), true);
+			LeftSpacer->SetSize(FVector2D(1.0f, 1.0f));
+			UHorizontalBoxSlot* LeftSlot = Alignment->AddChildToHorizontalBox(LeftSpacer);
+			LeftSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+
+			USizeBox* BubbleLimit = Make<USizeBox>(TEXT("SB_BubbleLimit"));
+			BubbleLimit->SetMaxDesiredWidth(700.0f);
+			UHorizontalBoxSlot* BubbleSlot = Alignment->AddChildToHorizontalBox(BubbleLimit);
+			BubbleSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+
+			UBorder* Bubble = MakeBorder(
+				TEXT("BRD_Bubble"), PagePanel, FMargin(18.0f, 12.0f), true);
+			BubbleLimit->SetContent(Bubble);
+			UWrapBox* Content = Make<UWrapBox>(TEXT("WB_MessageContent"), true);
+			Content->SetWrapSize(660.0f);
+			Content->SetExplicitWrapSize(true);
+			Content->SetInnerSlotPadding(FVector2D(0.0f, 2.0f));
+			Bubble->SetContent(Content);
+
+			USpacer* RightSpacer = Make<USpacer>(TEXT("Spacer_Right"), true);
+			RightSpacer->SetSize(FVector2D(1.0f, 1.0f));
+			UHorizontalBoxSlot* RightSlot = Alignment->AddChildToHorizontalBox(RightSpacer);
+			RightSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+
+			Tree->RootWidget = Root;
+		}
+
+		void BuildMessenger() const
+		{
+			UCanvasPanel* Root = Make<UCanvasPanel>(TEXT("Canvas_MessengerRoot"));
+			FillCanvas(Root, MakeColorImage(
+				TEXT("IMG_MessengerBackground"), FLinearColor(0.095f, 0.065f, 0.042f, 0.985f)));
+
+			Place(Root, MakeTextButton(TEXT("BTN_Back"), TEXT("←"), 38), 38, 76, 86, 64, 5);
+			Place(Root, MakeText(TEXT("TXT_MessengerTitle"), TEXT("메신저"), 35), 145, 82, 360, 55, 5);
+			Place(
+				Root,
+				MakeText(TEXT("TXT_ArchiveLabel"), TEXT("과거 대화 · 읽기 전용"), 18, WarmMuted),
+				1110, 92, 260, 36, 5);
+
+			UBorder* RoomPanel = MakeBorder(
+				TEXT("BRD_RoomPanel"), FLinearColor(0.12f, 0.082f, 0.052f, 0.98f), FMargin(18.0f));
+			UCanvasPanel* RoomCanvas = Make<UCanvasPanel>(TEXT("Canvas_RoomPanel"));
+			RoomPanel->SetContent(RoomCanvas);
+			Place(RoomCanvas, MakeText(TEXT("TXT_RoomListTitle"), TEXT("대화방"), 22), 6, 0, 300, 42);
+			UScrollBox* RoomList = Make<UScrollBox>(TEXT("SB_ChatRoomList"), true);
+			RoomList->SetAnimateWheelScrolling(true);
+			RoomList->SetScrollBarVisibility(ESlateVisibility::Visible);
+			Place(RoomCanvas, RoomList, 0, 52, 365, 690);
+			Place(Root, RoomPanel, 36, 154, 405, 806, 5);
+
+			UBorder* MessagePanel = MakeBorder(
+				TEXT("BRD_MessagePanel"), FLinearColor(0.14f, 0.095f, 0.058f, 0.98f), FMargin(18.0f));
+			UCanvasPanel* MessageCanvas = Make<UCanvasPanel>(TEXT("Canvas_MessagePanel"));
+			MessagePanel->SetContent(MessageCanvas);
+			UTextBlock* CurrentRoomName = MakeText(
+				TEXT("TXT_CurrentRoomName"), TEXT(""), 26, WarmWhite, true);
+			Place(MessageCanvas, CurrentRoomName, 12, 0, 820, 45);
+
+			UScrollBox* MessageList = Make<UScrollBox>(TEXT("SB_MessageList"), true);
+			MessageList->SetAnimateWheelScrolling(true);
+			MessageList->SetScrollBarVisibility(ESlateVisibility::Visible);
+			Place(MessageCanvas, MessageList, 0, 55, 876, 580);
+
+			UTextBlock* Prompt = MakeText(
+				TEXT("TXT_SelectRoomPrompt"), TEXT("대화방을 선택하세요."), 26, WarmMuted, true);
+			Prompt->SetJustification(ETextJustify::Center);
+			Prompt->SetVisibility(ESlateVisibility::HitTestInvisible);
+			Place(MessageCanvas, Prompt, 90, 290, 696, 60, 2);
+
+			UBorder* DisabledInput = MakeBorder(
+				TEXT("BRD_DisabledInputArea"), FLinearColor(0.085f, 0.06f, 0.042f, 1.0f), FMargin(20.0f));
+			DisabledInput->SetVisibility(ESlateVisibility::HitTestInvisible);
+			UTextBlock* DisabledText = MakeText(
+				TEXT("TXT_DisabledInput"), TEXT("현재 대화가 불가능합니다"), 20, WarmMuted);
+			DisabledText->SetJustification(ETextJustify::Center);
+			DisabledInput->SetContent(DisabledText);
+			Place(MessageCanvas, DisabledInput, 0, 660, 876, 82);
+			Place(Root, MessagePanel, 462, 154, 942, 806, 5);
+
+			Tree->RootWidget = Root;
+		}
+
 		UOverlay* BuildStatusBar() const
 		{
 			UOverlay* Status = Make<UOverlay>(TEXT("StatusBar"));
@@ -436,9 +695,17 @@ namespace TabletDesigner
 			UWidgetSwitcher* Switcher = Make<UWidgetSwitcher>(TEXT("WidgetSwitcher_TabletPage"), true);
 			Switcher->AddChild(BuildHomePage());
 			Switcher->AddChild(BuildPersonFolderPage());
-			Switcher->AddChild(BuildAppPage(
-				TEXT("Page_Messenger"), TEXT("BTN_MessengerBack"), TEXT("메신저"),
-				TEXT("아직 연결된 메시지가 없습니다."), MessengerPath, TEXT("IMG_MessengerPage")));
+			if (UClass* MessengerClass = LoadClass<UUserWidget>(nullptr, MessengerClassPath))
+			{
+				Switcher->AddChild(MakeUserWidget(MessengerClass, TEXT("WBP_Messenger"), true));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("Tablet redesign could not load WBP_Messenger."));
+				Switcher->AddChild(BuildAppPage(
+					TEXT("Page_Messenger"), TEXT("BTN_MessengerBack"), TEXT("메신저"),
+					TEXT("메신저 UI를 불러올 수 없습니다."), MessengerPath, TEXT("IMG_MessengerPage")));
+			}
 			Switcher->AddChild(BuildAppPage(
 				TEXT("Page_Internet"), TEXT("BTN_InternetBack"), TEXT("인터넷"),
 				TEXT("네트워크에 연결할 수 없습니다."), InternetPath, TEXT("IMG_InternetPage")));
@@ -548,6 +815,223 @@ namespace TabletDesigner
 		}
 		return true;
 	}
+
+	bool BuildWidgetBlueprint(
+		const TCHAR* InAssetName,
+		const TCHAR* InAssetPath,
+		UClass* ParentClass,
+		const bool bRedesignExisting,
+		TFunctionRef<void(const FBuilder&)> BuildTree)
+	{
+		UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, InAssetPath);
+		if (Blueprint && !bRedesignExisting)
+		{
+			return true;
+		}
+
+		if (!Blueprint)
+		{
+			UWidgetBlueprintFactory* Factory = NewObject<UWidgetBlueprintFactory>();
+			Factory->ParentClass = ParentClass;
+			IAssetTools& AssetTools =
+				FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+			Blueprint = Cast<UWidgetBlueprint>(AssetTools.CreateAsset(
+				InAssetName,
+				AssetFolder,
+				UWidgetBlueprint::StaticClass(),
+				Factory));
+		}
+		else if (!Blueprint->ParentClass || !Blueprint->ParentClass->IsChildOf(ParentClass))
+		{
+			UE_LOG(
+				LogTemp,
+				Error,
+				TEXT("Cannot redesign %s: parent %s is incompatible with %s."),
+				InAssetPath,
+				*GetNameSafe(Blueprint->ParentClass),
+				*GetNameSafe(ParentClass));
+			return false;
+		}
+
+		if (!Blueprint || !Blueprint->WidgetTree)
+		{
+			return false;
+		}
+		if (Blueprint->WidgetTree->RootWidget && !ClearWidgetTree(Blueprint))
+		{
+			return false;
+		}
+
+		BuildTree(FBuilder(Blueprint));
+		const bool bSaved = SaveAndCompile(Blueprint);
+		UE_LOG(
+			LogTemp,
+			Display,
+			TEXT("TABLET_WIDGET_BUILD Result=%s Asset=%s"),
+			bSaved ? TEXT("Success") : TEXT("Failure"),
+			InAssetPath);
+		return bSaved;
+	}
+
+	bool BuildMessengerWidgetBlueprints(const bool bRedesignExisting)
+	{
+		return BuildWidgetBlueprint(
+			KeywordAssetName,
+			KeywordAssetPath,
+			UBalhwajeomMessengerKeywordWidget::StaticClass(),
+			bRedesignExisting,
+			[](const FBuilder& Builder) { Builder.BuildMessengerKeyword(); })
+			&& BuildWidgetBlueprint(
+				RoomAssetName,
+				RoomAssetPath,
+				UBalhwajeomMessengerRoomWidget::StaticClass(),
+				bRedesignExisting,
+				[](const FBuilder& Builder) { Builder.BuildMessengerRoom(); })
+			&& BuildWidgetBlueprint(
+				MessageAssetName,
+				MessageAssetPath,
+				UBalhwajeomMessengerMessageWidget::StaticClass(),
+				bRedesignExisting,
+				[](const FBuilder& Builder) { Builder.BuildMessengerMessage(); })
+			&& BuildWidgetBlueprint(
+				MessengerAssetName,
+				MessengerAssetPath,
+				UBalhwajeomMessengerWidget::StaticClass(),
+				bRedesignExisting,
+				[](const FBuilder& Builder) { Builder.BuildMessenger(); });
+	}
+
+	bool CreateMessengerDataAssetsInternal()
+	{
+		auto EnsureRoom = [](
+			const TCHAR* InRoomAssetName,
+			const TCHAR* RoomID,
+			const TCHAR* RoomName,
+			const int32 InitialUnreadCount,
+			TArray<FST_MessengerMessage>&& Messages)
+		{
+			bool bCreated = false;
+			UBalhwajeomMessengerRoomDataAsset* Room =
+				LoadOrCreateDataAsset<UBalhwajeomMessengerRoomDataAsset>(
+					InRoomAssetName,
+					MessengerRoomDataFolder,
+					bCreated);
+			if (Room && bCreated)
+			{
+				Room->RoomID = RoomID;
+				Room->RoomName = FText::FromString(RoomName);
+				Room->InitialUnreadCount = InitialUnreadCount;
+				Room->Messages = MoveTemp(Messages);
+				if (!SaveDataAsset(Room))
+				{
+					return static_cast<UBalhwajeomMessengerRoomDataAsset*>(nullptr);
+				}
+			}
+			return Room;
+		};
+
+		TArray<TObjectPtr<UBalhwajeomMessengerRoomDataAsset>> RoomAssets;
+		RoomAssets.Add(EnsureRoom(
+			TEXT("DA_MessengerRoom_Family"),
+			TEXT("Family"),
+			TEXT("우리 가족"),
+			3,
+			{
+				MakeArchivedMessage(TEXT("엄마"), TEXT("오늘 저녁은 다 같이 먹을 수 있지?"), false),
+				MakeArchivedMessage(TEXT("나"), TEXT("응, 조금 늦어도 꼭 갈게."), true),
+				MakeArchivedMessage(TEXT("형"), TEXT("케이크는 내가 찾아갈게."), false),
+				MakeArchivedMessage(TEXT("여동생"), TEXT("그럼 사진도 꼭 찍자!"), false),
+			}));
+		RoomAssets.Add(EnsureRoom(
+			TEXT("DA_MessengerRoom_Mother"),
+			TEXT("Mother"),
+			TEXT("엄마"),
+			1,
+			{
+				MakeArchivedMessage(TEXT("엄마"), TEXT("오늘 저녁 먹고 들어오니?"), false),
+				MakeArchivedMessage(TEXT("나"), TEXT("응. 너무 늦지는 않을 거야."), true),
+				MakeArchivedMessage(
+					TEXT("엄마"),
+					TEXT("현관 비밀번호 바뀐 거 잊지 마."),
+					false,
+					TEXT("현관 비밀번호"),
+					TEXT("Mother_DoorCode")),
+			}));
+		RoomAssets.Add(EnsureRoom(
+			TEXT("DA_MessengerRoom_Sister"),
+			TEXT("Sister"),
+			TEXT("여동생"),
+			4,
+			{
+				MakeArchivedMessage(TEXT("여동생"), TEXT("내 생일 기억하고 있지?"), false),
+				MakeArchivedMessage(
+					TEXT("나"),
+					TEXT("당연하지. 5월 13일."),
+					true,
+					TEXT("5월 13일"),
+					TEXT("Sister_Birthday")),
+				MakeArchivedMessage(
+					TEXT("여동생"),
+					TEXT("내 생일에 스노우 글로브 사준다고 했잖아"),
+					false,
+					TEXT("스노우 글로브"),
+					TEXT("Sister_SnowGlobe")),
+				MakeArchivedMessage(TEXT("나"), TEXT("기억하고 있어. 걱정하지 마."), true),
+				MakeArchivedMessage(TEXT("여동생"), TEXT("약속이다!"), false),
+			}));
+		RoomAssets.Add(EnsureRoom(
+			TEXT("DA_MessengerRoom_Brother"),
+			TEXT("Brother"),
+			TEXT("형"),
+			0,
+			{
+				MakeArchivedMessage(
+					TEXT("형"),
+					TEXT("차 키 식탁 위에 뒀어."),
+					false,
+					TEXT("차 키"),
+					TEXT("Brother_CarKey")),
+				MakeArchivedMessage(TEXT("나"), TEXT("확인했어. 내일 가져다줄게."), true),
+				MakeArchivedMessage(TEXT("형"), TEXT("그래, 고맙다."), false),
+			}));
+
+		if (RoomAssets.Contains(nullptr))
+		{
+			UE_LOG(LogTemp, Error, TEXT("One or more messenger room Data Assets could not be created."));
+			return false;
+		}
+
+		bool bCatalogCreated = false;
+		UBalhwajeomMessengerCatalogDataAsset* Catalog =
+			LoadOrCreateDataAsset<UBalhwajeomMessengerCatalogDataAsset>(
+				MessengerCatalogAssetName,
+				MessengerDataFolder,
+				bCatalogCreated);
+		if (!Catalog)
+		{
+			return false;
+		}
+		if (bCatalogCreated)
+		{
+			Catalog->Rooms = MoveTemp(RoomAssets);
+			if (!SaveDataAsset(Catalog))
+			{
+				return false;
+			}
+		}
+
+		UE_LOG(
+			LogTemp,
+			Display,
+			TEXT("MESSENGER_DATA_ASSETS Result=Success Catalog=%s"),
+			MessengerCatalogAssetPath);
+		return true;
+	}
+}
+
+bool UTabletWidgetBlueprintLibrary::CreateMessengerDataAssets()
+{
+	return TabletDesigner::CreateMessengerDataAssetsInternal();
 }
 
 bool UTabletWidgetBlueprintLibrary::InspectTabletWidgetBlueprint()
@@ -588,6 +1072,10 @@ bool UTabletWidgetBlueprintLibrary::InspectTabletWidgetBlueprint()
 bool UTabletWidgetBlueprintLibrary::CreateTabletWidgetBlueprint()
 {
 	using namespace TabletDesigner;
+	if (!CreateMessengerDataAssetsInternal() || !BuildMessengerWidgetBlueprints(false))
+	{
+		return false;
+	}
 	if (LoadObject<UWidgetBlueprint>(nullptr, AssetPath))
 	{
 		UE_LOG(LogTemp, Display, TEXT("%s already exists; preserving Designer edits."), AssetPath);
@@ -610,6 +1098,11 @@ bool UTabletWidgetBlueprintLibrary::CreateTabletWidgetBlueprint()
 bool UTabletWidgetBlueprintLibrary::RedesignTabletWidgetBlueprint()
 {
 	using namespace TabletDesigner;
+	if (!CreateMessengerDataAssetsInternal() || !BuildMessengerWidgetBlueprints(true))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Messenger widget blueprints could not be generated."));
+		return false;
+	}
 	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, AssetPath);
 	if (!Blueprint || !ClearWidgetTree(Blueprint))
 	{
@@ -725,6 +1218,151 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 	bPassed &= Require(Tablet->GetCurrentPage() == ETabletPage::Memo, TEXT("Memo opens"));
 	bPassed &= Require(Click(TEXT("BTN_PhysicalHome")), TEXT("physical Home exists"));
 	bPassed &= Require(Tablet->GetCurrentPage() == ETabletPage::Home, TEXT("physical Home clears to Home"));
+
+	UBalhwajeomMessengerWidget* Messenger = Tablet->GetMessengerWidget();
+	bPassed &= Require(Messenger != nullptr, TEXT("WBP_Messenger is embedded in WBP_Tablet"));
+	if (Messenger)
+	{
+		bPassed &= Require(
+			Messenger->GetMessengerDataAsset() != nullptr,
+			TEXT("messenger loads the planner-owned Data Asset catalog"));
+		bPassed &= Require(
+			Messenger->GetMessengerDataAsset()
+			&& Messenger->GetMessengerDataAsset()->Rooms.Num() == 4,
+			TEXT("catalog references four room Data Assets"));
+		bPassed &= Require(Messenger->IsMessengerInitialized(), TEXT("messenger initializes once"));
+		bPassed &= Require(Messenger->HasValidRoomData(), TEXT("room IDs, messages, and unread counts are valid"));
+		bPassed &= Require(Messenger->GetDisplayedRoomCount() == 4, TEXT("four room rows are created"));
+		bPassed &= Require(Messenger->GetDisplayedMessageCount() == 0, TEXT("first entry does not auto-select a room"));
+		bPassed &= Require(Messenger->GetCurrentRoomID().IsEmpty(), TEXT("first entry has no current room"));
+		bPassed &= Require(Messenger->GetTotalUnreadCount() == 8, TEXT("initial unread state is copied once"));
+		bPassed &= Require(
+			Cast<UScrollBox>(Messenger->GetWidgetFromName(TEXT("SB_ChatRoomList"))) != nullptr,
+			TEXT("room list is scrollable"));
+		bPassed &= Require(
+			Cast<UScrollBox>(Messenger->GetWidgetFromName(TEXT("SB_MessageList"))) != nullptr,
+			TEXT("message list is scrollable"));
+		if (const UTextBlock* DisabledInput =
+			Cast<UTextBlock>(Messenger->GetWidgetFromName(TEXT("TXT_DisabledInput"))))
+		{
+			bPassed &= Require(
+				DisabledInput->GetText().ToString() == TEXT("현재 대화가 불가능합니다"),
+				TEXT("read-only input notice is present"));
+		}
+		else
+		{
+			bPassed &= Require(false, TEXT("read-only input notice exists"));
+		}
+
+		if (const UBalhwajeomMessengerRoomWidget* MotherRoom =
+			Messenger->GetDisplayedRoomWidget(TEXT("Mother")))
+		{
+			bPassed &= Require(
+				MotherRoom->GetLastMessagePreview().ToString() == TEXT("현관 비밀번호 바뀐 거 잊지 마."),
+				TEXT("room preview comes from Messages.Last"));
+		}
+		else
+		{
+			bPassed &= Require(false, TEXT("Mother room widget exists"));
+		}
+
+		Messenger->InitializeMessenger();
+		bPassed &= Require(Messenger->GetDisplayedRoomCount() == 4, TEXT("initialization guard prevents duplicate rooms"));
+		bPassed &= Require(Click(TEXT("BTN_Messenger")), TEXT("Messenger button exists"));
+		bPassed &= Require(Tablet->GetCurrentPage() == ETabletPage::Messenger, TEXT("Messenger opens"));
+
+		if (UBalhwajeomMessengerRoomWidget* MotherRoom =
+			Messenger->GetDisplayedRoomWidget(TEXT("Mother")))
+		{
+			if (UButton* RoomButton = Cast<UButton>(MotherRoom->GetWidgetFromName(TEXT("BTN_Room"))))
+			{
+				RoomButton->OnClicked.Broadcast();
+			}
+			else
+			{
+				bPassed &= Require(false, TEXT("room row button exists"));
+			}
+		}
+		else
+		{
+			bPassed &= Require(false, TEXT("Mother room can be selected"));
+		}
+		bPassed &= Require(Messenger->GetCurrentRoomID() == TEXT("Mother"), TEXT("current room tracks RoomID"));
+		bPassed &= Require(Messenger->GetDisplayedMessageCount() == 3, TEXT("Mother messages load"));
+		bPassed &= Require(Messenger->GetCurrentUnreadCount(TEXT("Mother")) == 0, TEXT("selected room becomes read"));
+		bPassed &= Require(Messenger->GetCurrentUnreadCount(TEXT("Sister")) == 4, TEXT("other room unread state is unchanged"));
+		bPassed &= Require(Messenger->GetTotalUnreadCount() == 7, TEXT("aggregate badge follows room state"));
+
+		const FString ValidRoomBeforeInvalidSelection = Messenger->GetCurrentRoomID();
+		const int32 MessageCountBeforeInvalidSelection = Messenger->GetDisplayedMessageCount();
+		bPassed &= Require(!Messenger->SelectRoomByID(TEXT("Missing")), TEXT("invalid RoomID is rejected"));
+		bPassed &= Require(
+			Messenger->GetCurrentRoomID() == ValidRoomBeforeInvalidSelection
+			&& Messenger->GetDisplayedMessageCount() == MessageCountBeforeInvalidSelection,
+			TEXT("invalid RoomID preserves the current UI"));
+
+		bPassed &= Require(Messenger->SelectRoomByID(TEXT("Sister")), TEXT("Sister room can be selected"));
+		bPassed &= Require(Messenger->GetDisplayedMessageCount() == 5, TEXT("changing rooms clears old messages"));
+		bPassed &= Require(Messenger->GetCurrentUnreadCount(TEXT("Sister")) == 0, TEXT("Sister room becomes read"));
+		bPassed &= Require(Messenger->GetTotalUnreadCount() == 3, TEXT("unread totals remain isolated per room"));
+		if (const UBalhwajeomMessengerMessageWidget* PlayerMessage = Messenger->GetDisplayedMessageWidget(1))
+		{
+			bPassed &= Require(PlayerMessage->IsPlayerMessage(), TEXT("player message retains right-side alignment state"));
+			bPassed &= Require(PlayerMessage->HasInteractiveKeyword(), TEXT("valid WordID keyword is interactive"));
+		}
+		else
+		{
+			bPassed &= Require(false, TEXT("player message widget exists"));
+		}
+		if (const UBalhwajeomMessengerMessageWidget* FamilyMessage = Messenger->GetDisplayedMessageWidget(0))
+		{
+			bPassed &= Require(!FamilyMessage->IsPlayerMessage(), TEXT("family message retains left-side alignment state"));
+		}
+
+		bPassed &= Require(Messenger->SelectRoomByID(TEXT("Sister")), TEXT("selected room can be clicked again"));
+		bPassed &= Require(Messenger->GetCurrentUnreadCount(TEXT("Sister")) == 0, TEXT("reselecting a room is idempotent"));
+
+		if (UButton* MessengerBack = Cast<UButton>(Messenger->GetWidgetFromName(TEXT("BTN_Back"))))
+		{
+			MessengerBack->OnClicked.Broadcast();
+			bPassed &= Require(Tablet->GetCurrentPage() == ETabletPage::Home, TEXT("Messenger back requests Desktop"));
+			bPassed &= Require(Click(TEXT("BTN_Messenger")), TEXT("Messenger can reopen"));
+			bPassed &= Require(
+				Messenger->GetCurrentUnreadCount(TEXT("Sister")) == 0
+				&& Messenger->GetDisplayedRoomCount() == 4,
+				TEXT("read state and room list persist across Messenger re-entry"));
+			MessengerBack->OnClicked.Broadcast();
+		}
+		else
+		{
+			bPassed &= Require(false, TEXT("Messenger back button exists"));
+		}
+
+		UClass* MessageClass = LoadClass<UBalhwajeomMessengerMessageWidget>(
+			nullptr,
+			TEXT("/Game/Balhwajeom/UI/Tablet/WBP_MessengerMessage.WBP_MessengerMessage_C"));
+		UBalhwajeomMessengerMessageWidget* InvalidKeywordMessage = MessageClass
+			? CreateWidget<UBalhwajeomMessengerMessageWidget>(World, MessageClass)
+			: nullptr;
+		if (InvalidKeywordMessage)
+		{
+			FST_MessengerMessage InvalidData;
+			InvalidData.SenderName = FText::FromString(TEXT("테스트"));
+			InvalidData.Message = FText::FromString(TEXT("생일 선물 사준다고 했잖아"));
+			InvalidData.KeywordText = FText::FromString(TEXT("스노우 글로브"));
+			InvalidData.WordID = TEXT("Sister_SnowGlobe");
+			InvalidKeywordMessage->SetupMessage(InvalidData);
+			bPassed &= Require(
+				!InvalidKeywordMessage->HasInteractiveKeyword()
+				&& InvalidKeywordMessage->GetDisplayedMessage().EqualTo(InvalidData.Message),
+				TEXT("invalid keyword data falls back to the full plain message"));
+		}
+		else
+		{
+			bPassed &= Require(false, TEXT("message widget can be instantiated for fallback validation"));
+		}
+	}
+
 	bPassed &= Require(Click(TEXT("BTN_Sister")), TEXT("Sister folder button exists"));
 	bPassed &= Require(Tablet->GetCurrentPage() == ETabletPage::PersonFolder, TEXT("folder page opens"));
 	bPassed &= Require(Tablet->GetActiveFamilyMember() == EFamilyMember::Sister, TEXT("active member is Sister"));
