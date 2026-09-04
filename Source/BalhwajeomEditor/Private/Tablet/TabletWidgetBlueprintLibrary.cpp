@@ -675,6 +675,7 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 	};
 
 	bool bPassed = true;
+	bPassed &= Require(Tablet->HasTabletTransitionAnimation(), TEXT("TabletUpAnim binds to the native tablet widget"));
 	if (const UScaleBox* TabletScale = Cast<UScaleBox>(FindWidget(TEXT("ScaleBox_Tablet"))))
 	{
 		const UCanvasPanelSlot* Slot = Cast<UCanvasPanelSlot>(TabletScale->Slot);

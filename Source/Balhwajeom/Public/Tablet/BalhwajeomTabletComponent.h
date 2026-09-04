@@ -73,11 +73,13 @@ private:
 	void RefreshPhotoCameraBinding();
 	void ProcessPendingPhotoExit();
 	void OpenTabletNow();
+	void FinishCloseTablet();
 	void SetGameplayInputBlocked(bool bBlocked);
 
 	void HandleTabletAction();
 	void HandlePhotoCameraModeExited();
 	void HandlePhotoCameraTransitionFinished();
+	void HandleTabletCloseAnimationFinished();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UEnhancedInputComponent> TabletInputComponent;
@@ -95,6 +97,7 @@ private:
 	TWeakObjectPtr<UBalhwajeomPhotoCameraComponent> BoundPhotoCamera;
 
 	bool bTabletOpen = false;
+	bool bTabletClosing = false;
 	bool bPendingOpenAfterPhotoMode = false;
 	bool bOwnsMappingContextRegistration = false;
 	bool bSavedShowMouseCursor = false;

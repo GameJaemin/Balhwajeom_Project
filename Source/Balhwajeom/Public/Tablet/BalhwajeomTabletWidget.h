@@ -9,6 +9,7 @@ class UButton;
 class UOverlay;
 class UTextBlock;
 class UWidgetSwitcher;
+class UWidgetAnimation;
 
 UENUM(BlueprintType)
 enum class ETabletPage : uint8
@@ -35,6 +36,20 @@ class BALHWAJEOM_API UBalhwajeomTabletWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	FSimpleMulticastDelegate OnTabletCloseAnimationFinished;
+
+	/** Plays the designer-authored TabletUpAnim using its authored duration. */
+	bool PlayTabletOpenAnimation();
+
+	/** Returns false when TabletUpAnim is absent, so the owner can close immediately. */
+	bool PlayTabletCloseAnimation();
+
+	/** Lets automated validation confirm the WBP animation is bound without playing UMG in a commandlet. */
+	bool HasTabletTransitionAnimation() const { return TabletUpAnim != nullptr; }
+
+	/** Reverses an in-progress close when IA_Tablet is pressed again. */
+	void CancelTabletCloseAnimation();
+
 	/** Physical Home behavior: clears page history and always opens Home. */
 	UFUNCTION(BlueprintCallable, Category = "Tablet")
 	void ResetToDesktop();
@@ -58,6 +73,7 @@ public:
 
 protected:
 	virtual void NativeOnInitialized() override;
+	virtual void OnAnimationFinished_Implementation(const UWidgetAnimation* Animation) override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tablet|Messenger", meta = (ClampMin = "0"))
 	int32 UnreadMessageCount = 0;
@@ -75,6 +91,11 @@ private:
 	void ShowPopup(const FText& Title, const FText& Body);
 	void HidePopup();
 	void UpdateUnreadBadge();
+
+	UPROPERTY(Transient, meta = (BindWidgetAnimOptional))
+	TObjectPtr<UWidgetAnimation> TabletUpAnim;
+
+	bool bWaitingForCloseAnimation = false;
 
 	UFUNCTION()
 	void HandleSisterClicked();

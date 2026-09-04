@@ -39,11 +39,13 @@ void UBalhwajeomTabletComponent::EndPlay(const EEndPlayReason::Type EndPlayReaso
 
 	if (bTabletOpen || bPendingOpenAfterPhotoMode)
 	{
-		CloseTablet();
+		bPendingOpenAfterPhotoMode = false;
+		FinishCloseTablet();
 	}
 
 	if (TabletWidget)
 	{
+		TabletWidget->OnTabletCloseAnimationFinished.RemoveAll(this);
 		TabletWidget->RemoveFromParent();
 		TabletWidget = nullptr;
 	}
@@ -64,7 +66,8 @@ void UBalhwajeomTabletComponent::TickComponent(
 	{
 		if (bTabletOpen || bPendingOpenAfterPhotoMode)
 		{
-			CloseTablet();
+			bPendingOpenAfterPhotoMode = false;
+			FinishCloseTablet();
 		}
 
 		TeardownPlayerInput();
@@ -247,7 +250,15 @@ void UBalhwajeomTabletComponent::ToggleTablet()
 		return;
 	}
 
-	if (bTabletOpen)
+	if (bTabletClosing)
+	{
+		bTabletClosing = false;
+		if (TabletWidget)
+		{
+			TabletWidget->CancelTabletCloseAnimation();
+		}
+	}
+	else if (bTabletOpen)
 	{
 		CloseTablet();
 	}
@@ -337,7 +348,11 @@ void UBalhwajeomTabletComponent::OpenTabletNow()
 		TabletWidget = CreateWidget<UBalhwajeomTabletWidget>(PlayerController, WidgetClass);
 		if (TabletWidget)
 		{
+			TabletWidget->SetVisibility(ESlateVisibility::Collapsed);
 			TabletWidget->AddToPlayerScreen(100);
+			TabletWidget->OnTabletCloseAnimationFinished.AddUObject(
+				this,
+				&ThisClass::HandleTabletCloseAnimationFinished);
 		}
 	}
 
@@ -357,6 +372,7 @@ void UBalhwajeomTabletComponent::OpenTabletNow()
 	SetGameplayInputBlocked(true);
 
 	TabletWidget->SetVisibility(ESlateVisibility::Visible);
+	TabletWidget->PlayTabletOpenAnimation();
 
 	PlayerController->bShowMouseCursor = true;
 	PlayerController->bEnableClickEvents = true;
@@ -372,6 +388,24 @@ void UBalhwajeomTabletComponent::OpenTabletNow()
 void UBalhwajeomTabletComponent::CloseTablet()
 {
 	bPendingOpenAfterPhotoMode = false;
+	if (!bTabletOpen || bTabletClosing)
+	{
+		return;
+	}
+
+	bTabletClosing = true;
+	if (TabletWidget && TabletWidget->PlayTabletCloseAnimation())
+	{
+		return;
+	}
+
+	bTabletClosing = false;
+	FinishCloseTablet();
+}
+
+void UBalhwajeomTabletComponent::FinishCloseTablet()
+{
+	bTabletClosing = false;
 
 	APlayerController* PlayerController = InitializedPlayerController.Get();
 	if (TabletWidget)
@@ -392,6 +426,14 @@ void UBalhwajeomTabletComponent::CloseTablet()
 
 	bTabletOpen = false;
 	SetGameplayInputBlocked(false);
+}
+
+void UBalhwajeomTabletComponent::HandleTabletCloseAnimationFinished()
+{
+	if (bTabletClosing)
+	{
+		FinishCloseTablet();
+	}
 }
 
 void UBalhwajeomTabletComponent::SetGameplayInputBlocked(bool bBlocked)

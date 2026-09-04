@@ -5,6 +5,7 @@
 #include "Components/Overlay.h"
 #include "Components/TextBlock.h"
 #include "Components/WidgetSwitcher.h"
+#include "Animation/WidgetAnimation.h"
 
 namespace
 {
@@ -25,6 +26,54 @@ namespace
 		default:
 			return FText::FromString(TEXT("여동생"));
 		}
+	}
+}
+
+bool UBalhwajeomTabletWidget::PlayTabletOpenAnimation()
+{
+	bWaitingForCloseAnimation = false;
+	if (!TabletUpAnim)
+	{
+		return false;
+	}
+
+	PlayAnimationForward(TabletUpAnim, 1.0f, false);
+	return true;
+}
+
+bool UBalhwajeomTabletWidget::PlayTabletCloseAnimation()
+{
+	if (!TabletUpAnim)
+	{
+		return false;
+	}
+
+	bWaitingForCloseAnimation = true;
+	PlayAnimationReverse(TabletUpAnim, 1.0f, false);
+	return true;
+}
+
+void UBalhwajeomTabletWidget::CancelTabletCloseAnimation()
+{
+	if (!bWaitingForCloseAnimation)
+	{
+		return;
+	}
+
+	bWaitingForCloseAnimation = false;
+	if (TabletUpAnim)
+	{
+		PlayAnimationForward(TabletUpAnim, 1.0f, false);
+	}
+}
+
+void UBalhwajeomTabletWidget::OnAnimationFinished_Implementation(const UWidgetAnimation* Animation)
+{
+	Super::OnAnimationFinished_Implementation(Animation);
+	if (Animation == TabletUpAnim && bWaitingForCloseAnimation)
+	{
+		bWaitingForCloseAnimation = false;
+		OnTabletCloseAnimationFinished.Broadcast();
 	}
 }
 
