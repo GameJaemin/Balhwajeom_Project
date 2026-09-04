@@ -182,7 +182,7 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Pan", meta = (ClampMin = "0.0"))
     float CameraPanSpeed = 80.0f;
 
-    /** Maximum distance the camera may be panned from its entry position. */
+    /** Half-size of the square pan area on both the horizontal and vertical axes. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Pan", meta = (ClampMin = "0.0"))
     float CameraPanMaxDistance = 150.0f;
 

@@ -668,7 +668,20 @@ void UBalhwajeomPhotoCameraComponent::PanCamera(const FVector& ScreenDirection, 
 
 	const FVector Delta = ScreenDirection.GetSafeNormal() * Value * CameraPanSpeed * GetWorld()->GetDeltaSeconds();
 	CameraPanWorldOffset += Delta;
-	CameraPanWorldOffset = CameraPanWorldOffset.GetClampedToMaxSize(CameraPanMaxDistance);
+
+	// Clamp each axis independently. A vector-length clamp creates a circular
+	// boundary; independent horizontal/vertical limits create a square pan area.
+	const float PanLimit = FMath::Max(CameraPanMaxDistance, 0.0f);
+	const float HorizontalOffset = FMath::Clamp(
+		FVector::DotProduct(CameraPanWorldOffset, CameraPanRightDirection),
+		-PanLimit,
+		PanLimit);
+	const float VerticalOffset = FMath::Clamp(
+		FVector::DotProduct(CameraPanWorldOffset, FVector::UpVector),
+		-PanLimit,
+		PanLimit);
+	CameraPanWorldOffset =
+		CameraPanRightDirection * HorizontalOffset + FVector::UpVector * VerticalOffset;
 	PhotoCamera->SetWorldLocation(CameraModeEntryWorldLocation + CameraPanWorldOffset);
 }
 
