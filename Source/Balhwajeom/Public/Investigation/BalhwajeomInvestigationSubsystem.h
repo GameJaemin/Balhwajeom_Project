@@ -79,7 +79,8 @@ public:
 	bool ValidateSentence(
 		FName SentenceID,
 		const FSentenceSubmission& Submission,
-		FName& OutResultTextID);
+		FName& OutResultTextID,
+		FText& OutResultText);
 
 	UPROPERTY(BlueprintAssignable, Category = "Investigation|Events")
 	FOnEvidenceStateChanged OnEvidenceStateChanged;
@@ -107,7 +108,6 @@ private:
 	const FPhotoDefinition* FindPhotoDefinition(FName PhotoID) const;
 	const FKeywordDocumentDefinition* FindKeywordDocumentDefinition(FName KeywordDocumentID) const;
 	const FSentenceDefinition* FindSentenceDefinition(FName SentenceID) const;
-	const FOutputTextDefinition* FindOutputTextDefinition(FName TextID) const;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDataTable> EvidenceDefinitionsTable;
@@ -126,9 +126,6 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDataTable> SentencesTable;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UDataTable> OutputTextsTable;
 
 	UPROPERTY(Transient)
 	TMap<FGuid, FEvidenceRuntimeState> EvidenceRuntimeStates;

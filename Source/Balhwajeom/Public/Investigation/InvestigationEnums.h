@@ -49,15 +49,6 @@ enum class ESentenceType : uint8
 };
 
 UENUM(BlueprintType)
-enum class EOutputTextType : uint8
-{
-	Answer,
-	Statement,
-	Dialogue,
-	Etc
-};
-
-UENUM(BlueprintType)
 enum class EWordAcquisitionSource : uint8
 {
 	Default,

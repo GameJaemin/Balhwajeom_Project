@@ -56,23 +56,8 @@ struct BALHWAJEOM_API FSentenceDefinition : public FTableRowBase
 	FName ResultTextID = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (MultiLine = "true"))
+	FText ResultText;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (MultiLine = "true"))
 	FText DesignerNote;
-};
-
-USTRUCT(BlueprintType)
-struct BALHWAJEOM_API FOutputTextDefinition : public FTableRowBase
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output Text")
-	FName TextID = NAME_None;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output Text")
-	EOutputTextType TextType = EOutputTextType::Answer;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output Text", meta = (MultiLine = "true"))
-	FText OutputText;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Output Text")
-	FName SpeakerID = NAME_None;
 };

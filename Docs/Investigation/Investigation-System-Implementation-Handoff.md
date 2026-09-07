@@ -13,7 +13,7 @@ C:\Users\User\Documents\GitHub\Balhwajeom_Project
 ## 2. 확정된 설계 원칙
 
 - `PrimaryDataAsset`과 별도 Database 에셋은 사용하지 않는다.
-- 정적 기획 데이터는 7개의 `UDataTable`로 관리한다.
+- 정적 기획 데이터는 6개의 `UDataTable`로 관리한다.
 - DataTable 연결은 `UBalhwajeomInvestigationSettings : UDeveloperSettings`가 담당한다.
 - 시나리오와 기획자가 Excel/CSV를 자주 사용하므로 `FEvidenceStateDefinition`은 중첩 구조가 아닌 평면 구조다.
 - 각 DataTable의 `Row Name`과 행 내부 ID는 반드시 동일하게 유지한다.
@@ -98,12 +98,6 @@ ESentenceType
 ├─ PhotoAnalysis
 └─ Statement
 
-EOutputTextType
-├─ Answer
-├─ Statement
-├─ Dialogue
-└─ Etc
-
 EWordAcquisitionSource
 ├─ Default
 ├─ EvidenceInteraction
@@ -158,10 +152,10 @@ FWordDefinition
 FPhotoDefinition
 FKeywordDocumentDefinition
 FSentenceDefinition
-FOutputTextDefinition
 ```
 
 `FKeywordChoiceDefinition`, `FSentenceWordSlot`, `FSentencePhotoSlot`은 각 행 안에서 사용하는 배열 원소 구조체다.
+문장 판정 결과는 `FSentenceDefinition`의 `ResultTextID`와 `ResultText`에 함께 저장한다.
 
 ## 6. 실제 DataTable 에셋
 
@@ -181,7 +175,6 @@ FOutputTextDefinition
 | `DT_Photos` | `FPhotoDefinition` |
 | `DT_KeywordDocuments` | `FKeywordDocumentDefinition` |
 | `DT_Sentences` | `FSentenceDefinition` |
-| `DT_OutputTexts` | `FOutputTextDefinition` |
 
 `Config/DefaultGame.ini`의 다음 섹션에 모두 연결되어 있다.
 
@@ -243,7 +236,8 @@ bool RegisterCapturedPhoto(
 bool ValidateSentence(
     FName SentenceID,
     const FSentenceSubmission& Submission,
-    FName& OutResultTextID
+    FName& OutResultTextID,
+    FText& OutResultText
 );
 ```
 
@@ -300,7 +294,7 @@ Subsystem 초기화 흐름:
 
 ```text
 InvestigationSettings 읽기
-→ DataTable 7개 동기 로드
+→ DataTable 6개 동기 로드
 → 교차 데이터 유효성 검사
 → 기본 제공 키워드 등록
 ```
@@ -314,7 +308,6 @@ WordID            → DT_Words
 PhotoID           → DT_Photos
 KeywordDocumentID → DT_KeywordDocuments
 SentenceID        → DT_Sentences
-TextID            → DT_OutputTexts
 ```
 
 자동 검증 항목:
@@ -332,6 +325,7 @@ TextID            → DT_OutputTexts
 - `CorrectWordID`, `CorrectPhotoID`
 - `RequiredPhotoCount`
 - `ResultTextID`
+- `ResultText`
 
 ## 11. 자동 테스트
 
@@ -397,7 +391,7 @@ DataTable 생성 스크립트 재실행 성공
 
 ### 이후 공통 작업
 
-- 실제 시나리오 데이터를 Excel/CSV에서 7개 DataTable로 입력
+- 실제 시나리오 데이터를 Excel/CSV에서 6개 DataTable로 입력
 - 태블릿 메모장·갤러리·진술서 UI 연결
 - 키워드/사진 목록 조회 API가 필요해질 때 공개 계약 확장
 - KeywordDocument의 선택 진행 상태가 실제로 필요하면 선택 API 추가

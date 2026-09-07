@@ -17,8 +17,7 @@ struct FInvestigationSubsystemTestAccessor
 		UDataTable* Words,
 		UDataTable* Photos,
 		UDataTable* KeywordDocuments,
-		UDataTable* Sentences,
-		UDataTable* OutputTexts)
+		UDataTable* Sentences)
 	{
 		Subsystem->EvidenceDefinitionsTable = EvidenceDefinitions;
 		Subsystem->EvidenceStatesTable = EvidenceStates;
@@ -26,7 +25,6 @@ struct FInvestigationSubsystemTestAccessor
 		Subsystem->PhotosTable = Photos;
 		Subsystem->KeywordDocumentsTable = KeywordDocuments;
 		Subsystem->SentencesTable = Sentences;
-		Subsystem->OutputTextsTable = OutputTexts;
 	}
 
 	static bool Validate(const UBalhwajeomInvestigationSubsystem* Subsystem)
@@ -63,7 +61,6 @@ struct FFixture
 		, Photos(MakeTable<FPhotoDefinition>())
 		, KeywordDocuments(MakeTable<FKeywordDocumentDefinition>())
 		, Sentences(MakeTable<FSentenceDefinition>())
-		, OutputTexts(MakeTable<FOutputTextDefinition>())
 	{
 		FEvidenceDefinition Evidence;
 		Evidence.ObjectID = ObjectID;
@@ -91,6 +88,7 @@ struct FFixture
 		FSentenceDefinition Sentence;
 		Sentence.SentenceID = SentenceID;
 		Sentence.ResultTextID = ResultTextID;
+		Sentence.ResultText = FText::FromString(TEXT("Test result text"));
 		Sentence.RequiredPhotoCount = 1;
 
 		FSentenceWordSlot WordSlot;
@@ -104,10 +102,6 @@ struct FFixture
 		Sentence.PhotoSlots.Add(PhotoSlot);
 		Sentences->AddRow(SentenceID, Sentence);
 
-		FOutputTextDefinition OutputText;
-		OutputText.TextID = ResultTextID;
-		OutputTexts->AddRow(ResultTextID, OutputText);
-
 		FInvestigationSubsystemTestAccessor::SetTables(
 			Subsystem,
 			EvidenceDefinitions,
@@ -115,8 +109,7 @@ struct FFixture
 			Words,
 			Photos,
 			KeywordDocuments,
-			Sentences,
-			OutputTexts);
+			Sentences);
 	}
 
 	FGuid RegisterTestEvidence() const
@@ -148,7 +141,6 @@ struct FFixture
 	UDataTable* Photos;
 	UDataTable* KeywordDocuments;
 	UDataTable* Sentences;
-	UDataTable* OutputTexts;
 };
 }
 
@@ -201,10 +193,6 @@ bool FInvestigationSettingsConfigurationTest::RunTest(const FString& Parameters)
 		TEXT("SentencesTable"),
 		Settings->SentencesTable,
 		FSentenceDefinition::StaticStruct());
-	TestConfiguredTable(
-		TEXT("OutputTextsTable"),
-		Settings->OutputTextsTable,
-		FOutputTextDefinition::StaticStruct());
 	return true;
 }
 
@@ -368,11 +356,14 @@ bool FInvestigationSentenceValidationTest::RunTest(const FString& Parameters)
 	Submission.SubmittedPhotos.Add(SubmittedPhoto);
 
 	FName ResultTextID;
+	FText ResultText;
 	TestTrue(TEXT("Acquired correct word and captured correct photo should solve the sentence"), Fixture.Subsystem->ValidateSentence(
 		InvestigationSubsystemTests::SentenceID,
 		Submission,
-		ResultTextID));
+		ResultTextID,
+		ResultText));
 	TestEqual(TEXT("Solved sentence should return its ResultTextID"), ResultTextID, InvestigationSubsystemTests::ResultTextID);
+	TestEqual(TEXT("Solved sentence should return its ResultText"), ResultText.ToString(), FString(TEXT("Test result text")));
 	return true;
 }
 

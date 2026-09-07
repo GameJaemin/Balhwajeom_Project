@@ -151,7 +151,6 @@ void UBalhwajeomInvestigationSubsystem::LoadConfiguredDataTables()
 		Settings->KeywordDocumentsTable,
 		TEXT("KeywordDocumentsTable"));
 	SentencesTable = LoadTable(Settings->SentencesTable, TEXT("SentencesTable"));
-	OutputTextsTable = LoadTable(Settings->OutputTextsTable, TEXT("OutputTextsTable"));
 }
 
 void UBalhwajeomInvestigationSubsystem::ClearLoadedDataTables()
@@ -162,7 +161,6 @@ void UBalhwajeomInvestigationSubsystem::ClearLoadedDataTables()
 	PhotosTable = nullptr;
 	KeywordDocumentsTable = nullptr;
 	SentencesTable = nullptr;
-	OutputTextsTable = nullptr;
 }
 
 void UBalhwajeomInvestigationSubsystem::InitializeDefaultWords()
@@ -217,10 +215,6 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 		SentencesTable,
 		TEXT("SentencesTable"),
 		[](const FSentenceDefinition& Row) { return Row.SentenceID; });
-	bIsValid &= ValidateTableRowIDs<FOutputTextDefinition>(
-		OutputTextsTable,
-		TEXT("OutputTextsTable"),
-		[](const FOutputTextDefinition& Row) { return Row.TextID; });
 
 	if (!bIsValid)
 	{
@@ -257,11 +251,6 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 	{
 		return !SentenceID.IsNone() &&
 			SentencesTable->FindRow<FSentenceDefinition>(SentenceID, Context, false) != nullptr;
-	};
-	auto HasOutputText = [this, &Context](FName TextID)
-	{
-		return !TextID.IsNone() &&
-			OutputTextsTable->FindRow<FOutputTextDefinition>(TextID, Context, false) != nullptr;
 	};
 	auto ReportInvalidReference = [&bIsValid](
 		const TCHAR* OwnerType,
@@ -419,10 +408,20 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 				FName(*FString::FromInt(Sentence->RequiredPhotoCount)));
 		}
 
-		if (!Sentence->ResultTextID.IsNone() && !HasOutputText(Sentence->ResultTextID))
+		if (Sentence->ResultTextID.IsNone())
 		{
 			ReportInvalidReference(
 				TEXT("Sentence"), Sentence->SentenceID, TEXT("ResultTextID"), Sentence->ResultTextID);
+		}
+
+		if (Sentence->ResultText.IsEmpty())
+		{
+			UE_LOG(
+				LogBalhwajeomInvestigation,
+				Error,
+				TEXT("Sentence '%s' has an empty ResultText."),
+				*Sentence->SentenceID.ToString());
+			bIsValid = false;
 		}
 	}
 
@@ -529,15 +528,6 @@ const FSentenceDefinition* UBalhwajeomInvestigationSubsystem::FindSentenceDefini
 		SentencesTable,
 		SentenceID,
 		TEXT("SentencesTable"));
-}
-
-const FOutputTextDefinition* UBalhwajeomInvestigationSubsystem::FindOutputTextDefinition(
-	FName TextID) const
-{
-	return FindInvestigationRow<FOutputTextDefinition>(
-		OutputTextsTable,
-		TextID,
-		TEXT("OutputTextsTable"));
 }
 
 bool UBalhwajeomInvestigationSubsystem::RegisterEvidenceActor(
@@ -771,9 +761,11 @@ bool UBalhwajeomInvestigationSubsystem::RegisterCapturedPhoto(const FCapturedPho
 bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 	FName SentenceID,
 	const FSentenceSubmission& Submission,
-	FName& OutResultTextID)
+	FName& OutResultTextID,
+	FText& OutResultText)
 {
 	OutResultTextID = NAME_None;
+	OutResultText = FText::GetEmpty();
 
 	const FSentenceDefinition* Sentence = FindSentenceDefinition(SentenceID);
 	if (Sentence == nullptr)
@@ -825,8 +817,7 @@ bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 		return false;
 	}
 
-	if (!Sentence->ResultTextID.IsNone() &&
-		FindOutputTextDefinition(Sentence->ResultTextID) == nullptr)
+	if (Sentence->ResultTextID.IsNone() || Sentence->ResultText.IsEmpty())
 	{
 		return false;
 	}
@@ -834,6 +825,7 @@ bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 	Progress.bSolved = true;
 
 	OutResultTextID = Sentence->ResultTextID;
+	OutResultText = Sentence->ResultText;
 	if (!bWasAlreadySolved)
 	{
 		OnSentenceSolved.Broadcast(SentenceID, OutResultTextID);

@@ -58,7 +58,6 @@ Source/Balhwajeom/Private/Investigation/
 - `FSentenceDefinition`
 - `FSentenceWordSlot`
 - `FSentencePhotoSlot`
-- `FOutputTextDefinition`
 - 관련 enum
 - `PhotoDefinition.CaptureSound`
 
@@ -67,7 +66,7 @@ Source/Balhwajeom/Private/Investigation/
 ### Settings 및 DataTable 구현
 
 - `UBalhwajeomInvestigationSettings`
-- Project Settings에서 7개 DataTable 참조
+- Project Settings에서 6개 DataTable 참조
 - ID 기반 DataTable 행 조회
 - Row Name과 내부 ID 검증
 - ID 참조 대상 존재 여부 검증
@@ -476,7 +475,8 @@ bool RegisterCapturedPhoto(
 bool ValidateSentence(
     FName SentenceID,
     const FSentenceSubmission& Submission,
-    FName& OutResultTextID
+    FName& OutResultTextID,
+    FText& OutResultText
 );
 ```
 
