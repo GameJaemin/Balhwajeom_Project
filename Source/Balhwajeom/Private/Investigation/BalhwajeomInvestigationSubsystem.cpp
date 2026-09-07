@@ -469,6 +469,22 @@ bool UBalhwajeomInvestigationSubsystem::GetEvidenceStateDefinition(
 	return true;
 }
 
+bool UBalhwajeomInvestigationSubsystem::GetPhotoDefinition(
+	FName PhotoID,
+	FPhotoDefinition& OutDefinition) const
+{
+	OutDefinition = FPhotoDefinition{};
+
+	const FPhotoDefinition* Definition = FindPhotoDefinition(PhotoID);
+	if (Definition == nullptr)
+	{
+		return false;
+	}
+
+	OutDefinition = *Definition;
+	return true;
+}
+
 const FEvidenceDefinition* UBalhwajeomInvestigationSubsystem::FindEvidenceDefinition(
 	FName ObjectID) const
 {

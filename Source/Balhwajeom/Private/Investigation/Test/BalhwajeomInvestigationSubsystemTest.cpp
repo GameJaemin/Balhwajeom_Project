@@ -218,6 +218,7 @@ bool FInvestigationDefinitionLookupTest::RunTest(const FString& Parameters)
 	const InvestigationSubsystemTests::FFixture Fixture;
 	FEvidenceDefinition Evidence;
 	FEvidenceStateDefinition State;
+	FPhotoDefinition PhotoDefinition;
 
 	TestTrue(
 		TEXT("A known ObjectID should resolve"),
@@ -229,6 +230,20 @@ bool FInvestigationDefinitionLookupTest::RunTest(const FString& Parameters)
 	TestFalse(
 		TEXT("An unknown ObjectID should fail safely"),
 		Fixture.Subsystem->GetEvidenceDefinition(FName(TEXT("OBJ_MISSING")), Evidence));
+	TestTrue(
+		TEXT("Existing PhotoID should resolve"),
+		Fixture.Subsystem->GetPhotoDefinition(
+			InvestigationSubsystemTests::PhotoID,
+			PhotoDefinition));
+	TestEqual(
+		TEXT("Resolved PhotoID should match"),
+		PhotoDefinition.PhotoID,
+		InvestigationSubsystemTests::PhotoID);
+	TestFalse(
+		TEXT("Unknown PhotoID should fail"),
+		Fixture.Subsystem->GetPhotoDefinition(
+			FName(TEXT("PHOTO_Missing")),
+			PhotoDefinition));
 	return true;
 }
 

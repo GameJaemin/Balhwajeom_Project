@@ -47,6 +47,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
 	bool GetEvidenceStateDefinition(FName StateID, FEvidenceStateDefinition& OutState) const;
 
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
+	bool GetPhotoDefinition(FName PhotoID, FPhotoDefinition& OutDefinition) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Evidence")
 	bool RegisterEvidenceActor(
 		FGuid EvidenceInstanceID,
