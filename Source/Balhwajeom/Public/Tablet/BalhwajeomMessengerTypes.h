@@ -18,6 +18,10 @@ struct BALHWAJEOM_API FST_MessengerMessage
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Messenger")
 	bool bIsPlayer = false;
 
+	/** Authored story-local time. No operating-system timezone conversion. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Messenger")
+	FDateTime SentAt = FDateTime::MinValue();
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Messenger")
 	FText KeywordText;
 

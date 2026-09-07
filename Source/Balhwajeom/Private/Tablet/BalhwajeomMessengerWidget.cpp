@@ -4,6 +4,7 @@
 #include "Components/ScrollBox.h"
 #include "Components/TextBlock.h"
 #include "Tablet/BalhwajeomMessengerDataAssets.h"
+#include "Tablet/BalhwajeomMessengerDateSeparator.h"
 #include "Tablet/BalhwajeomMessengerMessageWidget.h"
 #include "Tablet/BalhwajeomMessengerRoomWidget.h"
 
@@ -20,6 +21,8 @@ namespace
 UBalhwajeomMessengerWidget::UBalhwajeomMessengerWidget(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
+	DateSeparatorClass = TSoftClassPtr<UBalhwajeomMessengerDateSeparator>(FSoftObjectPath(
+		TEXT("/Game/Balhwajeom/UI/Tablet/WBP_MessengerDateSeparator.WBP_MessengerDateSeparator_C")));
 	MessengerData = TSoftObjectPtr<UBalhwajeomMessengerCatalogDataAsset>(
 		FSoftObjectPath(MessengerCatalogPath));
 }
@@ -172,7 +175,15 @@ int32 UBalhwajeomMessengerWidget::GetDisplayedRoomCount() const
 
 int32 UBalhwajeomMessengerWidget::GetDisplayedMessageCount() const
 {
-	return SB_MessageList ? SB_MessageList->GetChildrenCount() : 0;
+	int32 Count = 0;
+	if (SB_MessageList)
+	{
+		for (UWidget* Child : SB_MessageList->GetAllChildren())
+		{
+			Count += Cast<UBalhwajeomMessengerMessageWidget>(Child) != nullptr ? 1 : 0;
+		}
+	}
+	return Count;
 }
 
 UBalhwajeomMessengerRoomWidget* UBalhwajeomMessengerWidget::GetDisplayedRoomWidget(
@@ -188,12 +199,21 @@ UBalhwajeomMessengerRoomWidget* UBalhwajeomMessengerWidget::GetDisplayedRoomWidg
 UBalhwajeomMessengerMessageWidget* UBalhwajeomMessengerWidget::GetDisplayedMessageWidget(
 	const int32 Index) const
 {
-	return SB_MessageList
-		&& Index >= 0
-		&& Index < SB_MessageList->GetChildrenCount()
-		&& SB_MessageList->GetChildAt(Index)
-		? Cast<UBalhwajeomMessengerMessageWidget>(SB_MessageList->GetChildAt(Index))
-		: nullptr;
+	int32 MessageIndex = 0;
+	if (SB_MessageList && Index >= 0)
+	{
+		for (UWidget* Child : SB_MessageList->GetAllChildren())
+		{
+			if (auto* Message = Cast<UBalhwajeomMessengerMessageWidget>(Child))
+			{
+				if (MessageIndex++ == Index)
+				{
+					return Message;
+				}
+			}
+		}
+	}
+	return nullptr;
 }
 
 bool UBalhwajeomMessengerWidget::HasValidRoomData() const
@@ -291,8 +311,26 @@ void UBalhwajeomMessengerWidget::LoadMessages(const UBalhwajeomMessengerRoomData
 		return;
 	}
 
+	const auto SeparatorClass = DateSeparatorClass.LoadSynchronous();
+	FDateTime PreviousDate;
+	bool bFirstMessage = true;
 	for (const FST_MessengerMessage& Message : Room.Messages)
 	{
+		const FDateTime Date = Message.SentAt.GetDate();
+		if (bFirstMessage || Date != PreviousDate)
+		{
+			if (SeparatorClass)
+			{
+				auto* Separator = CreateWidget<UBalhwajeomMessengerDateSeparator>(World, SeparatorClass);
+				if (Separator)
+				{
+					Separator->SetupDate(Message.SentAt);
+					SB_MessageList->AddChild(Separator);
+				}
+			}
+		}
+		bFirstMessage = false;
+		PreviousDate = Date;
 		UBalhwajeomMessengerMessageWidget* MessageWidget =
 			CreateWidget<UBalhwajeomMessengerMessageWidget>(World, ResolvedClass);
 		if (!MessageWidget)

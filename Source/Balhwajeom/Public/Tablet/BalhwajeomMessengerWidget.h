@@ -6,6 +6,7 @@
 #include "BalhwajeomMessengerWidget.generated.h"
 
 class UBalhwajeomMessengerMessageWidget;
+class UBalhwajeomMessengerDateSeparator;
 class UBalhwajeomMessengerRoomWidget;
 class UBalhwajeomMessengerCatalogDataAsset;
 class UBalhwajeomMessengerRoomDataAsset;
@@ -76,6 +77,9 @@ public:
 #endif
 
 protected:
+	UPROPERTY(EditDefaultsOnly, Category = "Tablet|Messenger")
+	TSoftClassPtr<UBalhwajeomMessengerDateSeparator> DateSeparatorClass;
+
 	virtual void NativeOnInitialized() override;
 
 	/** Planner-owned source data. InitialUnreadCount and messages are never mutated at runtime. */

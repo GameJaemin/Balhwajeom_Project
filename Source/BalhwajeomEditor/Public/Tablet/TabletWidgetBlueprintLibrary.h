@@ -11,6 +11,12 @@ class UTabletWidgetBlueprintLibrary : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 
 public:
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool UpdateMessengerTimeline();
+
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool TestMessengerTimeline();
+
 	/** Creates the planner-owned catalog/room Data Assets if missing; never overwrites existing data. */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool CreateMessengerDataAssets();

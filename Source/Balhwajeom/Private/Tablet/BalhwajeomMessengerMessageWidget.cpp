@@ -6,6 +6,7 @@
 #include "Components/TextBlock.h"
 #include "Components/WrapBox.h"
 #include "Tablet/BalhwajeomMessengerKeywordWidget.h"
+#include "Tablet/BalhwajeomMessengerDateSeparator.h"
 
 namespace
 {
@@ -51,6 +52,16 @@ bool UBalhwajeomMessengerMessageWidget::IsKeywordDataValid(
 
 void UBalhwajeomMessengerMessageWidget::RenderMessage()
 {
+	if (TXT_TimeLeft)
+	{
+		TXT_TimeLeft->SetText(MessengerDate::TimeLabel(MessageData.SentAt));
+		TXT_TimeLeft->SetVisibility(MessageData.bIsPlayer ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	if (TXT_TimeRight)
+	{
+		TXT_TimeRight->SetText(MessengerDate::TimeLabel(MessageData.SentAt));
+		TXT_TimeRight->SetVisibility(MessageData.bIsPlayer ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
 	if (TXT_SenderName)
 	{
 		TXT_SenderName->SetText(MessageData.SenderName);
@@ -132,6 +143,7 @@ void UBalhwajeomMessengerMessageWidget::AddTextSegment(const FString& Segment)
 	Text->SetText(FText::FromString(Segment));
 	Text->SetColorAndOpacity(FSlateColor(FLinearColor(0.96f, 0.91f, 0.82f, 1.0f)));
 	Text->SetAutoWrapText(false);
+	Text->SetWrapTextAt(580.0f);
 	FSlateFontInfo Font = Text->GetFont();
 	Font.Size = 22;
 	Text->SetFont(Font);
