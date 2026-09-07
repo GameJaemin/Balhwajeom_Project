@@ -64,6 +64,12 @@ EDataValidationResult UBalhwajeomMessengerRoomDataAsset::IsDataValid(
 
 	for (int32 Index = 0; Index < Messages.Num(); ++Index)
 	{
+		if (Messages[Index].SentAt == FDateTime::MinValue()
+			|| (Index > 0 && Messages[Index].SentAt < Messages[Index - 1].SentAt))
+		{
+			AddError(FText::FromString(FString::Printf(
+				TEXT("Message %d: SentAt must be set and must not precede the previous message."), Index)));
+		}
 		if (!HasExactlyOneKeywordOccurrence(Messages[Index]))
 		{
 			AddError(FText::Format(

@@ -44,6 +44,12 @@ protected:
 	TSubclassOf<UBalhwajeomMessengerKeywordWidget> KeywordWidgetClass;
 
 private:
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TXT_TimeLeft;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TXT_TimeRight;
+
 	void RenderMessage();
 	void AddTextSegment(const FString& Segment);
 	TSubclassOf<UBalhwajeomMessengerKeywordWidget> ResolveKeywordWidgetClass();

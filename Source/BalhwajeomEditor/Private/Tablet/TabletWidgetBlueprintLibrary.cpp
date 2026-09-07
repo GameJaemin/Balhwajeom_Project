@@ -28,6 +28,7 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/PackageName.h"
 #include "Tablet/BalhwajeomMessengerDataAssets.h"
+#include "Tablet/BalhwajeomMessengerDateSeparator.h"
 #include "Tablet/BalhwajeomMessengerKeywordWidget.h"
 #include "Tablet/BalhwajeomMessengerMessageWidget.h"
 #include "Tablet/BalhwajeomMessengerRoomWidget.h"
@@ -562,8 +563,17 @@ namespace TabletDesigner
 			UHorizontalBoxSlot* LeftSlot = Alignment->AddChildToHorizontalBox(LeftSpacer);
 			LeftSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
 
+			auto AddTime = [this, Alignment](const FName Name)
+			{
+				UTextBlock* Time = MakeText(Name, TEXT("오후 6:30"), 17, WarmMuted, true);
+				Time->SetVisibility(ESlateVisibility::HitTestInvisible);
+				UHorizontalBoxSlot* TimeSlot = Alignment->AddChildToHorizontalBox(Time);
+				TimeSlot->SetVerticalAlignment(VAlign_Bottom);
+				TimeSlot->SetPadding(FMargin(10, 0, 10, 3));
+			};
+			AddTime(TEXT("TXT_TimeLeft"));
 			USizeBox* BubbleLimit = Make<USizeBox>(TEXT("SB_BubbleLimit"));
-			BubbleLimit->SetMaxDesiredWidth(700.0f);
+			BubbleLimit->SetMaxDesiredWidth(620.0f);
 			UHorizontalBoxSlot* BubbleSlot = Alignment->AddChildToHorizontalBox(BubbleLimit);
 			BubbleSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
 
@@ -571,16 +581,41 @@ namespace TabletDesigner
 				TEXT("BRD_Bubble"), PagePanel, FMargin(18.0f, 12.0f), true);
 			BubbleLimit->SetContent(Bubble);
 			UWrapBox* Content = Make<UWrapBox>(TEXT("WB_MessageContent"), true);
-			Content->SetWrapSize(660.0f);
+			Content->SetWrapSize(580.0f);
 			Content->SetExplicitWrapSize(true);
 			Content->SetInnerSlotPadding(FVector2D(0.0f, 2.0f));
 			Bubble->SetContent(Content);
+			AddTime(TEXT("TXT_TimeRight"));
 
 			USpacer* RightSpacer = Make<USpacer>(TEXT("Spacer_Right"), true);
 			RightSpacer->SetSize(FVector2D(1.0f, 1.0f));
 			UHorizontalBoxSlot* RightSlot = Alignment->AddChildToHorizontalBox(RightSpacer);
 			RightSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 
+			Tree->RootWidget = Root;
+		}
+
+		void BuildDateSeparator() const
+		{
+			UBorder* Root = MakeBorder(TEXT("BRD_DateSpacing"), FLinearColor::Transparent, FMargin(24, 30, 24, 26));
+			Root->SetVisibility(ESlateVisibility::HitTestInvisible);
+			UHorizontalBox* Row = Make<UHorizontalBox>(TEXT("HB_Date"));
+			Root->SetContent(Row);
+			auto AddLine = [this, Row](const FName Name)
+			{
+				USizeBox* Size = Make<USizeBox>(Name);
+				Size->SetHeightOverride(1.0f);
+				Size->SetContent(MakeBorder(*FString::Printf(TEXT("%s_Line"), *Name.ToString()), WarmMuted));
+				auto* Slot = Row->AddChildToHorizontalBox(Size);
+				Slot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+				Slot->SetVerticalAlignment(VAlign_Center);
+			};
+			AddLine(TEXT("DateLineLeft"));
+			auto* Label = MakeText(TEXT("TXT_Date"), TEXT("날짜"), 18, WarmMuted, true);
+			auto* LabelSlot = Row->AddChildToHorizontalBox(Label);
+			LabelSlot->SetPadding(FMargin(18, 0));
+			LabelSlot->SetVerticalAlignment(VAlign_Center);
+			AddLine(TEXT("DateLineRight"));
 			Tree->RootWidget = Root;
 		}
 
@@ -875,7 +910,11 @@ namespace TabletDesigner
 
 	bool BuildMessengerWidgetBlueprints(const bool bRedesignExisting)
 	{
-		return BuildWidgetBlueprint(
+		return BuildWidgetBlueprint(TEXT("WBP_MessengerDateSeparator"),
+			TEXT("/Game/Balhwajeom/UI/Tablet/WBP_MessengerDateSeparator.WBP_MessengerDateSeparator"),
+			UBalhwajeomMessengerDateSeparator::StaticClass(), bRedesignExisting,
+			[](const FBuilder& Builder) { Builder.BuildDateSeparator(); })
+			&& BuildWidgetBlueprint(
 			KeywordAssetName,
 			KeywordAssetPath,
 			UBalhwajeomMessengerKeywordWidget::StaticClass(),
@@ -922,6 +961,11 @@ namespace TabletDesigner
 				Room->RoomName = FText::FromString(RoomName);
 				Room->InitialUnreadCount = InitialUnreadCount;
 				Room->Messages = MoveTemp(Messages);
+				for (int32 Index = 0; Index < Room->Messages.Num(); ++Index)
+				{
+					Room->Messages[Index].SentAt = FDateTime(2026, 5, 12, 18, 30)
+						+ FTimespan(Index >= 2 ? 1 : 0, 0, Index * 2, 0);
+				}
 				if (!SaveDataAsset(Room))
 				{
 					return static_cast<UBalhwajeomMessengerRoomDataAsset*>(nullptr);
@@ -1032,6 +1076,110 @@ namespace TabletDesigner
 bool UTabletWidgetBlueprintLibrary::CreateMessengerDataAssets()
 {
 	return TabletDesigner::CreateMessengerDataAssetsInternal();
+}
+
+bool UTabletWidgetBlueprintLibrary::UpdateMessengerTimeline()
+{
+	using namespace TabletDesigner;
+	// Update only the message tree; preserve the existing tablet layout and animations.
+	if (!BuildWidgetBlueprint(TEXT("WBP_MessengerDateSeparator"),
+		TEXT("/Game/Balhwajeom/UI/Tablet/WBP_MessengerDateSeparator.WBP_MessengerDateSeparator"),
+		UBalhwajeomMessengerDateSeparator::StaticClass(), true,
+		[](const FBuilder& Builder) { Builder.BuildDateSeparator(); })
+		|| !BuildWidgetBlueprint(MessageAssetName, MessageAssetPath,
+			UBalhwajeomMessengerMessageWidget::StaticClass(), true,
+			[](const FBuilder& Builder) { Builder.BuildMessengerMessage(); }))
+	{
+		return false;
+	}
+	auto* Catalog = LoadObject<UBalhwajeomMessengerCatalogDataAsset>(nullptr, MessengerCatalogAssetPath);
+	if (!Catalog) { return false; }
+	for (UBalhwajeomMessengerRoomDataAsset* Room : Catalog->Rooms)
+	{
+		if (!Room || Room->Messages.IsEmpty()) { continue; }
+		bool bAllMissing = true;
+		for (const auto& Message : Room->Messages)
+		{
+			bAllMissing &= Message.SentAt == FDateTime::MinValue();
+		}
+		// One-time migration only: partially authored timelines require planner input.
+		if (bAllMissing)
+		{
+			for (int32 Index = 0; Index < Room->Messages.Num(); ++Index)
+			{
+				Room->Messages[Index].SentAt = FDateTime(2026, 5, 12, 18, 30)
+					+ FTimespan(Index >= 2 ? 1 : 0, 0, Index * 2, 0);
+			}
+			if (!SaveDataAsset(Room)) { return false; }
+		}
+	}
+	for (const TCHAR* Path : { MessengerAssetPath, AssetPath })
+	{
+		auto* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, Path);
+		if (!Blueprint || !SaveAndCompile(Blueprint)) { return false; }
+	}
+	UE_LOG(LogTemp, Display, TEXT("MESSENGER_TIMELINE_UPDATE Success"));
+	return true;
+}
+
+bool UTabletWidgetBlueprintLibrary::TestMessengerTimeline()
+{
+	using namespace TabletDesigner;
+	bool bPassed = true;
+	auto Require = [&bPassed](bool bValue, const TCHAR* Label)
+	{
+		if (!bValue) { UE_LOG(LogTemp, Error, TEXT("TIMELINE FAIL: %s"), Label); bPassed = false; }
+	};
+	Require(MessengerDate::TimeLabel(FDateTime(2026, 5, 12, 0, 5)).ToString() == TEXT("오전 12:05"), TEXT("midnight"));
+	Require(MessengerDate::TimeLabel(FDateTime(2026, 5, 12, 12, 0)).ToString() == TEXT("오후 12:00"), TEXT("noon"));
+	Require(MessengerDate::TimeLabel(FDateTime()).ToString() == TEXT("시간 미상"), TEXT("missing timestamp"));
+	Require(MessengerDate::DateLabel(FDateTime(2026, 5, 12)).ToString() == TEXT("2026년 5월 12일 화요일"), TEXT("weekday"));
+	UWorld* World = GEditor->GetEditorWorldContext().World();
+	auto* WidgetClass = LoadClass<UBalhwajeomMessengerWidget>(nullptr, MessengerClassPath);
+	auto* Messenger = World && WidgetClass ? CreateWidget<UBalhwajeomMessengerWidget>(World, WidgetClass) : nullptr;
+	if (!Messenger) { return false; }
+	Messenger->InitializeForAutomatedTest();
+	auto* Catalog = Messenger->GetMessengerDataAsset();
+	if (!Catalog) { return false; }
+	auto* List = Cast<UScrollBox>(Messenger->GetWidgetFromName(TEXT("SB_MessageList")));
+	if (!List) { return false; }
+	Require(List->GetChildrenCount() == 0, TEXT("no automatic selection"));
+	for (UBalhwajeomMessengerRoomDataAsset* Room : Catalog->Rooms)
+	{
+		if (!Room || Room->Messages.IsEmpty()) { continue; }
+		const int32 SourceUnread = Room->InitialUnreadCount;
+		Require(Messenger->SelectRoomByID(Room->RoomID), TEXT("selection"));
+		int32 Row = 0;
+		FDateTime PreviousDate;
+		for (int32 Index = 0; Index < Room->Messages.Num(); ++Index)
+		{
+			const auto& Data = Room->Messages[Index];
+			if (Index == 0 || Data.SentAt.GetDate() != PreviousDate)
+			{
+				auto* Separator = Cast<UBalhwajeomMessengerDateSeparator>(List->GetChildAt(Row++));
+				Require(Separator != nullptr, TEXT("date boundary inserts separator"));
+				auto* Label = Separator ? Cast<UTextBlock>(Separator->GetWidgetFromName(TEXT("TXT_Date"))) : nullptr;
+				Require(Label && Label->GetText().EqualTo(MessengerDate::DateLabel(Data.SentAt)), TEXT("date text"));
+			}
+			PreviousDate = Data.SentAt.GetDate();
+			auto* Message = Messenger->GetDisplayedMessageWidget(Index);
+			Require(Message && List->GetChildAt(Row++) == Message, TEXT("message indexing excludes date rows"));
+			auto* Left = Message ? Cast<UTextBlock>(Message->GetWidgetFromName(TEXT("TXT_TimeLeft"))) : nullptr;
+			auto* Right = Message ? Cast<UTextBlock>(Message->GetWidgetFromName(TEXT("TXT_TimeRight"))) : nullptr;
+			auto* VisibleTime = Data.bIsPlayer ? Left : Right;
+			auto* HiddenTime = Data.bIsPlayer ? Right : Left;
+			Require(VisibleTime && VisibleTime->GetVisibility() == ESlateVisibility::HitTestInvisible
+				&& VisibleTime->GetText().EqualTo(MessengerDate::TimeLabel(Data.SentAt)), TEXT("time on bubble outer edge"));
+			Require(HiddenTime && HiddenTime->GetVisibility() == ESlateVisibility::Collapsed, TEXT("opposite time hidden"));
+		}
+		Require(List->GetChildrenCount() == Row, TEXT("no extra or previous-room rows"));
+		Require(Messenger->GetDisplayedMessageCount() == Room->Messages.Num(), TEXT("message count excludes dates"));
+		Require(Room->InitialUnreadCount == SourceUnread && Messenger->GetCurrentUnreadCount(Room->RoomID) == 0, TEXT("source unread immutable"));
+		Messenger->InitializeMessenger();
+		Require(List->GetChildrenCount() == Row, TEXT("re-entry does not duplicate timeline"));
+	}
+	UE_LOG(LogTemp, Display, TEXT("MESSENGER_TIMELINE_TEST %s"), bPassed ? TEXT("Success") : TEXT("Failure"));
+	return bPassed;
 }
 
 bool UTabletWidgetBlueprintLibrary::InspectTabletWidgetBlueprint()
