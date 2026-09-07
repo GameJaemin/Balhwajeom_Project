@@ -38,10 +38,11 @@ Source/Balhwajeom/Public/Investigation/
 ├─ WordDefinitions.h
 ├─ SentenceDefinitions.h
 ├─ InvestigationRuntimeTypes.h
-├─ BalhwajeomInvestigationDatabase.h
+├─ BalhwajeomInvestigationSettings.h
 └─ BalhwajeomInvestigationSubsystem.h
 
 Source/Balhwajeom/Private/Investigation/
+├─ BalhwajeomInvestigationSettings.cpp
 ├─ BalhwajeomInvestigationSubsystem.cpp
 └─ Test/
 ```
@@ -50,9 +51,6 @@ Source/Balhwajeom/Private/Investigation/
 
 - `FEvidenceDefinition`
 - `FEvidenceStateDefinition`
-- `FEvidenceInteractionSettings`
-- `FEvidenceInspectionSettings`
-- `FEvidenceCaptureSettings`
 - `FWordDefinition`
 - `FPhotoDefinition`
 - `FKeywordDocumentDefinition`
@@ -64,10 +62,12 @@ Source/Balhwajeom/Private/Investigation/
 - 관련 enum
 - `PhotoDefinition.CaptureSound`
 
-### Database 구현
+`FEvidenceStateDefinition`은 Excel/CSV 작업을 위해 상호작용·거리 표시·촬영 필드를 중첩하지 않고 평면 열로 관리한다.
 
-- `UBalhwajeomInvestigationDatabase`
-- 챕터별 DataTable 참조
+### Settings 및 DataTable 구현
+
+- `UBalhwajeomInvestigationSettings`
+- Project Settings에서 7개 DataTable 참조
 - ID 기반 DataTable 행 조회
 - Row Name과 내부 ID 검증
 - ID 참조 대상 존재 여부 검증
@@ -116,7 +116,6 @@ OnSentenceSolved
 RegisterEvidenceActor
 GetEvidenceDefinition
 GetEvidenceStateDefinition
-GetCurrentEvidenceState
 BeginEvidenceInteraction
 CompleteEvidenceInteraction
 AcquireWord
@@ -375,7 +374,7 @@ InspectionComponent.NearLabel
 변경 중앙 문구:
 
 ```text
-CurrentState.Inspection.ObservationText
+CurrentState.ObservationText
 ```
 
 ### 사진별 촬영 사운드
@@ -606,7 +605,7 @@ DataTable도 `.uasset`이므로 한 명만 직접 수정한다.
 
 | 담당자 | 핵심 역할 | 예상 비중 |
 |---|---|---:|
-| 담당자 1 | 데이터 구조, Database, Subsystem, 자동 테스트 | 35% |
+| 담당자 1 | 데이터 구조, Settings/DataTable, Subsystem, 자동 테스트 | 35% |
 | 담당자 2 | EvidenceActor, 거리, F 상호작용, 증거 블루프린트 | 35% |
 | 담당자 3 | 카메라, 촬영, HUD, 사진별 사운드 | 30% |
 
