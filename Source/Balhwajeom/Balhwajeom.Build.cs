@@ -14,6 +14,7 @@ public class Balhwajeom : ModuleRules
 			"Engine",
 			"InputCore",
 			"EnhancedInput",
+			"GameplayTags",
 			"AIModule",
 			"StateTreeModule",
 			"GameplayStateTreeModule",

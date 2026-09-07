@@ -345,7 +345,7 @@ bool UPlayerInteractionComponent::TryInspect(
 	}
 
 	OutInspectionText =
-		FocusedInspection->InspectionText;
+		FocusedInspection->GetCurrentInspectionData().InspectionText;
 
 	return true;
 }
