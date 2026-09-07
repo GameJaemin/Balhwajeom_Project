@@ -9,6 +9,42 @@
 #include "BalhwajeomPhotoCameraComponent.generated.h"
 
 class UCameraComponent;
+class UBalhwajeomInvestigationSubsystem;
+
+enum class EBalhwajeomPhotoCaptureResult : uint8
+{
+    NoFocusedTarget,
+    NotFramedEnough,
+    NotCentered,
+    InvalidTargetSnapshot,
+    CaptureDisabled,
+    AlreadyCaptured,
+    CapturePending,
+    ImageSaveFailed,
+    RegistrationRejected,
+    Succeeded
+};
+
+struct FBalhwajeomResolvedPhotoTarget
+{
+    FGuid EvidenceInstanceID;
+    FName ObjectID = NAME_None;
+    FName StateID = NAME_None;
+    FName PhotoID = NAME_None;
+    bool bCanCapture = false;
+    float PreferredFocusDistance = 700.0f;
+    float FocusDistanceTolerance = 300.0f;
+    bool bScaleFocusDistanceWithZoom = true;
+};
+
+struct FBalhwajeomPendingPhotoCapture
+{
+    FGuid RequestID;
+    FBalhwajeomResolvedPhotoTarget TargetSnapshot;
+    FDateTime RequestedTime;
+    FString RelativePath;
+    FString AbsolutePath;
+};
 
 DECLARE_MULTICAST_DELEGATE(FOnCameraModeExited);
 DECLARE_MULTICAST_DELEGATE(FOnCameraTransitionFinished);
@@ -21,6 +57,8 @@ class BALHWAJEOM_API UBalhwajeomPhotoCameraComponent
 
 public:
     UBalhwajeomPhotoCameraComponent();
+
+    virtual void BeginDestroy() override;
 
     virtual void TickComponent(
         float DeltaTime,
@@ -84,13 +122,13 @@ public:
     UFUNCTION(BlueprintPure, Category = "Photo Camera|Focus")
     AActor* GetDisplayedFocusTarget() const { return DisplayedFocusTarget.Get(); }
 
-    UFUNCTION(BlueprintCallable, Category = "Evidence")
+    UFUNCTION(BlueprintCallable, Category = "Evidence", meta = (DeprecatedFunction, DeprecationMessage = "Use BalhwajeomInvestigationSubsystem.RegisterCapturedPhoto."))
     bool AddEvidence(const FBalhwajeomEvidenceData& NewEvidence);
 
-    UFUNCTION(BlueprintPure, Category = "Evidence")
+    UFUNCTION(BlueprintPure, Category = "Evidence", meta = (DeprecatedFunction, DeprecationMessage = "Use BalhwajeomInvestigationSubsystem.HasCapturedPhoto."))
     bool HasEvidence(FName EvidenceID) const;
 
-    UFUNCTION(BlueprintPure, Category = "Evidence")
+    UFUNCTION(BlueprintPure, Category = "Evidence", meta = (DeprecatedFunction, DeprecationMessage = "A captured-photo list API will be supplied by BalhwajeomInvestigationSubsystem."))
     TArray<FBalhwajeomEvidenceData> GetCollectedEvidence() const
     {
         return CollectedEvidence;
@@ -111,6 +149,15 @@ protected:
     void ApplyDepthOfField(float DeltaTime, float DesiredFocalDistance, bool bHasFocusedTarget);
     void ResetEvidenceFocus();
     bool TryCaptureActiveFocusTarget();
+    bool ResolveInvestigationTarget(
+        const FBalhwajeomCameraTargetInfo& TargetInfo,
+        FBalhwajeomResolvedPhotoTarget& OutTarget) const;
+    UBalhwajeomInvestigationSubsystem* GetInvestigationSubsystem() const;
+    bool BeginInvestigationImageCapture(const FBalhwajeomResolvedPhotoTarget& Target);
+    void HandleScreenshotCaptured(int32 Width, int32 Height, const TArray<FColor>& Colors);
+    void HandleScreenshotProcessed();
+    void CompleteImageSave(FGuid RequestID, bool bSucceeded, const FString& AbsolutePath);
+    void ClearScreenshotDelegates();
     void SetWorldInspectionLabelsSuppressed(bool bSuppressed) const;
 
     UPROPERTY(Transient)
@@ -126,9 +173,9 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
     bool bIsCameraTransitioning = false;
 
-    /** Off by default so existing camera Blueprints keep their previous behavior. */
+    /** Enables the evidence focus and PhotoID capture flow. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus")
-    bool bEnableEvidenceFocusSystem = false;
+    bool bEnableEvidenceFocusSystem = true;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus", meta = (ClampMin = "100.0"))
     float FocusTargetScanDistance = 5000.0f;
@@ -252,6 +299,13 @@ protected:
 
     /** Captured state is per placed Actor, so copies sharing one EvidenceID remain independent. */
     TSet<TWeakObjectPtr<AActor>> CapturedFocusTargets;
+
+    /** Temporary compatibility storage. New investigation captures never write to this array. */
+    TOptional<FBalhwajeomPendingPhotoCapture> PendingCapture;
+    FGuid PhotoCaptureSessionID;
+    FDelegateHandle ScreenshotCapturedHandle;
+    FDelegateHandle ScreenshotProcessedHandle;
+    bool bReceivedScreenshotPixels = false;
 
 private:
 

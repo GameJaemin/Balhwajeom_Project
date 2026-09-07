@@ -34,7 +34,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Camera")
 	bool IsInCameraMode() const;
 
-	UFUNCTION(BlueprintPure, Category = "Evidence")
+	UFUNCTION(BlueprintPure, Category = "Evidence", meta = (DeprecatedFunction, DeprecationMessage = "A captured-photo list API will be supplied by BalhwajeomInvestigationSubsystem."))
 	TArray<FBalhwajeomEvidenceData> GetCollectedEvidence() const;
 
 protected:

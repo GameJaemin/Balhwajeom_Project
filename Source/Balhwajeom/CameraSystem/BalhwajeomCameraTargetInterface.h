@@ -34,6 +34,6 @@ public:
 	UPrimitiveComponent* RequestCameraFramingComponent() const;
 
 	/** Notification sent only after a focused, centered, valid photo succeeds. */
-	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Camera Target")
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Camera Target", meta = (DeprecatedFunction, DeprecationMessage = "Photo capture state is owned by BalhwajeomInvestigationSubsystem."))
 	void NotifyCameraCaptureSucceeded();
 };
