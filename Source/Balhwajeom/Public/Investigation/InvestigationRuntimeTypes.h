@@ -45,25 +45,25 @@ struct BALHWAJEOM_API FCapturedPhotoRecord
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly, Category = "Investigation|Photo")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Investigation|Photo")
 	FName PhotoID = NAME_None;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Investigation|Photo")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Investigation|Photo")
 	FName ObjectID = NAME_None;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Investigation|Photo")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Investigation|Photo")
 	FGuid EvidenceInstanceID;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Investigation|Photo")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Investigation|Photo")
 	FName CapturedStateID = NAME_None;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Investigation|Photo")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Investigation|Photo")
 	FString ImageRelativePath;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Investigation|Photo")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Investigation|Photo")
 	FDateTime CapturedTime;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Investigation|Photo")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Investigation|Photo")
 	bool bViewedInTablet = false;
 };
 

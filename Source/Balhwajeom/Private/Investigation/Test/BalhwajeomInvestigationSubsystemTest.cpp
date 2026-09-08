@@ -17,6 +17,7 @@ struct FInvestigationSubsystemTestAccessor
 		UDataTable* Words,
 		UDataTable* Photos,
 		UDataTable* KeywordDocuments,
+		UDataTable* KeywordChoices,
 		UDataTable* Sentences)
 	{
 		Subsystem->EvidenceDefinitionsTable = EvidenceDefinitions;
@@ -24,6 +25,7 @@ struct FInvestigationSubsystemTestAccessor
 		Subsystem->WordsTable = Words;
 		Subsystem->PhotosTable = Photos;
 		Subsystem->KeywordDocumentsTable = KeywordDocuments;
+		Subsystem->KeywordChoicesTable = KeywordChoices;
 		Subsystem->SentencesTable = Sentences;
 	}
 
@@ -39,8 +41,8 @@ const FName ObjectID(TEXT("OBJ_TEST"));
 const FName StateID(TEXT("STATE_TEST_ONCE"));
 const FName WordID(TEXT("WORD_TEST"));
 const FName PhotoID(TEXT("PHOTO_TEST"));
-const FName SentenceID(TEXT("SENT_TEST"));
-const FName ResultTextID(TEXT("TEXT_TEST"));
+const FName SentenceID(TEXT("SENT_PHOTO_TEST"));
+const FName StatementID(TEXT("SENT_STATEMENT_TEST"));
 
 template <typename RowType>
 UDataTable* MakeTable()
@@ -60,6 +62,7 @@ struct FFixture
 		, Words(MakeTable<FWordDefinition>())
 		, Photos(MakeTable<FPhotoDefinition>())
 		, KeywordDocuments(MakeTable<FKeywordDocumentDefinition>())
+		, KeywordChoices(MakeTable<FKeywordChoiceDefinition>())
 		, Sentences(MakeTable<FSentenceDefinition>())
 	{
 		FEvidenceDefinition Evidence;
@@ -80,27 +83,49 @@ struct FFixture
 		Word.WordID = WordID;
 		Words->AddRow(WordID, Word);
 
+		FKeywordDocumentDefinition Document;
+		Document.KeywordDocumentID = TEXT("DOC_TEST");
+		Document.DocumentText = FText::FromString(TEXT("Test document"));
+		KeywordDocuments->AddRow(Document.KeywordDocumentID, Document);
+
+		FKeywordChoiceDefinition Choice;
+		Choice.ChoiceID = TEXT("CHOICE_TEST");
+		Choice.KeywordDocumentID = Document.KeywordDocumentID;
+		Choice.DisplayText = FText::FromString(TEXT("Test choice"));
+		Choice.GrantedWordID = WordID;
+		KeywordChoices->AddRow(Choice.ChoiceID, Choice);
+
 		FPhotoDefinition Photo;
 		Photo.PhotoID = PhotoID;
 		Photo.PhotoSentenceID = SentenceID;
+		Photo.StatementSentenceID = StatementID;
+		Photo.GrantedWordIDs.Add(WordID);
 		Photos->AddRow(PhotoID, Photo);
 
-		FSentenceDefinition Sentence;
-		Sentence.SentenceID = SentenceID;
-		Sentence.ResultTextID = ResultTextID;
-		Sentence.ResultText = FText::FromString(TEXT("Test result text"));
-		Sentence.RequiredPhotoCount = 1;
+		FSentenceDefinition PhotoSentence;
+		PhotoSentence.SentenceID = SentenceID;
+		PhotoSentence.SentenceType = ESentenceType::PhotoAnalysis;
+		PhotoSentence.ResultText = FText::FromString(TEXT("Photo analysis result"));
 
 		FSentenceWordSlot WordSlot;
 		WordSlot.SlotIndex = 0;
 		WordSlot.CorrectWordID = WordID;
-		Sentence.WordSlots.Add(WordSlot);
+		PhotoSentence.WordSlots.Add(WordSlot);
+		Sentences->AddRow(SentenceID, PhotoSentence);
+
+		FSentenceDefinition Statement;
+		Statement.SentenceID = StatementID;
+		Statement.SentenceType = ESentenceType::Statement;
+		Statement.CharacterID = TEXT("CHAR_TEST");
+		Statement.FolderName = FText::FromString(TEXT("테스트 인물"));
+		Statement.ResultText = FText::FromString(TEXT("Test result text"));
+		Statement.RequiredPhotoCount = 1;
 
 		FSentencePhotoSlot PhotoSlot;
 		PhotoSlot.SlotIndex = 0;
 		PhotoSlot.CorrectPhotoID = PhotoID;
-		Sentence.PhotoSlots.Add(PhotoSlot);
-		Sentences->AddRow(SentenceID, Sentence);
+		Statement.PhotoSlots.Add(PhotoSlot);
+		Sentences->AddRow(StatementID, Statement);
 
 		FInvestigationSubsystemTestAccessor::SetTables(
 			Subsystem,
@@ -109,6 +134,7 @@ struct FFixture
 			Words,
 			Photos,
 			KeywordDocuments,
+			KeywordChoices,
 			Sentences);
 	}
 
@@ -140,6 +166,7 @@ struct FFixture
 	UDataTable* Words;
 	UDataTable* Photos;
 	UDataTable* KeywordDocuments;
+	UDataTable* KeywordChoices;
 	UDataTable* Sentences;
 };
 }
@@ -190,6 +217,10 @@ bool FInvestigationSettingsConfigurationTest::RunTest(const FString& Parameters)
 		Settings->KeywordDocumentsTable,
 		FKeywordDocumentDefinition::StaticStruct());
 	TestConfiguredTable(
+		TEXT("KeywordChoicesTable"),
+		Settings->KeywordChoicesTable,
+		FKeywordChoiceDefinition::StaticStruct());
+	TestConfiguredTable(
 		TEXT("SentencesTable"),
 		Settings->SentencesTable,
 		FSentenceDefinition::StaticStruct());
@@ -236,6 +267,31 @@ bool FInvestigationDefinitionLookupTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInvestigationConfiguredDataValidationTest,
+	"Balhwajeom.Investigation.ConfiguredDataValidation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FInvestigationConfiguredDataValidationTest::RunTest(const FString& Parameters)
+{
+	const UBalhwajeomInvestigationSettings* Settings = GetDefault<UBalhwajeomInvestigationSettings>();
+	UGameInstance* GameInstance = NewObject<UGameInstance>();
+	UBalhwajeomInvestigationSubsystem* Subsystem =
+		NewObject<UBalhwajeomInvestigationSubsystem>(GameInstance);
+	FInvestigationSubsystemTestAccessor::SetTables(
+		Subsystem,
+		Settings->EvidenceDefinitionsTable.LoadSynchronous(),
+		Settings->EvidenceStatesTable.LoadSynchronous(),
+		Settings->WordsTable.LoadSynchronous(),
+		Settings->PhotosTable.LoadSynchronous(),
+		Settings->KeywordDocumentsTable.LoadSynchronous(),
+		Settings->KeywordChoicesTable.LoadSynchronous(),
+		Settings->SentencesTable.LoadSynchronous());
+	TestTrue(TEXT("Configured prototype DataTables should pass all cross-reference checks"),
+		FInvestigationSubsystemTestAccessor::Validate(Subsystem));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FInvestigationOnceInteractionTest,
 	"Balhwajeom.Investigation.OnceInteraction",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -273,6 +329,28 @@ bool FInvestigationDuplicateWordTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInvestigationKeywordChoiceTest,
+	"Balhwajeom.Investigation.KeywordChoice",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FInvestigationKeywordChoiceTest::RunTest(const FString& Parameters)
+{
+	const InvestigationSubsystemTests::FFixture Fixture;
+	TArray<FKeywordChoiceDefinition> Choices;
+	Fixture.Subsystem->GetKeywordChoicesForDocument(TEXT("DOC_TEST"), Choices);
+	TestEqual(TEXT("Document should expose its normalized choice rows"), Choices.Num(), 1);
+	TestTrue(TEXT("Selecting a valid choice should acquire its word"),
+		Fixture.Subsystem->SelectKeywordChoice(
+			TEXT("DOC_TEST"), TEXT("CHOICE_TEST"), EWordAcquisitionSource::EvidenceInteraction));
+	TestTrue(TEXT("Choice word should be available to sentence solving"),
+		Fixture.Subsystem->HasAcquiredWord(InvestigationSubsystemTests::WordID));
+	TestFalse(TEXT("A choice cannot be selected twice"),
+		Fixture.Subsystem->SelectKeywordChoice(
+			TEXT("DOC_TEST"), TEXT("CHOICE_TEST"), EWordAcquisitionSource::EvidenceInteraction));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FInvestigationDuplicatePhotoTest,
 	"Balhwajeom.Investigation.DuplicatePhoto",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -283,6 +361,7 @@ bool FInvestigationDuplicatePhotoTest::RunTest(const FString& Parameters)
 	const FCapturedPhotoRecord Record = Fixture.MakePhotoRecord(Fixture.RegisterTestEvidence());
 	TestTrue(TEXT("A valid photo should register once"), Fixture.Subsystem->RegisterCapturedPhoto(Record));
 	TestTrue(TEXT("Registered PhotoID should be reported as captured"), Fixture.Subsystem->HasCapturedPhoto(Record.PhotoID));
+	TestTrue(TEXT("Photo capture should grant its configured word"), Fixture.Subsystem->HasAcquiredWord(InvestigationSubsystemTests::WordID));
 	TestFalse(TEXT("The same PhotoID should not register twice"), Fixture.Subsystem->RegisterCapturedPhoto(Record));
 	return true;
 }
@@ -350,20 +429,23 @@ bool FInvestigationSentenceValidationTest::RunTest(const FString& Parameters)
 	SubmittedWord.WordID = InvestigationSubsystemTests::WordID;
 	Submission.SubmittedWords.Add(SubmittedWord);
 
+	FText ResultText;
+	TestTrue(TEXT("An acquired correct word should solve the photo analysis"), Fixture.Subsystem->ValidateSentence(
+		InvestigationSubsystemTests::SentenceID,
+		Submission,
+		ResultText));
+	TestTrue(TEXT("Solved state should be queryable"), Fixture.Subsystem->IsSentenceSolved(InvestigationSubsystemTests::SentenceID));
+
+	FSentenceSubmission StatementSubmission;
 	FSubmittedPhotoSlot SubmittedPhoto;
 	SubmittedPhoto.SlotIndex = 0;
 	SubmittedPhoto.PhotoID = InvestigationSubsystemTests::PhotoID;
-	Submission.SubmittedPhotos.Add(SubmittedPhoto);
-
-	FName ResultTextID;
-	FText ResultText;
-	TestTrue(TEXT("Acquired correct word and captured correct photo should solve the sentence"), Fixture.Subsystem->ValidateSentence(
-		InvestigationSubsystemTests::SentenceID,
-		Submission,
-		ResultTextID,
+	StatementSubmission.SubmittedPhotos.Add(SubmittedPhoto);
+	TestTrue(TEXT("A completed analysis photo should solve the statement"), Fixture.Subsystem->ValidateSentence(
+		InvestigationSubsystemTests::StatementID,
+		StatementSubmission,
 		ResultText));
-	TestEqual(TEXT("Solved sentence should return its ResultTextID"), ResultTextID, InvestigationSubsystemTests::ResultTextID);
-	TestEqual(TEXT("Solved sentence should return its ResultText"), ResultText.ToString(), FString(TEXT("Test result text")));
+	TestEqual(TEXT("Solved statement should return its ResultText"), ResultText.ToString(), FString(TEXT("Test result text")));
 	return true;
 }
 

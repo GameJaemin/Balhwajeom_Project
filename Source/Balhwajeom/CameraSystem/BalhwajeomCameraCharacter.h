@@ -12,6 +12,7 @@ class USpringArmComponent;
 class ABalhwajeomFixedCameraZone;
 class UBalhwajeomPhotoCameraComponent;
 class UBalhwajeomTabletComponent;
+class UPlayerInteractionComponent;
 
 /** A keyboard-driven top-down character with hold-to-sprint movement. */
 UCLASS()
@@ -48,6 +49,9 @@ protected:
 
 	/** Receives Mouse Y from the "LookUp" axis; routes to camera-mode pitch or boom orbit pitch. */
 	void HandleLookUp(float Value);
+
+	UFUNCTION()
+	void HandleInspectionSucceeded(FText InspectionText);
 
 	/**
 	 * When true, mouse movement orbits CameraBoom around the character (yaw + pitch) while not in
@@ -93,4 +97,7 @@ protected:
 	/** Reusable tablet UI/input component. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "UI", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UBalhwajeomTabletComponent> TabletComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UPlayerInteractionComponent> PlayerInteractionComponent;
 };

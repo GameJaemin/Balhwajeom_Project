@@ -31,5 +31,8 @@ public:
 	TSoftObjectPtr<UDataTable> KeywordDocumentsTable;
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Data Tables")
+	TSoftObjectPtr<UDataTable> KeywordChoicesTable;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Data Tables")
 	TSoftObjectPtr<UDataTable> SentencesTable;
 };

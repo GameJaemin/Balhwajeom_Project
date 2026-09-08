@@ -26,10 +26,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FOnPhotoCaptured,
 	const FCapturedPhotoRecord&, PhotoRecord);
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FOnSentenceSolved,
-	FName, SentenceID,
-	FName, ResultTextID);
+	FName, SentenceID);
 
 /** Central access point for investigation definitions and mutable play-session state. */
 UCLASS()
@@ -50,6 +49,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
 	bool GetPhotoDefinition(FName PhotoID, FPhotoDefinition& OutDefinition) const;
 
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
+	bool GetWordDefinition(FName WordID, FWordDefinition& OutDefinition) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
+	bool GetSentenceDefinition(FName SentenceID, FSentenceDefinition& OutDefinition) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Keyword Documents")
+	bool GetKeywordDocumentDefinition(FName KeywordDocumentID, FKeywordDocumentDefinition& OutDefinition) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Keyword Documents")
+	void GetKeywordChoicesForDocument(FName KeywordDocumentID, TArray<FKeywordChoiceDefinition>& OutChoices) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Keyword Documents")
+	bool SelectKeywordChoice(FName KeywordDocumentID, FName ChoiceID, EWordAcquisitionSource SourceType);
+
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Evidence")
 	bool RegisterEvidenceActor(
 		FGuid EvidenceInstanceID,
@@ -69,18 +83,35 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Words")
 	bool AcquireWord(FName WordID, EWordAcquisitionSource SourceType, FName SourceID);
 
+	UFUNCTION(BlueprintPure, Category = "Investigation|Words")
+	bool HasAcquiredWord(FName WordID) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Words")
+	void GetAcquiredWords(TArray<FAcquiredWordRecord>& OutWords) const;
+
 	UFUNCTION(BlueprintPure, Category = "Investigation|Photos")
 	bool HasCapturedPhoto(FName PhotoID) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Photos")
 	bool RegisterCapturedPhoto(const FCapturedPhotoRecord& Record);
 
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Photos")
+	void GetCapturedPhotos(TArray<FCapturedPhotoRecord>& OutPhotos) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Sentences")
 	bool ValidateSentence(
 		FName SentenceID,
 		const FSentenceSubmission& Submission,
-		FName& OutResultTextID,
 		FText& OutResultText);
+
+	UFUNCTION(BlueprintPure, Category = "Investigation|Sentences")
+	bool IsSentenceSolved(FName SentenceID) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Folders")
+	void GetStatementSentencesForCharacter(FName CharacterID, TArray<FSentenceDefinition>& OutSentences) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Folders")
+	void GetPhotosForCharacter(FName CharacterID, TArray<FPhotoDefinition>& OutPhotos) const;
 
 	UPROPERTY(BlueprintAssignable, Category = "Investigation|Events")
 	FOnEvidenceStateChanged OnEvidenceStateChanged;
@@ -100,6 +131,9 @@ private:
 	void LoadConfiguredDataTables();
 	void ClearLoadedDataTables();
 	void InitializeDefaultWords();
+	void LoadPersistentPhotoGallery();
+	bool SavePersistentPhotoGallery() const;
+	bool ShouldPersistPhotoGallery() const;
 	bool ValidateLoadedDataTables() const;
 
 	const FEvidenceDefinition* FindEvidenceDefinition(FName ObjectID) const;
@@ -123,6 +157,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDataTable> KeywordDocumentsTable;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDataTable> KeywordChoicesTable;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDataTable> SentencesTable;

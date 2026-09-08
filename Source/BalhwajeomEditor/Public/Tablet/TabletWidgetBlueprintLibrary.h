@@ -34,4 +34,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool RunTabletWidgetSmokeTest();
 
+	/** Creates DT_KeywordChoices and migrates choices embedded in legacy keyword documents. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Investigation")
+	static bool UpgradeInvestigationDataTables();
+
 };

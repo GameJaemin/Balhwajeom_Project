@@ -41,6 +41,7 @@ enum class EWordAcquisitionSource : uint8
 {
 	Default,
 	EvidenceInteraction,
+	PhotoCapture,
 	Browser,
 	Messenger
 };

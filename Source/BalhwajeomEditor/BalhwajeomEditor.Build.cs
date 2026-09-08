@@ -18,6 +18,7 @@ public class BalhwajeomEditor : ModuleRules
 			"AssetRegistry",
 			"AssetTools",
 			"Balhwajeom",
+			"ImageCore",
 			"SlateCore",
 			"UMG",
 			"UMGEditor",

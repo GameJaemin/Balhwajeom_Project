@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Investigation/InvestigationRuntimeTypes.h"
 #include "BalhwajeomTabletWidget.generated.h"
 
 class UBorder;
@@ -11,6 +12,7 @@ class UOverlay;
 class UTextBlock;
 class UWidgetSwitcher;
 class UWidgetAnimation;
+class UBalhwajeomInvestigationSubsystem;
 
 UENUM(BlueprintType)
 enum class ETabletPage : uint8
@@ -92,6 +94,16 @@ private:
 	void SetTabletPage(ETabletPage NewPage, bool bAddToHistory = true);
 	void NavigateBack();
 	void ShowFolder(EFamilyMember FamilyMember);
+	void RefreshFolderContents();
+	FName GetActiveCharacterID() const;
+	UBalhwajeomInvestigationSubsystem* GetInvestigationSubsystem() const;
+	void OpenPhotoAtIndex(int32 Index);
+	void PreparePuzzle(FName SentenceID);
+	void RefreshPuzzleControls();
+	void HidePuzzleControls();
+	void SelectPuzzleWord(int32 Index);
+	void SelectPuzzlePhoto(int32 Index);
+	void ValidateActivePuzzle(bool bExplicitStatementSubmit);
 	void ShowPopup(const FText& Title, const FText& Body);
 	void HidePopup();
 	void UpdateUnreadBadge();
@@ -142,6 +154,19 @@ private:
 
 	UFUNCTION()
 	void HandlePopupCloseClicked();
+
+	UFUNCTION()
+	void HandlePuzzleWord01Clicked();
+	UFUNCTION()
+	void HandlePuzzleWord02Clicked();
+	UFUNCTION()
+	void HandlePuzzleWord03Clicked();
+	UFUNCTION()
+	void HandlePuzzlePhoto01Clicked();
+	UFUNCTION()
+	void HandlePuzzlePhoto02Clicked();
+	UFUNCTION()
+	void HandleStatementSubmitClicked();
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidgetSwitcher> WidgetSwitcher_TabletPage;
@@ -209,5 +234,26 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_PopupClose;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BTN_PuzzleWord01;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BTN_PuzzleWord02;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BTN_PuzzleWord03;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BTN_PuzzlePhoto01;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BTN_PuzzlePhoto02;
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BTN_StatementSubmit;
+
 	TArray<ETabletPage> PageHistory;
+	TArray<FName> VisiblePhotoIDs;
+	TArray<FName> VisibleStatementIDs;
+	FName ActiveSentenceID = NAME_None;
+	FSentenceSubmission ActiveSubmission;
+	TArray<FName> AvailablePuzzleWordIDs;
+	TArray<FName> AvailablePuzzlePhotoIDs;
+	int32 NextWordSlotCursor = 0;
+	int32 NextPhotoSlotCursor = 0;
 };

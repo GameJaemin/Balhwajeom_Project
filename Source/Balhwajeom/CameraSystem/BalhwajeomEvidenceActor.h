@@ -10,10 +10,12 @@
 #include "BalhwajeomEvidenceActor.generated.h"
 
 class UStaticMeshComponent;
+class UBoxComponent;
 class UPrimitiveComponent;
 class USceneComponent;
 class UInspectionComponent;
 class UWidgetComponent;
+class UBalhwajeomInvestigationSubsystem;
 
 /** A simple Blueprint-placeable object that can be discovered with the camera trace. */
 UCLASS(Blueprintable)
@@ -30,6 +32,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Evidence")
 	void MarkAsCollected();
 
+	UFUNCTION(BlueprintCallable, Category = "Evidence|Investigation")
+	void ConfigureInvestigationObject(FName InObjectID);
+
+	UFUNCTION(BlueprintPure, Category = "Evidence|Investigation")
+	FName GetObjectID() const { return ObjectID; }
+
+	/** Executes the current F-interaction. Single-choice keyword documents award their word immediately. */
+	UFUNCTION(BlueprintCallable, Category = "Evidence|Investigation")
+	bool RequestInvestigationInteraction(FText& OutDisplayText);
+
 	/** Hides the normal distance label while the dedicated photo camera HUD is active. */
 	void SetInspectionLabelSuppressed(bool bSuppressed);
 
@@ -44,15 +56,30 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	UFUNCTION()
+	void HandleEvidenceStateChanged(FGuid ChangedInstanceID, FName PreviousStateID, FName NewStateID);
 
 	UFUNCTION()
 	void HandlePlayerDistanceStateChanged(EPlayerInspectionDistanceState NewState);
 
 	void SetInspectionLabel(const FText& LabelText, bool bVisible);
 	void ApplyInspectionDistanceState(EPlayerInspectionDistanceState DistanceState);
+	void RegisterWithInvestigationSystem();
+	void ApplyInvestigationState(FName StateID);
+	UBalhwajeomInvestigationSubsystem* GetInvestigationSubsystem() const;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Evidence")
 	TObjectPtr<UStaticMeshComponent> EvidenceMesh;
+
+	/**
+	 * Query-only volume used by photo focus and interaction traces.
+	 * This keeps target recognition working when a designer swaps the visible mesh
+	 * for an asset with missing or disabled complex collision.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera Target")
+	TObjectPtr<UBoxComponent> CameraTargetBounds;
 
 	/**
 	 * Makes every evidence actor discoverable by UPlayerInteractionComponent.
@@ -79,6 +106,16 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Evidence")
 	FBalhwajeomEvidenceData EvidenceData;
+
+	/** Row ID in DT_EvidenceDefinitions. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Evidence|Investigation")
+	FName ObjectID = NAME_None;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Evidence|Investigation")
+	FGuid EvidenceInstanceID;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Evidence|Investigation")
+	FName CurrentStateID = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target")
 	TArray<FText> CameraInformationStages;

@@ -1,0 +1,4 @@
+Name,WordID,DisplayWord,Description,bUnlockedByDefault
+WORD_PIG,WORD_PIG,돼지,거울 앞에 놓여 있던 작은 돼지 장식.,false
+WORD_MIRROR,WORD_MIRROR,거울,불에 그을렸지만 반사면 일부가 남아 있다.,false
+WORD_SNOW_GLOBE,WORD_SNOW_GLOBE,스노우글로브,가족이 생일 선물로 준비했던 장식품.,false

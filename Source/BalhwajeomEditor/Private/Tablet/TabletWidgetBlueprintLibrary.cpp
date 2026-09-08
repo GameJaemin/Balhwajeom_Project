@@ -23,6 +23,7 @@
 #include "Editor.h"
 #include "Engine/Texture2D.h"
 #include "Factories/DataAssetFactory.h"
+#include "Factories/DataTableFactory.h"
 #include "IAssetTools.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -33,6 +34,10 @@
 #include "Tablet/BalhwajeomMessengerMessageWidget.h"
 #include "Tablet/BalhwajeomMessengerRoomWidget.h"
 #include "Tablet/BalhwajeomMessengerWidget.h"
+#include "Investigation/WordDefinitions.h"
+#include "Investigation/EvidenceDefinitions.h"
+#include "Investigation/PhotoDefinitions.h"
+#include "Investigation/SentenceDefinitions.h"
 #include "Tablet/BalhwajeomTabletWidget.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
@@ -703,7 +708,7 @@ namespace TabletDesigner
 
 			USizeBox* PopupSize = Make<USizeBox>(TEXT("SB_Popup"));
 			PopupSize->SetWidthOverride(820.0f);
-			PopupSize->SetHeightOverride(560.0f);
+			PopupSize->SetHeightOverride(680.0f);
 			UOverlaySlot* PopupSizeSlot = Popup->AddChildToOverlay(PopupSize);
 			PopupSizeSlot->SetHorizontalAlignment(HAlign_Center);
 			PopupSizeSlot->SetVerticalAlignment(VAlign_Center);
@@ -715,12 +720,20 @@ namespace TabletDesigner
 			Place(Canvas, MakeText(TEXT("TXT_PopupTitle"), TEXT("증거 사진"), 30, WarmWhite, true), 20, 15, 650, 55);
 			Place(Canvas, MakeTextButton(TEXT("BTN_PopupClose"), TEXT("×"), 36), 700, 5, 58, 58);
 			UBorder* Preview = MakeBorder(TEXT("BRD_PopupPreview"), PagePanel);
-			Place(Canvas, Preview, 20, 95, 740, 300);
+			Place(Canvas, Preview, 20, 95, 450, 330);
+			Place(Canvas, MakeText(TEXT("TXT_PuzzleKeywordLabel"), TEXT("획득 키워드"), 18, WarmMuted), 500, 95, 240, 34);
+			Place(Canvas, MakeTextButton(TEXT("BTN_PuzzleWord01"), TEXT("키워드 1"), 21), 500, 135, 240, 54);
+			Place(Canvas, MakeTextButton(TEXT("BTN_PuzzleWord02"), TEXT("키워드 2"), 21), 500, 195, 240, 54);
+			Place(Canvas, MakeTextButton(TEXT("BTN_PuzzleWord03"), TEXT("키워드 3"), 21), 500, 255, 240, 54);
+			Place(Canvas, MakeText(TEXT("TXT_PuzzlePhotoLabel"), TEXT("완성 사진"), 18, WarmMuted), 500, 325, 240, 34);
+			Place(Canvas, MakeTextButton(TEXT("BTN_PuzzlePhoto01"), TEXT("사진 1"), 19), 500, 365, 115, 54);
+			Place(Canvas, MakeTextButton(TEXT("BTN_PuzzlePhoto02"), TEXT("사진 2"), 19), 625, 365, 115, 54);
 			UTextBlock* Body = MakeText(
 				TEXT("TXT_PopupBody"), TEXT("증거 Placeholder"), 22, WarmMuted, true);
 			Body->SetJustification(ETextJustify::Center);
 			Body->SetAutoWrapText(true);
-			Place(Canvas, Body, 40, 420, 700, 70);
+			Place(Canvas, Body, 40, 450, 700, 100);
+			Place(Canvas, MakeTextButton(TEXT("BTN_StatementSubmit"), TEXT("자백 반증"), 23), 530, 565, 210, 62);
 			Popup->SetVisibility(ESlateVisibility::Collapsed);
 			return Popup;
 		}
@@ -1533,4 +1546,234 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 
 	UE_LOG(LogTemp, Display, TEXT("TABLET_SMOKE Result=%s"), bPassed ? TEXT("Success") : TEXT("Failure"));
 	return bPassed;
+}
+
+bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
+{
+	const TCHAR* DocumentPath =
+		TEXT("/Game/Balhwajeom/Data/Investigation/DT_KeywordDocuments.DT_KeywordDocuments");
+	const TCHAR* ChoicePath =
+		TEXT("/Game/Balhwajeom/Data/Investigation/DT_KeywordChoices.DT_KeywordChoices");
+	const TCHAR* AssetFolder = TEXT("/Game/Balhwajeom/Data/Investigation");
+
+	UDataTable* Documents = LoadObject<UDataTable>(nullptr, DocumentPath);
+	if (!Documents || Documents->GetRowStruct() != FKeywordDocumentDefinition::StaticStruct())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Investigation upgrade: DT_KeywordDocuments is missing or has the wrong row struct."));
+		return false;
+	}
+
+	UDataTable* Choices = LoadObject<UDataTable>(nullptr, ChoicePath);
+	if (!Choices)
+	{
+		UDataTableFactory* Factory = NewObject<UDataTableFactory>();
+		Factory->Struct = FKeywordChoiceDefinition::StaticStruct();
+		IAssetTools& AssetTools =
+			FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+		Choices = Cast<UDataTable>(AssetTools.CreateAsset(
+			TEXT("DT_KeywordChoices"), AssetFolder, UDataTable::StaticClass(), Factory));
+	}
+	if (!Choices || Choices->GetRowStruct() != FKeywordChoiceDefinition::StaticStruct())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Investigation upgrade: could not create DT_KeywordChoices."));
+		return false;
+	}
+
+	UDataTable* EvidenceDefinitions = LoadObject<UDataTable>(
+		nullptr, TEXT("/Game/Balhwajeom/Data/Investigation/DT_EvidenceDefinitions.DT_EvidenceDefinitions"));
+	UDataTable* EvidenceStates = LoadObject<UDataTable>(
+		nullptr, TEXT("/Game/Balhwajeom/Data/Investigation/DT_EvidenceStates.DT_EvidenceStates"));
+	UDataTable* Words = LoadObject<UDataTable>(
+		nullptr, TEXT("/Game/Balhwajeom/Data/Investigation/DT_Words.DT_Words"));
+	UDataTable* Photos = LoadObject<UDataTable>(
+		nullptr, TEXT("/Game/Balhwajeom/Data/Investigation/DT_Photos.DT_Photos"));
+	UDataTable* Sentences = LoadObject<UDataTable>(
+		nullptr, TEXT("/Game/Balhwajeom/Data/Investigation/DT_Sentences.DT_Sentences"));
+	if (!EvidenceDefinitions || EvidenceDefinitions->GetRowStruct() != FEvidenceDefinition::StaticStruct() ||
+		!EvidenceStates || EvidenceStates->GetRowStruct() != FEvidenceStateDefinition::StaticStruct() ||
+		!Words || Words->GetRowStruct() != FWordDefinition::StaticStruct() ||
+		!Photos || Photos->GetRowStruct() != FPhotoDefinition::StaticStruct() ||
+		!Sentences || Sentences->GetRowStruct() != FSentenceDefinition::StaticStruct())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Investigation upgrade: one or more core DataTables have the wrong row struct."));
+		return false;
+	}
+
+	int32 MigratedCount = 0;
+	for (const TPair<FName, uint8*>& Pair : Documents->GetRowMap())
+	{
+		FKeywordDocumentDefinition* Document =
+			reinterpret_cast<FKeywordDocumentDefinition*>(Pair.Value);
+		for (int32 Index = 0; Index < Document->KeywordChoices.Num(); ++Index)
+		{
+			FKeywordChoiceDefinition Choice = Document->KeywordChoices[Index];
+			Choice.KeywordDocumentID = Document->KeywordDocumentID;
+			Choice.SortOrder = Index;
+			if (Choice.ChoiceID.IsNone())
+			{
+				Choice.ChoiceID = FName(*FString::Printf(
+					TEXT("%s_CHOICE_%02d"), *Document->KeywordDocumentID.ToString(), Index + 1));
+			}
+			if (!Choices->GetRowMap().Contains(Choice.ChoiceID))
+			{
+				Choices->AddRow(Choice.ChoiceID, Choice);
+				++MigratedCount;
+			}
+		}
+		Document->KeywordChoices.Reset();
+		Document->bCloseAfterSelection = false;
+	}
+
+	int32 SeededRows = 0;
+	if (EvidenceDefinitions->GetRowMap().IsEmpty() && EvidenceStates->GetRowMap().IsEmpty() &&
+		Words->GetRowMap().IsEmpty() && Photos->GetRowMap().IsEmpty() &&
+		Documents->GetRowMap().IsEmpty() && Choices->GetRowMap().IsEmpty() && Sentences->GetRowMap().IsEmpty())
+	{
+		auto AddWord = [Words, &SeededRows](const TCHAR* ID, const TCHAR* Display, const TCHAR* Description)
+		{
+			FWordDefinition Row;
+			Row.WordID = ID;
+			Row.DisplayWord = FText::FromString(Display);
+			Row.Description = FText::FromString(Description);
+			Words->AddRow(Row.WordID, Row);
+			++SeededRows;
+		};
+		AddWord(TEXT("WORD_PIG"), TEXT("돼지"), TEXT("거울 앞에 놓여 있던 작은 돼지 장식."));
+		AddWord(TEXT("WORD_MIRROR"), TEXT("거울"), TEXT("불에 그을렸지만 반사면 일부가 남아 있다."));
+		AddWord(TEXT("WORD_SNOW_GLOBE"), TEXT("스노우글로브"), TEXT("가족이 생일 선물로 준비했던 장식품."));
+
+		FKeywordDocumentDefinition Document;
+		Document.KeywordDocumentID = TEXT("DOC_MIRROR_LABEL");
+		Document.DocumentText = FText::FromString(
+			TEXT("그을린 라벨 아래로 ‘거울’이라는 글자가 희미하게 남아 있다."));
+		Documents->AddRow(Document.KeywordDocumentID, Document);
+		++SeededRows;
+
+		FKeywordChoiceDefinition Choice;
+		Choice.ChoiceID = TEXT("CHOICE_MIRROR");
+		Choice.KeywordDocumentID = Document.KeywordDocumentID;
+		Choice.DisplayText = FText::FromString(TEXT("거울"));
+		Choice.GrantedWordID = TEXT("WORD_MIRROR");
+		Choice.SortOrder = 0;
+		Choices->AddRow(Choice.ChoiceID, Choice);
+		++SeededRows;
+
+		FSentenceDefinition Analysis;
+		Analysis.SentenceID = TEXT("SENT_PHOTO_PIG_MIRROR");
+		Analysis.ChapterID = TEXT("CHAPTER_01");
+		Analysis.SentenceType = ESentenceType::PhotoAnalysis;
+		Analysis.SentenceTemplate = FText::FromString(TEXT("[   ]가 바라보던 것은 [   ]이었다."));
+		Analysis.ResultText = FText::FromString(TEXT("돼지가 바라보던 것은 거울이었다."));
+		Analysis.DesignerNote = FText::FromString(TEXT("촬영으로 돼지, F 조사로 거울 키워드를 획득한다."));
+		Analysis.WordSlots.Add({0, TEXT("WORD_PIG")});
+		Analysis.WordSlots.Add({1, TEXT("WORD_MIRROR")});
+		Sentences->AddRow(Analysis.SentenceID, Analysis);
+		++SeededRows;
+
+		FSentenceDefinition Statement;
+		Statement.SentenceID = TEXT("SENT_STATEMENT_SISTER_01");
+		Statement.ChapterID = TEXT("CHAPTER_01");
+		Statement.CharacterID = TEXT("SISTER");
+		Statement.FolderName = FText::FromString(TEXT("여동생"));
+		Statement.FolderSortOrder = 0;
+		Statement.LieText = FText::FromString(TEXT("나는 돼지 장식이 놓인 거울을 본 적이 없어."));
+		Statement.SentenceType = ESentenceType::Statement;
+		Statement.SentenceTemplate = FText::FromString(TEXT("현장에 남은 [   ]이 그 말을 반박한다."));
+		Statement.ResultText = FText::FromString(TEXT("현장에 남은 거울과 완성된 사진이 그 말을 반박한다."));
+		Statement.RequiredPhotoCount = 1;
+		Statement.WordSlots.Add({0, TEXT("WORD_MIRROR")});
+		Statement.PhotoSlots.Add({0, TEXT("PHOTO_PIG_MIRROR")});
+		Sentences->AddRow(Statement.SentenceID, Statement);
+		++SeededRows;
+
+		FPhotoDefinition MirrorPhoto;
+		MirrorPhoto.PhotoID = TEXT("PHOTO_PIG_MIRROR");
+		MirrorPhoto.PhotoName = FText::FromString(TEXT("돼지가 보던 거울"));
+		MirrorPhoto.DescriptionSource = EPhotoDescriptionSource::ObservationText;
+		MirrorPhoto.PhotoSentenceID = Analysis.SentenceID;
+		MirrorPhoto.StatementSentenceID = Statement.SentenceID;
+		MirrorPhoto.GrantedWordIDs.Add(TEXT("WORD_PIG"));
+		MirrorPhoto.WorldStoryText = FText::FromString(TEXT("불탄 거울 속에 돼지 장식의 실루엣이 남아 있다."));
+		Photos->AddRow(MirrorPhoto.PhotoID, MirrorPhoto);
+		++SeededRows;
+
+		FPhotoDefinition StoryPhoto;
+		StoryPhoto.PhotoID = TEXT("PHOTO_SNOW_GLOBE");
+		StoryPhoto.PhotoName = FText::FromString(TEXT("가족의 스노우글로브"));
+		StoryPhoto.DescriptionSource = EPhotoDescriptionSource::Custom;
+		StoryPhoto.CustomDescription = FText::FromString(TEXT("그을린 유리 안에서 작은 눈송이가 흔들린다."));
+		StoryPhoto.StatementSentenceID = Statement.SentenceID;
+		StoryPhoto.GrantedWordIDs.Add(TEXT("WORD_SNOW_GLOBE"));
+		StoryPhoto.WorldStoryText = FText::FromString(TEXT("가족의 대화가 잠시 귓가에 되살아난다."));
+		Photos->AddRow(StoryPhoto.PhotoID, StoryPhoto);
+		++SeededRows;
+
+		FEvidenceDefinition MirrorObject;
+		MirrorObject.ObjectID = TEXT("OBJ_PIG_MIRROR");
+		MirrorObject.ObjectName = FText::FromString(TEXT("돼지 장식과 거울"));
+		MirrorObject.InitialStateID = TEXT("STATE_PIG_MIRROR");
+		EvidenceDefinitions->AddRow(MirrorObject.ObjectID, MirrorObject);
+		++SeededRows;
+
+		FEvidenceStateDefinition MirrorState;
+		MirrorState.StateID = MirrorObject.InitialStateID;
+		MirrorState.ObjectID = MirrorObject.ObjectID;
+		MirrorState.StateName = FText::FromString(TEXT("그을린 상태"));
+		MirrorState.InteractionBehavior = EEvidenceInteractionBehavior::Once;
+		MirrorState.InteractionPresentation = EEvidenceInteractionPresentation::KeywordSelectionWindow;
+		MirrorState.KeywordDocumentID = Document.KeywordDocumentID;
+		MirrorState.MidLabel = FText::FromString(TEXT("그을린 거울이 있다"));
+		MirrorState.ObservationText = FText::FromString(TEXT("돼지 장식이 거울을 향해 놓여 있다."));
+		MirrorState.bCanCapture = true;
+		MirrorState.PhotoID = MirrorPhoto.PhotoID;
+		EvidenceStates->AddRow(MirrorState.StateID, MirrorState);
+		++SeededRows;
+
+		FEvidenceDefinition SnowGlobeObject;
+		SnowGlobeObject.ObjectID = TEXT("OBJ_SNOW_GLOBE");
+		SnowGlobeObject.ObjectName = FText::FromString(TEXT("스노우글로브"));
+		SnowGlobeObject.InitialStateID = TEXT("STATE_SNOW_GLOBE");
+		EvidenceDefinitions->AddRow(SnowGlobeObject.ObjectID, SnowGlobeObject);
+		++SeededRows;
+
+		FEvidenceStateDefinition SnowGlobeState;
+		SnowGlobeState.StateID = SnowGlobeObject.InitialStateID;
+		SnowGlobeState.ObjectID = SnowGlobeObject.ObjectID;
+		SnowGlobeState.StateName = FText::FromString(TEXT("발견 상태"));
+		SnowGlobeState.InteractionBehavior = EEvidenceInteractionBehavior::Repeatable;
+		SnowGlobeState.InteractionPresentation = EEvidenceInteractionPresentation::SimpleText;
+		SnowGlobeState.InteractionText = FText::FromString(TEXT("가족이 주고받던 생일 선물이다."));
+		SnowGlobeState.MidLabel = FText::FromString(TEXT("유리 장식품이 있다"));
+		SnowGlobeState.ObservationText = FText::FromString(TEXT("불길을 견딘 스노우글로브가 놓여 있다."));
+		SnowGlobeState.bCanCapture = true;
+		SnowGlobeState.PhotoID = StoryPhoto.PhotoID;
+		EvidenceStates->AddRow(SnowGlobeState.StateID, SnowGlobeState);
+		++SeededRows;
+	}
+
+	const auto SaveTable = [](UDataTable* Table)
+	{
+		UPackage* Package = Table->GetOutermost();
+		Package->MarkPackageDirty();
+		const FString Filename = FPackageName::LongPackageNameToFilename(
+			Package->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		SaveArgs.SaveFlags = SAVE_NoError;
+		SaveArgs.bSlowTask = false;
+		return UPackage::SavePackage(Package, Table, *Filename, SaveArgs);
+	};
+
+	const bool bSaved = SaveTable(EvidenceDefinitions) && SaveTable(EvidenceStates) &&
+		SaveTable(Words) && SaveTable(Photos) && SaveTable(Documents) &&
+		SaveTable(Choices) && SaveTable(Sentences);
+	if (bSaved)
+	{
+		UE_LOG(LogTemp, Display, TEXT("INVESTIGATION_UPGRADE Result=Success MigratedChoices=%d SeededRows=%d"), MigratedCount, SeededRows);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("INVESTIGATION_UPGRADE Result=Failure MigratedChoices=%d SeededRows=%d"), MigratedCount, SeededRows);
+	}
+	return bSaved;
 }

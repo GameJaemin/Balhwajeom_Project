@@ -9,6 +9,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
+#include "Engine/GameViewportClient.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
@@ -37,20 +38,41 @@ namespace
 		return OwnerPawn ? OwnerPawn->GetController() : nullptr;
 	}
 
-	bool ProjectActorBoundsToScreen(
-		const AActor* Actor,
+	AActor* ResolveCameraTargetFromHit(AActor* HitActor)
+	{
+		TSet<AActor*> Visited;
+		for (AActor* Candidate = HitActor; IsValid(Candidate) && !Visited.Contains(Candidate);)
+		{
+			Visited.Add(Candidate);
+			if (Candidate->GetClass()->ImplementsInterface(
+				UBalhwajeomCameraTargetInterface::StaticClass()))
+			{
+				return Candidate;
+			}
+
+			AActor* Parent = Candidate->GetAttachParentActor();
+			Candidate = Parent ? Parent : Candidate->GetOwner();
+		}
+		return nullptr;
+	}
+
+	bool ProjectPrimitiveBoundsToScreen(
+		const UPrimitiveComponent* FramingComponent,
 		APlayerController* PlayerController,
 		int32 ViewportWidth,
 		int32 ViewportHeight,
 		FVector2D& OutScreenMin,
 		FVector2D& OutScreenMax)
 	{
-		if (!Actor || !PlayerController)
+		if (!FramingComponent || !PlayerController)
 		{
 			return false;
 		}
 
-		const FBox Bounds = Actor->GetComponentsBoundingBox(true);
+		// Camera targets may own screen-space widgets and helper components whose
+		// bounds are unrelated to the photographed silhouette. Only the component
+		// explicitly supplied by RequestCameraFramingComponent is considered.
+		const FBox Bounds = FramingComponent->Bounds.GetBox();
 		if (!Bounds.IsValid)
 		{
 			return false;
@@ -153,7 +175,7 @@ namespace
 				RayOrigin,
 				RayOrigin + RayDirection * TraceDistance,
 				ECC_Visibility,
-				Params) && Hit.GetActor() == Actor;
+				Params) && ResolveCameraTargetFromHit(Hit.GetActor()) == Actor;
 			if (bHitTarget)
 			{
 				OutHitWorldPosition = Hit.ImpactPoint;
@@ -264,7 +286,6 @@ UBalhwajeomPhotoCameraComponent::UBalhwajeomPhotoCameraComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
-	PhotoCaptureSessionID = FGuid::NewGuid();
 }
 
 void UBalhwajeomPhotoCameraComponent::BeginDestroy()
@@ -458,22 +479,21 @@ void UBalhwajeomPhotoCameraComponent::TakePhoto()
 
 	AActor* Owner = GetOwner();
 
-	if (const APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this)))
-	{
-		if (ABalhwajeomEvidenceCameraHUD* CameraHUD = Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD()))
-		{
-			CameraHUD->TriggerPhotoFlash();
-		}
-	}
-
 	// The shutter always works. Evidence collection, however, requires a visible target
 	// inside the focus-distance band and the center guide.
 	if (bEnableEvidenceFocusSystem)
 	{
 		UpdateEvidenceFocus(0.0f);
-		TryCaptureActiveFocusTarget();
+		// A successful evidence shot flashes only after the viewport pixels have been
+		// copied. Otherwise the white shutter overlay becomes the saved photograph.
+		if (!TryCaptureActiveFocusTarget())
+		{
+			TriggerPhotoFlash();
+		}
 		return;
 	}
+
+	TriggerPhotoFlash();
 
 	const FVector TraceStart = PhotoCamera->GetComponentLocation();
 	const FVector TraceEnd = TraceStart + PhotoCamera->GetForwardVector() * PhotoTraceDistance;
@@ -814,7 +834,12 @@ bool UBalhwajeomPhotoCameraComponent::IsDisplayedGuideSurfaceVisible() const
 	const FVector GuideWorldPosition = TargetTransform.TransformPosition(DisplayedFocusGuideLocalPosition);
 	const FVector GuideWorldNormal = TargetTransform.TransformVectorNoScale(
 		DisplayedFocusGuideLocalNormal).GetSafeNormal();
-	const FVector CameraLocation = PhotoCamera->GetComponentLocation();
+	FVector CameraLocation;
+	FVector CameraForward;
+	if (!GetEffectiveCameraView(CameraLocation, CameraForward))
+	{
+		return false;
+	}
 	const FVector ToGuide = GuideWorldPosition - CameraLocation;
 	const float GuideDistance = ToGuide.Size();
 	if (GuideDistance <= KINDA_SMALL_NUMBER)
@@ -839,15 +864,50 @@ bool UBalhwajeomPhotoCameraComponent::IsDisplayedGuideSurfaceVisible() const
 		return false;
 	}
 
-	return Hit.GetActor() == Target &&
+	return ResolveCameraTargetFromHit(Hit.GetActor()) == Target &&
 		FVector::Distance(Hit.ImpactPoint, GuideWorldPosition) <= GuideVisibilityImpactTolerance;
 }
 
-bool UBalhwajeomPhotoCameraComponent::IsViewportCenterOverTarget(const AActor* Target) const
+void UBalhwajeomPhotoCameraComponent::TriggerPhotoFlash() const
+{
+	if (const APlayerController* PlayerController =
+		Cast<APlayerController>(GetOwningController(this)))
+	{
+		if (ABalhwajeomEvidenceCameraHUD* CameraHUD =
+			Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD()))
+		{
+			CameraHUD->TriggerPhotoFlash();
+		}
+	}
+}
+
+bool UBalhwajeomPhotoCameraComponent::GetEffectiveCameraView(
+	FVector& OutLocation,
+	FVector& OutForward) const
+{
+	if (APlayerController* PlayerController =
+		Cast<APlayerController>(GetOwningController(this)))
+	{
+		FRotator ViewRotation;
+		PlayerController->GetPlayerViewPoint(OutLocation, ViewRotation);
+		OutForward = ViewRotation.Vector();
+		return !OutForward.IsNearlyZero();
+	}
+
+	if (PhotoCamera)
+	{
+		OutLocation = PhotoCamera->GetComponentLocation();
+		OutForward = PhotoCamera->GetForwardVector();
+		return true;
+	}
+	return false;
+}
+
+bool UBalhwajeomPhotoCameraComponent::TraceViewportCenter(FHitResult& OutHit) const
 {
 	APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
 	UWorld* World = GetWorld();
-	if (!Target || !PlayerController || !World)
+	if (!PlayerController || !World)
 	{
 		return false;
 	}
@@ -873,13 +933,23 @@ bool UBalhwajeomPhotoCameraComponent::IsViewportCenterOverTarget(const AActor* T
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(EvidenceCenterTrace), true, GetOwner());
 	Params.bTraceComplex = true;
-	FHitResult Hit;
 	return World->LineTraceSingleByChannel(
-		Hit,
+		OutHit,
 		RayOrigin,
 		RayOrigin + RayDirection * FocusTargetScanDistance,
 		ECC_Visibility,
-		Params) && Hit.GetActor() == Target;
+		Params);
+}
+
+bool UBalhwajeomPhotoCameraComponent::IsViewportCenterOverTarget(const AActor* Target) const
+{
+	if (!Target)
+	{
+		return false;
+	}
+
+	FHitResult Hit;
+	return TraceViewportCenter(Hit) && ResolveCameraTargetFromHit(Hit.GetActor()) == Target;
 }
 
 bool UBalhwajeomPhotoCameraComponent::CalculateTargetFrameCoverage(
@@ -991,8 +1061,13 @@ void UBalhwajeomPhotoCameraComponent::UpdateEvidenceFocus(float DeltaTime)
 		return;
 	}
 
-	const FVector CameraLocation = PhotoCamera->GetComponentLocation();
-	const FVector CameraForward = PhotoCamera->GetForwardVector();
+	FVector CameraLocation;
+	FVector CameraForward;
+	if (!GetEffectiveCameraView(CameraLocation, CameraForward))
+	{
+		ResetEvidenceFocus();
+		return;
+	}
 	const FVector2D ViewportCenter(ViewportWidth * 0.5f, ViewportHeight * 0.5f);
 	const float ZoomRatio = SavedFirstPersonFieldOfView /
 		FMath::Max(PhotoCamera->FieldOfView, 1.0f);
@@ -1061,40 +1136,54 @@ void UBalhwajeomPhotoCameraComponent::UpdateEvidenceFocus(float DeltaTime)
 			continue;
 		}
 
-		FVector2D ScreenBoundsMin;
-		FVector2D ScreenBoundsMax;
-		if (!ProjectActorBoundsToScreen(
-			Candidate,
-			PlayerController,
-			ViewportWidth,
-			ViewportHeight,
-			ScreenBoundsMin,
-			ScreenBoundsMax))
-		{
-			continue;
-		}
-
-		// Use the projected bounds only as a search region. Complex visibility traces
-		// then reject holes and empty space inside concave silhouettes.
 		FVector2D ScreenPosition;
 		FVector GuideWorldPosition;
 		FVector GuideWorldNormal;
-		if (!FindClosestVisibleSilhouettePoint(
-			Candidate,
-			PlayerController,
-			GetWorld(),
-			GetOwner(),
-			ViewportCenter,
-			ScreenBoundsMin,
-			ScreenBoundsMax,
-			FocusTargetScanDistance,
-			SilhouetteTracePixelStep,
-			SilhouetteTraceMaxSamples,
-			ScreenPosition,
-			GuideWorldPosition,
-			GuideWorldNormal))
+		FHitResult CenterHit;
+		if (TraceViewportCenter(CenterHit) &&
+			ResolveCameraTargetFromHit(CenterHit.GetActor()) == Candidate)
 		{
-			continue;
+			// A direct reticle hit is definitive. It must not be rejected because a
+			// screen-space label or a coarse silhouette search distorted the bounds.
+			ScreenPosition = ViewportCenter;
+			GuideWorldPosition = CenterHit.ImpactPoint;
+			GuideWorldNormal = CenterHit.ImpactNormal.GetSafeNormal();
+		}
+		else
+		{
+			UPrimitiveComponent* FramingComponent =
+				IBalhwajeomCameraTargetInterface::Execute_RequestCameraFramingComponent(Candidate);
+			FVector2D ScreenBoundsMin;
+			FVector2D ScreenBoundsMax;
+			if (!IsValid(FramingComponent) || !ProjectPrimitiveBoundsToScreen(
+				FramingComponent,
+				PlayerController,
+				ViewportWidth,
+				ViewportHeight,
+				ScreenBoundsMin,
+				ScreenBoundsMax))
+			{
+				continue;
+			}
+
+			// Use the photographed primitive's projected bounds as the search region.
+			if (!FindClosestVisibleSilhouettePoint(
+				Candidate,
+				PlayerController,
+				GetWorld(),
+				GetOwner(),
+				ViewportCenter,
+				ScreenBoundsMin,
+				ScreenBoundsMax,
+				FocusTargetScanDistance,
+				SilhouetteTracePixelStep,
+				SilhouetteTraceMaxSamples,
+				ScreenPosition,
+				GuideWorldPosition,
+				GuideWorldNormal))
+			{
+				continue;
+			}
 		}
 
 		const float ScreenDistance = FVector2D::Distance(ScreenPosition, ViewportCenter);
@@ -1338,17 +1427,16 @@ bool UBalhwajeomPhotoCameraComponent::BeginInvestigationImageCapture(
 	}
 
 	const FGuid RequestID = FGuid::NewGuid();
-	const FString SessionDirectory = PhotoCaptureSessionID.ToString(EGuidFormats::Digits);
 	const FString SafePhotoID = FPaths::MakeValidFileName(Target.PhotoID.ToString(), TEXT('_'));
-	const FString FileName = FString::Printf(
-		TEXT("%s_%s.png"),
-		*SafePhotoID,
-		*RequestID.ToString(EGuidFormats::Digits));
-	const FString RelativePath = FPaths::Combine(
-		TEXT("Investigation"),
-		TEXT("Photos"),
-		SessionDirectory,
-		FileName);
+	const FString FileName = FString::Printf(TEXT("%s.png"), *SafePhotoID);
+	FString RelativeDirectory = FPaths::Combine(TEXT("Investigation"), TEXT("Photos"));
+#if WITH_DEV_AUTOMATION_TESTS
+	if (GIsAutomationTesting)
+	{
+		RelativeDirectory = FPaths::Combine(RelativeDirectory, TEXT("Automation"));
+	}
+#endif
+	const FString RelativePath = FPaths::Combine(RelativeDirectory, FileName);
 	const FString AbsolutePath = FPaths::ConvertRelativePathToFull(
 		FPaths::Combine(FPaths::ProjectSavedDir(), RelativePath));
 
@@ -1367,7 +1455,7 @@ bool UBalhwajeomPhotoCameraComponent::BeginInvestigationImageCapture(
 	PendingCapture = MoveTemp(NewCapture);
 	bReceivedScreenshotPixels = false;
 
-	ScreenshotCapturedHandle = FScreenshotRequest::OnScreenshotCaptured().AddUObject(
+	ScreenshotCapturedHandle = UGameViewportClient::OnScreenshotCaptured().AddUObject(
 		this,
 		&UBalhwajeomPhotoCameraComponent::HandleScreenshotCaptured);
 	ScreenshotProcessedHandle = FScreenshotRequest::OnScreenshotRequestProcessed().AddUObject(
@@ -1405,6 +1493,10 @@ void UBalhwajeomPhotoCameraComponent::HandleScreenshotCaptured(
 	const FGuid RequestID = PendingCapture->RequestID;
 	const FString AbsolutePath = PendingCapture->AbsolutePath;
 	ClearScreenshotDelegates();
+
+	// The pixels above represent the unflashed viewport. Start the visual shutter
+	// response now so it remains visible to the player but cannot contaminate the PNG.
+	TriggerPhotoFlash();
 
 	if (Width <= 0 || Height <= 0 || Colors.Num() != Width * Height)
 	{
@@ -1505,7 +1597,7 @@ void UBalhwajeomPhotoCameraComponent::ClearScreenshotDelegates()
 {
 	if (ScreenshotCapturedHandle.IsValid())
 	{
-		FScreenshotRequest::OnScreenshotCaptured().Remove(ScreenshotCapturedHandle);
+		UGameViewportClient::OnScreenshotCaptured().Remove(ScreenshotCapturedHandle);
 		ScreenshotCapturedHandle.Reset();
 	}
 

@@ -1,12 +1,31 @@
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 
 #include "Engine/DataTable.h"
+#include "Engine/GameInstance.h"
+#include "HAL/FileManager.h"
+#include "Investigation/BalhwajeomInvestigationSaveGame.h"
 #include "Investigation/BalhwajeomInvestigationSettings.h"
+#include "Kismet/GameplayStatics.h"
+#include "Misc/Paths.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogBalhwajeomInvestigation, Log, All);
 
 namespace
 {
+const FString PhotoGallerySaveSlot = TEXT("BalhwajeomInvestigation");
+const FString AutomationPhotoGallerySaveSlot = TEXT("BalhwajeomInvestigation_Automation");
+
+const FString& GetPhotoGallerySaveSlot()
+{
+#if WITH_DEV_AUTOMATION_TESTS
+	if (GIsAutomationTesting)
+	{
+		return AutomationPhotoGallerySaveSlot;
+	}
+#endif
+	return PhotoGallerySaveSlot;
+}
+
 template <typename RowType>
 const RowType* FindInvestigationRow(
 	const UDataTable* Table,
@@ -94,6 +113,7 @@ void UBalhwajeomInvestigationSubsystem::Initialize(FSubsystemCollectionBase& Col
 	LoadConfiguredDataTables();
 	ValidateLoadedDataTables();
 	InitializeDefaultWords();
+	LoadPersistentPhotoGallery();
 }
 
 void UBalhwajeomInvestigationSubsystem::Deinitialize()
@@ -150,6 +170,9 @@ void UBalhwajeomInvestigationSubsystem::LoadConfiguredDataTables()
 	KeywordDocumentsTable = LoadTable(
 		Settings->KeywordDocumentsTable,
 		TEXT("KeywordDocumentsTable"));
+	KeywordChoicesTable = LoadTable(
+		Settings->KeywordChoicesTable,
+		TEXT("KeywordChoicesTable"));
 	SentencesTable = LoadTable(Settings->SentencesTable, TEXT("SentencesTable"));
 }
 
@@ -160,6 +183,7 @@ void UBalhwajeomInvestigationSubsystem::ClearLoadedDataTables()
 	WordsTable = nullptr;
 	PhotosTable = nullptr;
 	KeywordDocumentsTable = nullptr;
+	KeywordChoicesTable = nullptr;
 	SentencesTable = nullptr;
 }
 
@@ -187,6 +211,87 @@ void UBalhwajeomInvestigationSubsystem::InitializeDefaultWords()
 	}
 }
 
+bool UBalhwajeomInvestigationSubsystem::ShouldPersistPhotoGallery() const
+{
+	const UGameInstance* GameInstance = GetGameInstance();
+	const UWorld* World = GameInstance ? GameInstance->GetWorld() : nullptr;
+	return World && World->IsGameWorld();
+}
+
+void UBalhwajeomInvestigationSubsystem::LoadPersistentPhotoGallery()
+{
+	if (!ShouldPersistPhotoGallery())
+	{
+		return;
+	}
+	if (!UGameplayStatics::DoesSaveGameExist(GetPhotoGallerySaveSlot(), 0))
+	{
+		return;
+	}
+
+	UBalhwajeomInvestigationSaveGame* SaveGame = Cast<UBalhwajeomInvestigationSaveGame>(
+		UGameplayStatics::LoadGameFromSlot(GetPhotoGallerySaveSlot(), 0));
+	if (!SaveGame)
+	{
+		return;
+	}
+
+	const FString GalleryRoot = FPaths::ConvertRelativePathToFull(
+		FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Investigation"), TEXT("Photos")));
+	for (const FCapturedPhotoRecord& Record : SaveGame->CapturedPhotos)
+	{
+		const FPhotoDefinition* PhotoDefinition = FindPhotoDefinition(Record.PhotoID);
+		const FEvidenceStateDefinition* StateDefinition =
+			FindEvidenceStateDefinition(Record.CapturedStateID);
+		const FString AbsoluteImagePath = FPaths::ConvertRelativePathToFull(
+			FPaths::Combine(FPaths::ProjectSavedDir(), Record.ImageRelativePath));
+		if (Record.PhotoID.IsNone() || Record.ObjectID.IsNone() ||
+			!PhotoDefinition || !StateDefinition ||
+			StateDefinition->ObjectID != Record.ObjectID ||
+			StateDefinition->PhotoID != Record.PhotoID || !StateDefinition->bCanCapture ||
+			!FPaths::IsUnderDirectory(AbsoluteImagePath, GalleryRoot) ||
+			IFileManager::Get().FileSize(*AbsoluteImagePath) <= 0)
+		{
+			UE_LOG(LogBalhwajeomInvestigation, Warning,
+				TEXT("Ignoring invalid persistent photo '%s' (%s)."),
+				*Record.PhotoID.ToString(), *Record.ImageRelativePath);
+			continue;
+		}
+
+		CapturedPhotos.FindOrAdd(Record.PhotoID) = Record;
+		for (const FName WordID : PhotoDefinition->GrantedWordIDs)
+		{
+			AcquireWord(WordID, EWordAcquisitionSource::PhotoCapture, Record.PhotoID);
+		}
+	}
+
+	UE_LOG(LogBalhwajeomInvestigation, Log,
+		TEXT("Restored %d persistent photograph(s) from slot '%s'."),
+		CapturedPhotos.Num(), *GetPhotoGallerySaveSlot());
+}
+
+bool UBalhwajeomInvestigationSubsystem::SavePersistentPhotoGallery() const
+{
+	if (!ShouldPersistPhotoGallery())
+	{
+		return true;
+	}
+
+	UBalhwajeomInvestigationSaveGame* SaveGame = Cast<UBalhwajeomInvestigationSaveGame>(
+		UGameplayStatics::CreateSaveGameObject(UBalhwajeomInvestigationSaveGame::StaticClass()));
+	if (!SaveGame)
+	{
+		return false;
+	}
+
+	CapturedPhotos.GenerateValueArray(SaveGame->CapturedPhotos);
+	SaveGame->CapturedPhotos.Sort([](const FCapturedPhotoRecord& A, const FCapturedPhotoRecord& B)
+	{
+		return A.PhotoID.LexicalLess(B.PhotoID);
+	});
+	return UGameplayStatics::SaveGameToSlot(SaveGame, GetPhotoGallerySaveSlot(), 0);
+}
+
 bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 {
 	bool bIsValid = true;
@@ -211,6 +316,10 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 		KeywordDocumentsTable,
 		TEXT("KeywordDocumentsTable"),
 		[](const FKeywordDocumentDefinition& Row) { return Row.KeywordDocumentID; });
+	bIsValid &= ValidateTableRowIDs<FKeywordChoiceDefinition>(
+		KeywordChoicesTable,
+		TEXT("KeywordChoicesTable"),
+		[](const FKeywordChoiceDefinition& Row) { return Row.ChoiceID; });
 	bIsValid &= ValidateTableRowIDs<FSentenceDefinition>(
 		SentencesTable,
 		TEXT("SentencesTable"),
@@ -246,11 +355,6 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 	{
 		return !DocumentID.IsNone() &&
 			KeywordDocumentsTable->FindRow<FKeywordDocumentDefinition>(DocumentID, Context, false) != nullptr;
-	};
-	auto HasSentence = [this, &Context](FName SentenceID)
-	{
-		return !SentenceID.IsNone() &&
-			SentencesTable->FindRow<FSentenceDefinition>(SentenceID, Context, false) != nullptr;
 	};
 	auto ReportInvalidReference = [&bIsValid](
 		const TCHAR* OwnerType,
@@ -324,57 +428,82 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 	for (const TPair<FName, uint8*>& Pair : PhotosTable->GetRowMap())
 	{
 		const FPhotoDefinition* Photo = reinterpret_cast<const FPhotoDefinition*>(Pair.Value);
-		if (!Photo->PhotoSentenceID.IsNone() && !HasSentence(Photo->PhotoSentenceID))
+		TSet<FName> GrantedWords;
+		for (const FName WordID : Photo->GrantedWordIDs)
 		{
-			ReportInvalidReference(
-				TEXT("PhotoDefinition"),
-				Photo->PhotoID,
-				TEXT("PhotoSentenceID"),
-				Photo->PhotoSentenceID);
+			if (!HasWord(WordID) || GrantedWords.Contains(WordID))
+			{
+				ReportInvalidReference(
+					TEXT("PhotoDefinition"), Photo->PhotoID, TEXT("GrantedWordIDs"), WordID);
+			}
+			GrantedWords.Add(WordID);
+		}
+		if (!Photo->PhotoSentenceID.IsNone())
+		{
+			const FSentenceDefinition* PhotoSentence = SentencesTable->FindRow<FSentenceDefinition>(
+				Photo->PhotoSentenceID, Context, false);
+			if (PhotoSentence == nullptr || PhotoSentence->SentenceType != ESentenceType::PhotoAnalysis)
+			{
+				ReportInvalidReference(
+					TEXT("PhotoDefinition"), Photo->PhotoID, TEXT("PhotoSentenceID"), Photo->PhotoSentenceID);
+			}
 		}
 
-		if (!Photo->StatementSentenceID.IsNone() && !HasSentence(Photo->StatementSentenceID))
+		if (!Photo->StatementSentenceID.IsNone())
 		{
-			ReportInvalidReference(
-				TEXT("PhotoDefinition"),
-				Photo->PhotoID,
-				TEXT("StatementSentenceID"),
-				Photo->StatementSentenceID);
+			const FSentenceDefinition* Statement = SentencesTable->FindRow<FSentenceDefinition>(
+				Photo->StatementSentenceID, Context, false);
+			if (Statement == nullptr || Statement->SentenceType != ESentenceType::Statement)
+			{
+				ReportInvalidReference(
+					TEXT("PhotoDefinition"), Photo->PhotoID, TEXT("StatementSentenceID"), Photo->StatementSentenceID);
+			}
 		}
 	}
 
-	for (const TPair<FName, uint8*>& Pair : KeywordDocumentsTable->GetRowMap())
+	TMap<FName, TSet<int32>> SortOrdersByDocument;
+	for (const TPair<FName, uint8*>& Pair : KeywordChoicesTable->GetRowMap())
 	{
-		const FKeywordDocumentDefinition* Document =
-			reinterpret_cast<const FKeywordDocumentDefinition*>(Pair.Value);
-		TSet<FName> ChoiceIDs;
-		for (const FKeywordChoiceDefinition& Choice : Document->KeywordChoices)
+		const FKeywordChoiceDefinition* Choice =
+			reinterpret_cast<const FKeywordChoiceDefinition*>(Pair.Value);
+		if (!HasKeywordDocument(Choice->KeywordDocumentID))
 		{
-			if (Choice.ChoiceID.IsNone() || ChoiceIDs.Contains(Choice.ChoiceID))
-			{
-				ReportInvalidReference(
-					TEXT("KeywordDocument"),
-					Document->KeywordDocumentID,
-					TEXT("ChoiceID"),
-					Choice.ChoiceID);
-			}
-			ChoiceIDs.Add(Choice.ChoiceID);
-
-			if (!HasWord(Choice.GrantedWordID))
-			{
-				ReportInvalidReference(
-					TEXT("KeywordDocument"),
-					Document->KeywordDocumentID,
-					TEXT("GrantedWordID"),
-					Choice.GrantedWordID);
-			}
+			ReportInvalidReference(
+				TEXT("KeywordChoice"), Choice->ChoiceID, TEXT("KeywordDocumentID"), Choice->KeywordDocumentID);
 		}
+		if (!HasWord(Choice->GrantedWordID))
+		{
+			ReportInvalidReference(
+				TEXT("KeywordChoice"), Choice->ChoiceID, TEXT("GrantedWordID"), Choice->GrantedWordID);
+		}
+
+		TSet<int32>& UsedSortOrders = SortOrdersByDocument.FindOrAdd(Choice->KeywordDocumentID);
+		if (UsedSortOrders.Contains(Choice->SortOrder))
+		{
+			UE_LOG(
+				LogBalhwajeomInvestigation,
+				Warning,
+				TEXT("Keyword document '%s' contains duplicate SortOrder %d."),
+				*Choice->KeywordDocumentID.ToString(),
+				Choice->SortOrder);
+		}
+		UsedSortOrders.Add(Choice->SortOrder);
 	}
 
 	for (const TPair<FName, uint8*>& Pair : SentencesTable->GetRowMap())
 	{
 		const FSentenceDefinition* Sentence =
 			reinterpret_cast<const FSentenceDefinition*>(Pair.Value);
+		if (Sentence->SentenceType == ESentenceType::Statement &&
+			(Sentence->CharacterID.IsNone() || Sentence->FolderName.IsEmpty()))
+		{
+			UE_LOG(
+				LogBalhwajeomInvestigation,
+				Error,
+				TEXT("Statement sentence '%s' requires CharacterID and FolderName."),
+				*Sentence->SentenceID.ToString());
+			bIsValid = false;
+		}
 		TSet<int32> WordSlotIndices;
 		for (const FSentenceWordSlot& Slot : Sentence->WordSlots)
 		{
@@ -415,12 +544,6 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 				Sentence->SentenceID,
 				TEXT("RequiredPhotoCount"),
 				FName(*FString::FromInt(Sentence->RequiredPhotoCount)));
-		}
-
-		if (Sentence->ResultTextID.IsNone())
-		{
-			ReportInvalidReference(
-				TEXT("Sentence"), Sentence->SentenceID, TEXT("ResultTextID"), Sentence->ResultTextID);
 		}
 
 		if (Sentence->ResultText.IsEmpty())
@@ -491,6 +614,105 @@ bool UBalhwajeomInvestigationSubsystem::GetPhotoDefinition(
 
 	OutDefinition = *Definition;
 	return true;
+}
+
+bool UBalhwajeomInvestigationSubsystem::GetWordDefinition(
+	FName WordID,
+	FWordDefinition& OutDefinition) const
+{
+	OutDefinition = FWordDefinition{};
+	const FWordDefinition* Definition = FindWordDefinition(WordID);
+	if (Definition == nullptr)
+	{
+		return false;
+	}
+	OutDefinition = *Definition;
+	return true;
+}
+
+bool UBalhwajeomInvestigationSubsystem::GetSentenceDefinition(
+	FName SentenceID,
+	FSentenceDefinition& OutDefinition) const
+{
+	OutDefinition = FSentenceDefinition{};
+	const FSentenceDefinition* Definition = FindSentenceDefinition(SentenceID);
+	if (Definition == nullptr)
+	{
+		return false;
+	}
+	OutDefinition = *Definition;
+	return true;
+}
+
+bool UBalhwajeomInvestigationSubsystem::GetKeywordDocumentDefinition(
+	FName KeywordDocumentID,
+	FKeywordDocumentDefinition& OutDefinition) const
+{
+	OutDefinition = FKeywordDocumentDefinition{};
+	const FKeywordDocumentDefinition* Definition =
+		FindKeywordDocumentDefinition(KeywordDocumentID);
+	if (Definition == nullptr)
+	{
+		return false;
+	}
+	OutDefinition = *Definition;
+	return true;
+}
+
+void UBalhwajeomInvestigationSubsystem::GetKeywordChoicesForDocument(
+	FName KeywordDocumentID,
+	TArray<FKeywordChoiceDefinition>& OutChoices) const
+{
+	OutChoices.Reset();
+	if (!IsValid(KeywordChoicesTable) ||
+		KeywordChoicesTable->GetRowStruct() != FKeywordChoiceDefinition::StaticStruct())
+	{
+		return;
+	}
+
+	for (const TPair<FName, uint8*>& Pair : KeywordChoicesTable->GetRowMap())
+	{
+		const FKeywordChoiceDefinition* Choice =
+			reinterpret_cast<const FKeywordChoiceDefinition*>(Pair.Value);
+		if (Choice->KeywordDocumentID == KeywordDocumentID)
+		{
+			OutChoices.Add(*Choice);
+		}
+	}
+	OutChoices.Sort([](const FKeywordChoiceDefinition& A, const FKeywordChoiceDefinition& B)
+	{
+		return A.SortOrder == B.SortOrder
+			? A.ChoiceID.LexicalLess(B.ChoiceID)
+			: A.SortOrder < B.SortOrder;
+	});
+}
+
+bool UBalhwajeomInvestigationSubsystem::SelectKeywordChoice(
+	FName KeywordDocumentID,
+	FName ChoiceID,
+	EWordAcquisitionSource SourceType)
+{
+	if (FindKeywordDocumentDefinition(KeywordDocumentID) == nullptr)
+	{
+		return false;
+	}
+	const FKeywordChoiceDefinition* Choice = FindInvestigationRow<FKeywordChoiceDefinition>(
+		KeywordChoicesTable, ChoiceID, TEXT("KeywordChoicesTable"));
+	if (Choice == nullptr || Choice->KeywordDocumentID != KeywordDocumentID)
+	{
+		return false;
+	}
+
+	FKeywordDocumentRuntimeState& State = KeywordDocumentStates.FindOrAdd(KeywordDocumentID);
+	State.KeywordDocumentID = KeywordDocumentID;
+	if (State.SelectedChoiceIDs.Contains(ChoiceID))
+	{
+		return false;
+	}
+	State.SelectedChoiceIDs.Add(ChoiceID);
+	State.bCompleted = true;
+	return HasAcquiredWord(Choice->GrantedWordID) ||
+		AcquireWord(Choice->GrantedWordID, SourceType, KeywordDocumentID);
 }
 
 const FEvidenceDefinition* UBalhwajeomInvestigationSubsystem::FindEvidenceDefinition(
@@ -718,6 +940,23 @@ bool UBalhwajeomInvestigationSubsystem::AcquireWord(
 	return true;
 }
 
+bool UBalhwajeomInvestigationSubsystem::HasAcquiredWord(FName WordID) const
+{
+	return AcquiredWords.Contains(WordID);
+}
+
+void UBalhwajeomInvestigationSubsystem::GetAcquiredWords(
+	TArray<FAcquiredWordRecord>& OutWords) const
+{
+	AcquiredWords.GenerateValueArray(OutWords);
+	OutWords.Sort([](const FAcquiredWordRecord& A, const FAcquiredWordRecord& B)
+	{
+		return A.AcquiredTime == B.AcquiredTime
+			? A.WordID.LexicalLess(B.WordID)
+			: A.AcquiredTime < B.AcquiredTime;
+	});
+}
+
 bool UBalhwajeomInvestigationSubsystem::HasCapturedPhoto(FName PhotoID) const
 {
 	return CapturedPhotos.Contains(PhotoID);
@@ -732,7 +971,8 @@ bool UBalhwajeomInvestigationSubsystem::RegisterCapturedPhoto(const FCapturedPho
 		return false;
 	}
 
-	if (FindPhotoDefinition(Record.PhotoID) == nullptr)
+	const FPhotoDefinition* PhotoDefinition = FindPhotoDefinition(Record.PhotoID);
+	if (PhotoDefinition == nullptr)
 	{
 		return false;
 	}
@@ -763,17 +1003,39 @@ bool UBalhwajeomInvestigationSubsystem::RegisterCapturedPhoto(const FCapturedPho
 	}
 
 	CapturedPhotos.Add(StoredRecord.PhotoID, StoredRecord);
+	if (!SavePersistentPhotoGallery())
+	{
+		CapturedPhotos.Remove(StoredRecord.PhotoID);
+		UE_LOG(LogBalhwajeomInvestigation, Error,
+			TEXT("Failed to persist captured photo '%s'."),
+			*StoredRecord.PhotoID.ToString());
+		return false;
+	}
+	for (const FName WordID : PhotoDefinition->GrantedWordIDs)
+	{
+		AcquireWord(WordID, EWordAcquisitionSource::PhotoCapture, StoredRecord.PhotoID);
+	}
 	OnPhotoCaptured.Broadcast(StoredRecord);
 	return true;
+}
+
+void UBalhwajeomInvestigationSubsystem::GetCapturedPhotos(
+	TArray<FCapturedPhotoRecord>& OutPhotos) const
+{
+	CapturedPhotos.GenerateValueArray(OutPhotos);
+	OutPhotos.Sort([](const FCapturedPhotoRecord& A, const FCapturedPhotoRecord& B)
+	{
+		return A.CapturedTime == B.CapturedTime
+			? A.PhotoID.LexicalLess(B.PhotoID)
+			: A.CapturedTime < B.CapturedTime;
+	});
 }
 
 bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 	FName SentenceID,
 	const FSentenceSubmission& Submission,
-	FName& OutResultTextID,
 	FText& OutResultText)
 {
-	OutResultTextID = NAME_None;
 	OutResultText = FText::GetEmpty();
 
 	const FSentenceDefinition* Sentence = FindSentenceDefinition(SentenceID);
@@ -837,18 +1099,73 @@ bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 		return false;
 	}
 
-	if (Sentence->ResultTextID.IsNone() || Sentence->ResultText.IsEmpty())
+	if (Sentence->ResultText.IsEmpty())
 	{
 		return false;
 	}
 
 	Progress.bSolved = true;
 
-	OutResultTextID = Sentence->ResultTextID;
 	OutResultText = Sentence->ResultText;
 	if (!bWasAlreadySolved)
 	{
-		OnSentenceSolved.Broadcast(SentenceID, OutResultTextID);
+		OnSentenceSolved.Broadcast(SentenceID);
 	}
 	return true;
+}
+
+bool UBalhwajeomInvestigationSubsystem::IsSentenceSolved(FName SentenceID) const
+{
+	const FSentenceRuntimeProgress* Progress = SentenceProgress.Find(SentenceID);
+	return Progress != nullptr && Progress->bSolved;
+}
+
+void UBalhwajeomInvestigationSubsystem::GetStatementSentencesForCharacter(
+	FName CharacterID,
+	TArray<FSentenceDefinition>& OutSentences) const
+{
+	OutSentences.Reset();
+	if (!IsValid(SentencesTable) || SentencesTable->GetRowStruct() != FSentenceDefinition::StaticStruct())
+	{
+		return;
+	}
+	for (const TPair<FName, uint8*>& Pair : SentencesTable->GetRowMap())
+	{
+		const FSentenceDefinition* Sentence = reinterpret_cast<const FSentenceDefinition*>(Pair.Value);
+		if (Sentence->SentenceType == ESentenceType::Statement && Sentence->CharacterID == CharacterID)
+		{
+			OutSentences.Add(*Sentence);
+		}
+	}
+	OutSentences.Sort([](const FSentenceDefinition& A, const FSentenceDefinition& B)
+	{
+		return A.FolderSortOrder == B.FolderSortOrder
+			? A.SentenceID.LexicalLess(B.SentenceID)
+			: A.FolderSortOrder < B.FolderSortOrder;
+	});
+}
+
+void UBalhwajeomInvestigationSubsystem::GetPhotosForCharacter(
+	FName CharacterID,
+	TArray<FPhotoDefinition>& OutPhotos) const
+{
+	OutPhotos.Reset();
+	if (!IsValid(PhotosTable) || PhotosTable->GetRowStruct() != FPhotoDefinition::StaticStruct())
+	{
+		return;
+	}
+	for (const TPair<FName, uint8*>& Pair : PhotosTable->GetRowMap())
+	{
+		const FPhotoDefinition* Photo = reinterpret_cast<const FPhotoDefinition*>(Pair.Value);
+		const FSentenceDefinition* Statement = FindSentenceDefinition(Photo->StatementSentenceID);
+		if (Statement != nullptr && Statement->SentenceType == ESentenceType::Statement &&
+			Statement->CharacterID == CharacterID)
+		{
+			OutPhotos.Add(*Photo);
+		}
+	}
+	OutPhotos.Sort([](const FPhotoDefinition& A, const FPhotoDefinition& B)
+	{
+		return A.PhotoID.LexicalLess(B.PhotoID);
+	});
 }

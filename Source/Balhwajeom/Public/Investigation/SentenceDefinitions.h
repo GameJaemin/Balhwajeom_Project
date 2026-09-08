@@ -38,6 +38,21 @@ struct BALHWAJEOM_API FSentenceDefinition : public FTableRowBase
 	FName SentenceID = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
+	FName ChapterID = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
+	FName CharacterID = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
+	FText FolderName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
+	int32 FolderSortOrder = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (MultiLine = "true"))
+	FText LieText;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
 	ESentenceType SentenceType = ESentenceType::PhotoAnalysis;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (MultiLine = "true"))
@@ -51,9 +66,6 @@ struct BALHWAJEOM_API FSentenceDefinition : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (ClampMin = "0", ClampMax = "2"))
 	int32 RequiredPhotoCount = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
-	FName ResultTextID = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (MultiLine = "true"))
 	FText ResultText;

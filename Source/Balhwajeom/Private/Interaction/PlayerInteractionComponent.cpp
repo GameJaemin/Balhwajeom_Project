@@ -10,6 +10,7 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "Interaction/InspectionComponent.h"
+#include "CameraSystem/BalhwajeomEvidenceActor.h"
 
 
 UPlayerInteractionComponent::UPlayerInteractionComponent()
@@ -342,6 +343,12 @@ bool UPlayerInteractionComponent::TryInspect(
 	if (!CanInspectDistanceState(CurrentState))
 	{
 		return false;
+	}
+
+	if (ABalhwajeomEvidenceActor* Evidence =
+		Cast<ABalhwajeomEvidenceActor>(FocusedInspection->GetOwner()))
+	{
+		return Evidence->RequestInvestigationInteraction(OutInspectionText);
 	}
 
 	OutInspectionText =

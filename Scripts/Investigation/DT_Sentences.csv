@@ -1,0 +1,3 @@
+Name,SentenceID,ChapterID,CharacterID,FolderName,FolderSortOrder,LieText,SentenceType,SentenceTemplate,WordSlots,PhotoSlots,RequiredPhotoCount,ResultText,DesignerNote
+SENT_PHOTO_PIG_MIRROR,SENT_PHOTO_PIG_MIRROR,CHAPTER_01,,,0,,PhotoAnalysis,[   ]가 바라보던 것은 [   ]이었다.,"((SlotIndex=0,CorrectWordID=WORD_PIG),(SlotIndex=1,CorrectWordID=WORD_MIRROR))",(),0,돼지가 바라보던 것은 거울이었다.,촬영으로 돼지·F 조사로 거울 키워드를 획득한다.
+SENT_STATEMENT_SISTER_01,SENT_STATEMENT_SISTER_01,CHAPTER_01,SISTER,여동생,0,나는 돼지 장식이 놓인 거울을 본 적이 없어.,Statement,현장에 남은 [   ]이 그 말을 반박한다.,"((SlotIndex=0,CorrectWordID=WORD_MIRROR))","((SlotIndex=0,CorrectPhotoID=PHOTO_PIG_MIRROR))",1,현장에 남은 거울과 완성된 사진이 그 말을 반박한다.,완성 사진 1장을 요구한다.

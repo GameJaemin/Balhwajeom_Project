@@ -23,7 +23,7 @@ struct BALHWAJEOM_API FWordDefinition : public FTableRowBase
 };
 
 USTRUCT(BlueprintType)
-struct BALHWAJEOM_API FKeywordChoiceDefinition
+struct BALHWAJEOM_API FKeywordChoiceDefinition : public FTableRowBase
 {
 	GENERATED_BODY()
 
@@ -31,10 +31,16 @@ struct BALHWAJEOM_API FKeywordChoiceDefinition
 	FName ChoiceID = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Keyword Choice")
+	FName KeywordDocumentID = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Keyword Choice")
 	FText DisplayText;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Keyword Choice")
 	FName GrantedWordID = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Keyword Choice")
+	int32 SortOrder = 0;
 };
 
 USTRUCT(BlueprintType)
@@ -48,9 +54,12 @@ struct BALHWAJEOM_API FKeywordDocumentDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Keyword Document", meta = (MultiLine = "true"))
 	FText DocumentText;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Keyword Document")
+	/** Migration-only copy of the pre-redesign nested choices. New content belongs in DT_KeywordChoices. */
+	UPROPERTY(meta = (DeprecatedProperty, DeprecationMessage = "Use DT_KeywordChoices."))
 	TArray<FKeywordChoiceDefinition> KeywordChoices;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Keyword Document")
-	bool bCloseAfterSelection = true;
+	/** Retained only so existing DataTable assets deserialize during the one-time migration. */
+	UPROPERTY(meta = (DeprecatedProperty, DeprecationMessage = "Keyword documents remain open in the final prototype."))
+	bool bCloseAfterSelection = false;
+
 };

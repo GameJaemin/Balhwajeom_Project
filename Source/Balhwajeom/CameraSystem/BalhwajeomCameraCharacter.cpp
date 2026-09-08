@@ -10,6 +10,10 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Tablet/BalhwajeomTabletComponent.h"
+#include "Interaction/PlayerInteractionComponent.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
+#include "Engine/Engine.h"
 
 ABalhwajeomCameraCharacter::ABalhwajeomCameraCharacter()
 {
@@ -54,6 +58,13 @@ ABalhwajeomCameraCharacter::ABalhwajeomCameraCharacter()
 	PhotoCameraComponent->SetPhotoCamera(FirstPersonCamera);
 
 	TabletComponent = CreateDefaultSubobject<UBalhwajeomTabletComponent>(TEXT("TabletComponent"));
+	PlayerInteractionComponent = CreateDefaultSubobject<UPlayerInteractionComponent>(TEXT("PlayerInteractionComponent"));
+	static ConstructorHelpers::FObjectFinder<UInputMappingContext> InteractionMapping(
+		TEXT("/Game/Balhwajeom/Input/IMC_Interaction.IMC_Interaction"));
+	static ConstructorHelpers::FObjectFinder<UInputAction> InteractionAction(
+		TEXT("/Game/Balhwajeom/Input/IA_Interact.IA_Interact"));
+	if (InteractionMapping.Succeeded()) PlayerInteractionComponent->InteractionMappingContext = InteractionMapping.Object;
+	if (InteractionAction.Succeeded()) PlayerInteractionComponent->InteractAction = InteractionAction.Object;
 	PhotoCameraComponent->OnCameraModeExited.AddLambda([this]()
 	{
 		// Camera mode grabbed the view target away from the active zone; hand it back now that we're done.
@@ -87,6 +98,11 @@ void ABalhwajeomCameraCharacter::BeginPlay()
 	// Apply the Blueprint default so designers can tune WalkSpeed without
 	// changing or recompiling this C++ class.
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+	if (PlayerInteractionComponent)
+	{
+		PlayerInteractionComponent->OnInspectionSucceeded.AddUniqueDynamic(
+			this, &ABalhwajeomCameraCharacter::HandleInspectionSucceeded);
+	}
 
 	if (bAllowCameraOrbit)
 	{
@@ -104,6 +120,15 @@ void ABalhwajeomCameraCharacter::BeginPlay()
 		// camera when walking backward.)
 		bUseControllerRotationYaw = true;
 		GetCharacterMovement()->bOrientRotationToMovement = false;
+	}
+}
+
+void ABalhwajeomCameraCharacter::HandleInspectionSucceeded(FText InspectionText)
+{
+	if (GEngine && !InspectionText.IsEmpty())
+	{
+		GEngine->AddOnScreenDebugMessage(
+			-1, 4.0f, FColor(255, 220, 140), InspectionText.ToString(), true, FVector2D(1.25f));
 	}
 }
 

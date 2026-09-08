@@ -141,9 +141,12 @@ protected:
     void FinishCameraTransition();
     void PanCamera(const FVector& ScreenDirection, float Value);
     void ShowPhotoFeedback(const FString& Message, const FColor& Color) const;
+    void TriggerPhotoFlash() const;
     void UpdateEvidenceFocus(float DeltaTime);
     void RefreshDisplayedGuideSnapshot();
     bool IsDisplayedGuideSurfaceVisible() const;
+    bool GetEffectiveCameraView(FVector& OutLocation, FVector& OutForward) const;
+    bool TraceViewportCenter(FHitResult& OutHit) const;
     bool IsViewportCenterOverTarget(const AActor* Target) const;
     bool CalculateTargetFrameCoverage(const AActor* Target, float& OutCoverageRatio) const;
     void ApplyDepthOfField(float DeltaTime, float DesiredFocalDistance, bool bHasFocusedTarget);
@@ -302,7 +305,6 @@ protected:
 
     /** Temporary compatibility storage. New investigation captures never write to this array. */
     TOptional<FBalhwajeomPendingPhotoCapture> PendingCapture;
-    FGuid PhotoCaptureSessionID;
     FDelegateHandle ScreenshotCapturedHandle;
     FDelegateHandle ScreenshotProcessedHandle;
     bool bReceivedScreenshotPixels = false;
