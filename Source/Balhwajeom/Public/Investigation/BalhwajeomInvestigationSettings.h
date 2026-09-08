@@ -32,4 +32,7 @@ public:
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Data Tables")
 	TSoftObjectPtr<UDataTable> SentencesTable;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Data Tables")
+	TSoftObjectPtr<UDataTable> CharactersTable;
 };

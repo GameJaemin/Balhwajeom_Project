@@ -27,9 +27,9 @@ struct BALHWAJEOM_API FPhotoDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo")
 	FName PhotoSentenceID = NAME_None;
 
-	/** The Statement-type sentence whose CharacterID/FolderName this photo is displayed under in the tablet. */
+	/** The character whose tablet folder this photo is displayed under. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo")
-	FName StatementSentenceID = NAME_None;
+	FName CharacterID = NAME_None;
 
 	/** World-locked 3D story text shown after capture, and again when reopening the photo from the tablet. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo", meta = (MultiLine = "true"))

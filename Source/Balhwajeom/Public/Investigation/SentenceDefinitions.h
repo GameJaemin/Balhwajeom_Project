@@ -40,11 +40,19 @@ struct BALHWAJEOM_API FSentenceDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
 	ESentenceType SentenceType = ESentenceType::PhotoAnalysis;
 
+	/** The person this Statement-type sentence belongs to, for tablet folder placement. Empty for PhotoAnalysis rows. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
+	FName CharacterID = NAME_None;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (MultiLine = "true"))
 	FText SentenceTemplate;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
 	TArray<FSentenceWordSlot> WordSlots;
+
+	/** If false, WordSlots may be filled in any order; only the set of correct words matters. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
+	bool bWordOrderMatters = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
 	TArray<FSentencePhotoSlot> PhotoSlots;

@@ -151,6 +151,7 @@ void UBalhwajeomInvestigationSubsystem::LoadConfiguredDataTables()
 		Settings->KeywordDocumentsTable,
 		TEXT("KeywordDocumentsTable"));
 	SentencesTable = LoadTable(Settings->SentencesTable, TEXT("SentencesTable"));
+	CharactersTable = LoadTable(Settings->CharactersTable, TEXT("CharactersTable"));
 }
 
 void UBalhwajeomInvestigationSubsystem::ClearLoadedDataTables()
@@ -161,6 +162,7 @@ void UBalhwajeomInvestigationSubsystem::ClearLoadedDataTables()
 	PhotosTable = nullptr;
 	KeywordDocumentsTable = nullptr;
 	SentencesTable = nullptr;
+	CharactersTable = nullptr;
 }
 
 void UBalhwajeomInvestigationSubsystem::InitializeDefaultWords()
@@ -215,6 +217,10 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 		SentencesTable,
 		TEXT("SentencesTable"),
 		[](const FSentenceDefinition& Row) { return Row.SentenceID; });
+	bIsValid &= ValidateTableRowIDs<FCharacterDefinition>(
+		CharactersTable,
+		TEXT("CharactersTable"),
+		[](const FCharacterDefinition& Row) { return Row.CharacterID; });
 
 	if (!bIsValid)
 	{
@@ -251,6 +257,11 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 	{
 		return !SentenceID.IsNone() &&
 			SentencesTable->FindRow<FSentenceDefinition>(SentenceID, Context, false) != nullptr;
+	};
+	auto HasCharacter = [this, &Context](FName CharacterID)
+	{
+		return !CharacterID.IsNone() &&
+			CharactersTable->FindRow<FCharacterDefinition>(CharacterID, Context, false) != nullptr;
 	};
 	auto ReportInvalidReference = [&bIsValid](
 		const TCHAR* OwnerType,
@@ -333,13 +344,14 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 				Photo->PhotoSentenceID);
 		}
 
-		if (!Photo->StatementSentenceID.IsNone() && !HasSentence(Photo->StatementSentenceID))
+		// Every photo (investigation or story) must belong to exactly one character's tablet folder.
+		if (!HasCharacter(Photo->CharacterID))
 		{
 			ReportInvalidReference(
 				TEXT("PhotoDefinition"),
 				Photo->PhotoID,
-				TEXT("StatementSentenceID"),
-				Photo->StatementSentenceID);
+				TEXT("CharacterID"),
+				Photo->CharacterID);
 		}
 	}
 
@@ -375,6 +387,13 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 	{
 		const FSentenceDefinition* Sentence =
 			reinterpret_cast<const FSentenceDefinition*>(Pair.Value);
+
+		if (!Sentence->CharacterID.IsNone() && !HasCharacter(Sentence->CharacterID))
+		{
+			ReportInvalidReference(
+				TEXT("Sentence"), Sentence->SentenceID, TEXT("CharacterID"), Sentence->CharacterID);
+		}
+
 		TSet<int32> WordSlotIndices;
 		for (const FSentenceWordSlot& Slot : Sentence->WordSlots)
 		{
@@ -493,6 +512,22 @@ bool UBalhwajeomInvestigationSubsystem::GetPhotoDefinition(
 	return true;
 }
 
+bool UBalhwajeomInvestigationSubsystem::GetCharacterDefinition(
+	FName CharacterID,
+	FCharacterDefinition& OutDefinition) const
+{
+	OutDefinition = FCharacterDefinition{};
+
+	const FCharacterDefinition* Definition = FindCharacterDefinition(CharacterID);
+	if (Definition == nullptr)
+	{
+		return false;
+	}
+
+	OutDefinition = *Definition;
+	return true;
+}
+
 const FEvidenceDefinition* UBalhwajeomInvestigationSubsystem::FindEvidenceDefinition(
 	FName ObjectID) const
 {
@@ -537,6 +572,15 @@ const FSentenceDefinition* UBalhwajeomInvestigationSubsystem::FindSentenceDefini
 		SentencesTable,
 		SentenceID,
 		TEXT("SentencesTable"));
+}
+
+const FCharacterDefinition* UBalhwajeomInvestigationSubsystem::FindCharacterDefinition(
+	FName CharacterID) const
+{
+	return FindInvestigationRow<FCharacterDefinition>(
+		CharactersTable,
+		CharacterID,
+		TEXT("CharactersTable"));
 }
 
 bool UBalhwajeomInvestigationSubsystem::RegisterEvidenceActor(
@@ -788,19 +832,49 @@ bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 	Progress.SelectedWords = Submission.SubmittedWords;
 	Progress.SelectedPhotos = Submission.SubmittedPhotos;
 
-	for (const FSentenceWordSlot& CorrectSlot : Sentence->WordSlots)
+	if (Sentence->bWordOrderMatters)
 	{
-		const FSubmittedWordSlot* SubmittedSlot = Submission.SubmittedWords.FindByPredicate(
-			[&CorrectSlot](const FSubmittedWordSlot& Candidate)
-			{
-				return Candidate.SlotIndex == CorrectSlot.SlotIndex;
-			});
+		for (const FSentenceWordSlot& CorrectSlot : Sentence->WordSlots)
+		{
+			const FSubmittedWordSlot* SubmittedSlot = Submission.SubmittedWords.FindByPredicate(
+				[&CorrectSlot](const FSubmittedWordSlot& Candidate)
+				{
+					return Candidate.SlotIndex == CorrectSlot.SlotIndex;
+				});
 
-		if (SubmittedSlot == nullptr ||
-			SubmittedSlot->WordID != CorrectSlot.CorrectWordID ||
-			!AcquiredWords.Contains(SubmittedSlot->WordID))
+			if (SubmittedSlot == nullptr ||
+				SubmittedSlot->WordID != CorrectSlot.CorrectWordID ||
+				!AcquiredWords.Contains(SubmittedSlot->WordID))
+			{
+				return false;
+			}
+		}
+	}
+	else
+	{
+		// Order-independent: the submitted words must match the required words as a multiset,
+		// regardless of which slot each one was placed in.
+		if (Submission.SubmittedWords.Num() != Sentence->WordSlots.Num())
 		{
 			return false;
+		}
+
+		TMap<FName, int32> RemainingRequiredCounts;
+		for (const FSentenceWordSlot& CorrectSlot : Sentence->WordSlots)
+		{
+			++RemainingRequiredCounts.FindOrAdd(CorrectSlot.CorrectWordID);
+		}
+
+		for (const FSubmittedWordSlot& SubmittedSlot : Submission.SubmittedWords)
+		{
+			int32* RemainingCount = RemainingRequiredCounts.Find(SubmittedSlot.WordID);
+			if (RemainingCount == nullptr ||
+				*RemainingCount <= 0 ||
+				!AcquiredWords.Contains(SubmittedSlot.WordID))
+			{
+				return false;
+			}
+			--(*RemainingCount);
 		}
 	}
 
