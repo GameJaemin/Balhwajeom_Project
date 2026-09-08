@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
-#include "GameplayTagContainer.h"
 #include "Investigation/InvestigationEnums.h"
 #include "PhotoDefinitions.generated.h"
 
@@ -28,10 +27,15 @@ struct BALHWAJEOM_API FPhotoDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo")
 	FName PhotoSentenceID = NAME_None;
 
+	/** The Statement-type sentence whose CharacterID/FolderName this photo is displayed under in the tablet. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo")
-	FGameplayTagContainer PhotoTags;
+	FName StatementSentenceID = NAME_None;
 
-	/** Optional sound played only when this evidence photo is registered for the first time. */
+	/** World-locked 3D story text shown after capture, and again when reopening the photo from the tablet. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo", meta = (MultiLine = "true"))
+	FText WorldStoryText;
+
+	/** Narration voice played alongside WorldStoryText. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo|Audio")
-	TSoftObjectPtr<USoundBase> CaptureSound;
+	TSoftObjectPtr<USoundBase> StoryVoice;
 };

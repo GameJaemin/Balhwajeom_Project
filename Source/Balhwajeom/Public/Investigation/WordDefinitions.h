@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
-#include "Investigation/InvestigationEnums.h"
 #include "WordDefinitions.generated.h"
 
 USTRUCT(BlueprintType)
@@ -15,9 +14,6 @@ struct BALHWAJEOM_API FWordDefinition : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Word")
 	FText DisplayWord;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Word")
-	EWordCategory Category = EWordCategory::Etc;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Word", meta = (MultiLine = "true"))
 	FText Description;

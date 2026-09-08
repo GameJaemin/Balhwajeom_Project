@@ -332,6 +332,15 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 				TEXT("PhotoSentenceID"),
 				Photo->PhotoSentenceID);
 		}
+
+		if (!Photo->StatementSentenceID.IsNone() && !HasSentence(Photo->StatementSentenceID))
+		{
+			ReportInvalidReference(
+				TEXT("PhotoDefinition"),
+				Photo->PhotoID,
+				TEXT("StatementSentenceID"),
+				Photo->StatementSentenceID);
+		}
 	}
 
 	for (const TPair<FName, uint8*>& Pair : KeywordDocumentsTable->GetRowMap())
@@ -804,9 +813,20 @@ bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 				return Candidate.SlotIndex == CorrectSlot.SlotIndex;
 			});
 
-		if (SubmittedSlot != nullptr &&
-			SubmittedSlot->PhotoID == CorrectSlot.CorrectPhotoID &&
-			CapturedPhotos.Contains(SubmittedSlot->PhotoID))
+		if (SubmittedSlot == nullptr ||
+			SubmittedSlot->PhotoID != CorrectSlot.CorrectPhotoID ||
+			!CapturedPhotos.Contains(SubmittedSlot->PhotoID))
+		{
+			continue;
+		}
+
+		// Photo evidence must have completed its own analysis sentence; a photo that is
+		// merely captured (or has no analysis sentence, e.g. a story photo) is not eligible.
+		const FPhotoDefinition* SubmittedPhoto = FindPhotoDefinition(SubmittedSlot->PhotoID);
+		const FSentenceRuntimeProgress* AnalysisProgress =
+			SubmittedPhoto != nullptr ? SentenceProgress.Find(SubmittedPhoto->PhotoSentenceID) : nullptr;
+
+		if (AnalysisProgress != nullptr && AnalysisProgress->bSolved)
 		{
 			++CorrectPhotoCount;
 		}

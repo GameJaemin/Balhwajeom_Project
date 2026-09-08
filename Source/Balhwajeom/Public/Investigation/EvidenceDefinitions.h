@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
-#include "GameplayTagContainer.h"
 #include "Investigation/InvestigationEnums.h"
 #include "EvidenceDefinitions.generated.h"
 
@@ -17,14 +16,8 @@ struct BALHWAJEOM_API FEvidenceDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Evidence")
 	FText ObjectName;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Evidence", meta = (MultiLine = "true"))
-	FText Description;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Evidence")
 	FName InitialStateID = NAME_None;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Evidence")
-	FGameplayTagContainer ClassificationTags;
 };
 
 USTRUCT(BlueprintType)

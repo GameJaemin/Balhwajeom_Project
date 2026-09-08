@@ -30,18 +30,6 @@ enum class EPhotoDescriptionSource : uint8
 };
 
 UENUM(BlueprintType)
-enum class EWordCategory : uint8
-{
-	Object,
-	State,
-	Target,
-	Action,
-	Place,
-	Time,
-	Etc
-};
-
-UENUM(BlueprintType)
 enum class ESentenceType : uint8
 {
 	PhotoAnalysis,
