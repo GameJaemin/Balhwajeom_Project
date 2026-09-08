@@ -42,26 +42,14 @@ struct BALHWAJEOM_API FSentenceDefinition : public FTableRowBase
 	FName SentenceID = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
-	FName ChapterID = NAME_None;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
-	FName CharacterID = NAME_None;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
-	FText FolderName;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
-	int32 FolderSortOrder = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (MultiLine = "true"))
-	FText LieText;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
 	ESentenceType SentenceType = ESentenceType::PhotoAnalysis;
 
 	/** The person this Statement-type sentence belongs to, for tablet folder placement. Empty for PhotoAnalysis rows. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
 	FName CharacterID = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (MultiLine = "true"))
+	FText LieText;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (MultiLine = "true"))
 	FText SentenceTemplate;

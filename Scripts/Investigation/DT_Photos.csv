@@ -1,3 +1,3 @@
-Name,PhotoID,PhotoName,DescriptionSource,CustomDescription,PhotoSentenceID,StatementSentenceID,GrantedWordIDs,WorldStoryText,StoryVoice
-PHOTO_PIG_MIRROR,PHOTO_PIG_MIRROR,돼지가 보던 거울,ObservationText,,SENT_PHOTO_PIG_MIRROR,SENT_STATEMENT_SISTER_01,(WORD_PIG),불탄 거울 속에 돼지 장식의 실루엣이 남아 있다.,
-PHOTO_SNOW_GLOBE,PHOTO_SNOW_GLOBE,가족의 스노우글로브,Custom,그을린 유리 안에서 작은 눈송이가 흔들린다.,,SENT_STATEMENT_SISTER_01,(WORD_SNOW_GLOBE),가족의 대화가 잠시 귓가에 되살아난다.,
+Name,PhotoID,PhotoName,DescriptionSource,CustomDescription,PhotoSentenceID,CharacterID,GrantedWordIDs,WorldStoryText,StoryVoice
+PHOTO_PIG_MIRROR,PHOTO_PIG_MIRROR,돼지가 보던 거울,ObservationText,,SENT_PHOTO_PIG_MIRROR,SISTER,(WORD_PIG),불탄 거울 속에 돼지 장식의 실루엣이 남아 있다.,
+PHOTO_SNOW_GLOBE,PHOTO_SNOW_GLOBE,가족의 스노우글로브,Custom,그을린 유리 안에서 작은 눈송이가 흔들린다.,,SISTER,(WORD_SNOW_GLOBE),가족의 대화가 잠시 귓가에 되살아난다.,

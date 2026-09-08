@@ -35,6 +35,7 @@
 #include "Tablet/BalhwajeomMessengerRoomWidget.h"
 #include "Tablet/BalhwajeomMessengerWidget.h"
 #include "Investigation/WordDefinitions.h"
+#include "Investigation/CharacterDefinitions.h"
 #include "Investigation/EvidenceDefinitions.h"
 #include "Investigation/PhotoDefinitions.h"
 #include "Investigation/SentenceDefinitions.h"
@@ -452,9 +453,12 @@ namespace TabletDesigner
 			UCanvasPanel* Records = Make<UCanvasPanel>(TEXT("Canvas_FolderRecords"));
 			RecordArea->SetContent(Records);
 			Place(Records, MakeText(TEXT("TXT_Episode01"), TEXT("EPISODE 01"), 22, WarmMuted), 12, 8, 400, 42);
-			Place(Records, MakeTextButton(TEXT("BTN_EvidencePhoto01"), TEXT("▣  증거 사진"), 26), 18, 76, 280, 110);
-			Place(Records, MakeTextButton(TEXT("BTN_EvidencePhoto02"), TEXT("▣  추가 사진"), 26), 330, 76, 280, 110);
-			Place(Records, MakeTextButton(TEXT("BTN_EvidenceStatement"), TEXT("▤  진술서"), 26), 642, 76, 280, 110);
+			UScrollBox* PhotoScroll = Make<UScrollBox>(TEXT("SB_EvidencePhotos"));
+			UWrapBox* PhotoWrap = Make<UWrapBox>(TEXT("WB_EvidencePhotos"), true);
+			PhotoWrap->SetInnerSlotPadding(FVector2D(12.0f, 12.0f));
+			PhotoScroll->AddChild(PhotoWrap);
+			Place(Records, PhotoScroll, 18, 64, 664, 150);
+			Place(Records, MakeTextButton(TEXT("BTN_EvidenceStatement"), TEXT("▤  진술서"), 22), 699, 76, 210, 110);
 			Place(Records, MakeText(TEXT("TXT_Episode02"), TEXT("EPISODE 02     잠김"), 22, WarmMuted), 12, 230, 600, 42);
 			Place(Page, RecordArea, 120, 220, 1200, 410, 5);
 			return Page;
@@ -726,8 +730,11 @@ namespace TabletDesigner
 			Place(Canvas, MakeTextButton(TEXT("BTN_PuzzleWord02"), TEXT("키워드 2"), 21), 500, 195, 240, 54);
 			Place(Canvas, MakeTextButton(TEXT("BTN_PuzzleWord03"), TEXT("키워드 3"), 21), 500, 255, 240, 54);
 			Place(Canvas, MakeText(TEXT("TXT_PuzzlePhotoLabel"), TEXT("완성 사진"), 18, WarmMuted), 500, 325, 240, 34);
-			Place(Canvas, MakeTextButton(TEXT("BTN_PuzzlePhoto01"), TEXT("사진 1"), 19), 500, 365, 115, 54);
-			Place(Canvas, MakeTextButton(TEXT("BTN_PuzzlePhoto02"), TEXT("사진 2"), 19), 625, 365, 115, 54);
+			UScrollBox* PuzzlePhotoScroll = Make<UScrollBox>(TEXT("SB_PuzzlePhotos"));
+			UWrapBox* PuzzlePhotoWrap = Make<UWrapBox>(TEXT("WB_PuzzlePhotos"), true);
+			PuzzlePhotoWrap->SetInnerSlotPadding(FVector2D(8.0f, 8.0f));
+			PuzzlePhotoScroll->AddChild(PuzzlePhotoWrap);
+			Place(Canvas, PuzzlePhotoScroll, 500, 365, 240, 100);
 			UTextBlock* Body = MakeText(
 				TEXT("TXT_PopupBody"), TEXT("증거 Placeholder"), 22, WarmMuted, true);
 			Body->SetJustification(ETextJustify::Center);
@@ -1527,6 +1534,10 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 	bPassed &= Require(Click(TEXT("BTN_Sister")), TEXT("Sister folder button exists"));
 	bPassed &= Require(Tablet->GetCurrentPage() == ETabletPage::PersonFolder, TEXT("folder page opens"));
 	bPassed &= Require(Tablet->GetActiveFamilyMember() == EFamilyMember::Sister, TEXT("active member is Sister"));
+	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_EvidencePhotos"))) != nullptr,
+		TEXT("dynamic evidence photo list exists"));
+	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_PuzzlePhotos"))) != nullptr,
+		TEXT("dynamic puzzle photo candidate list exists"));
 	if (UTextBlock* FolderTitle = FindText(TEXT("TXT_FolderTitle")))
 	{
 		bPassed &= Require(FolderTitle->GetText().ToString() == TEXT("여동생"), TEXT("folder title updates"));
@@ -1554,6 +1565,8 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		TEXT("/Game/Balhwajeom/Data/Investigation/DT_KeywordDocuments.DT_KeywordDocuments");
 	const TCHAR* ChoicePath =
 		TEXT("/Game/Balhwajeom/Data/Investigation/DT_KeywordChoices.DT_KeywordChoices");
+	const TCHAR* CharacterPath =
+		TEXT("/Game/Balhwajeom/Data/Investigation/DT_Characters.DT_Characters");
 	const TCHAR* AssetFolder = TEXT("/Game/Balhwajeom/Data/Investigation");
 
 	UDataTable* Documents = LoadObject<UDataTable>(nullptr, DocumentPath);
@@ -1576,6 +1589,22 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 	if (!Choices || Choices->GetRowStruct() != FKeywordChoiceDefinition::StaticStruct())
 	{
 		UE_LOG(LogTemp, Error, TEXT("Investigation upgrade: could not create DT_KeywordChoices."));
+		return false;
+	}
+
+	UDataTable* Characters = LoadObject<UDataTable>(nullptr, CharacterPath);
+	if (!Characters)
+	{
+		UDataTableFactory* Factory = NewObject<UDataTableFactory>();
+		Factory->Struct = FCharacterDefinition::StaticStruct();
+		IAssetTools& AssetTools =
+			FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+		Characters = Cast<UDataTable>(AssetTools.CreateAsset(
+			TEXT("DT_Characters"), AssetFolder, UDataTable::StaticClass(), Factory));
+	}
+	if (!Characters || Characters->GetRowStruct() != FCharacterDefinition::StaticStruct())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Investigation upgrade: could not create DT_Characters."));
 		return false;
 	}
 
@@ -1625,6 +1654,30 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 	}
 
 	int32 SeededRows = 0;
+	const FName SisterCharacterID(TEXT("SISTER"));
+	if (!Characters->GetRowMap().Contains(SisterCharacterID))
+	{
+		FCharacterDefinition Sister;
+		Sister.CharacterID = SisterCharacterID;
+		Sister.FolderName = FText::FromString(TEXT("여동생"));
+		Sister.FolderSortOrder = 0;
+		Characters->AddRow(Sister.CharacterID, Sister);
+		++SeededRows;
+	}
+	if (Characters->GetRowMap().Num() == 1)
+	{
+		const FName SoleCharacterID = Characters->GetRowMap().CreateConstIterator().Key();
+		for (const TPair<FName, uint8*>& Pair : Photos->GetRowMap())
+		{
+			FPhotoDefinition* Photo = reinterpret_cast<FPhotoDefinition*>(Pair.Value);
+			if (Photo->CharacterID.IsNone())
+			{
+				Photo->CharacterID = SoleCharacterID;
+				++SeededRows;
+			}
+		}
+	}
+
 	if (EvidenceDefinitions->GetRowMap().IsEmpty() && EvidenceStates->GetRowMap().IsEmpty() &&
 		Words->GetRowMap().IsEmpty() && Photos->GetRowMap().IsEmpty() &&
 		Documents->GetRowMap().IsEmpty() && Choices->GetRowMap().IsEmpty() && Sentences->GetRowMap().IsEmpty())
@@ -1660,7 +1713,6 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 
 		FSentenceDefinition Analysis;
 		Analysis.SentenceID = TEXT("SENT_PHOTO_PIG_MIRROR");
-		Analysis.ChapterID = TEXT("CHAPTER_01");
 		Analysis.SentenceType = ESentenceType::PhotoAnalysis;
 		Analysis.SentenceTemplate = FText::FromString(TEXT("[   ]가 바라보던 것은 [   ]이었다."));
 		Analysis.ResultText = FText::FromString(TEXT("돼지가 바라보던 것은 거울이었다."));
@@ -1672,10 +1724,7 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 
 		FSentenceDefinition Statement;
 		Statement.SentenceID = TEXT("SENT_STATEMENT_SISTER_01");
-		Statement.ChapterID = TEXT("CHAPTER_01");
-		Statement.CharacterID = TEXT("SISTER");
-		Statement.FolderName = FText::FromString(TEXT("여동생"));
-		Statement.FolderSortOrder = 0;
+		Statement.CharacterID = SisterCharacterID;
 		Statement.LieText = FText::FromString(TEXT("나는 돼지 장식이 놓인 거울을 본 적이 없어."));
 		Statement.SentenceType = ESentenceType::Statement;
 		Statement.SentenceTemplate = FText::FromString(TEXT("현장에 남은 [   ]이 그 말을 반박한다."));
@@ -1691,7 +1740,7 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		MirrorPhoto.PhotoName = FText::FromString(TEXT("돼지가 보던 거울"));
 		MirrorPhoto.DescriptionSource = EPhotoDescriptionSource::ObservationText;
 		MirrorPhoto.PhotoSentenceID = Analysis.SentenceID;
-		MirrorPhoto.StatementSentenceID = Statement.SentenceID;
+		MirrorPhoto.CharacterID = SisterCharacterID;
 		MirrorPhoto.GrantedWordIDs.Add(TEXT("WORD_PIG"));
 		MirrorPhoto.WorldStoryText = FText::FromString(TEXT("불탄 거울 속에 돼지 장식의 실루엣이 남아 있다."));
 		Photos->AddRow(MirrorPhoto.PhotoID, MirrorPhoto);
@@ -1702,7 +1751,7 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		StoryPhoto.PhotoName = FText::FromString(TEXT("가족의 스노우글로브"));
 		StoryPhoto.DescriptionSource = EPhotoDescriptionSource::Custom;
 		StoryPhoto.CustomDescription = FText::FromString(TEXT("그을린 유리 안에서 작은 눈송이가 흔들린다."));
-		StoryPhoto.StatementSentenceID = Statement.SentenceID;
+		StoryPhoto.CharacterID = SisterCharacterID;
 		StoryPhoto.GrantedWordIDs.Add(TEXT("WORD_SNOW_GLOBE"));
 		StoryPhoto.WorldStoryText = FText::FromString(TEXT("가족의 대화가 잠시 귓가에 되살아난다."));
 		Photos->AddRow(StoryPhoto.PhotoID, StoryPhoto);
@@ -1766,7 +1815,7 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 
 	const bool bSaved = SaveTable(EvidenceDefinitions) && SaveTable(EvidenceStates) &&
 		SaveTable(Words) && SaveTable(Photos) && SaveTable(Documents) &&
-		SaveTable(Choices) && SaveTable(Sentences);
+		SaveTable(Choices) && SaveTable(Sentences) && SaveTable(Characters);
 	if (bSaved)
 	{
 		UE_LOG(LogTemp, Display, TEXT("INVESTIGATION_UPGRADE Result=Success MigratedChoices=%d SeededRows=%d"), MigratedCount, SeededRows);

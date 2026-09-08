@@ -3,8 +3,11 @@
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/Overlay.h"
+#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Components/WrapBox.h"
 #include "Components/WidgetSwitcher.h"
+#include "Blueprint/WidgetTree.h"
 #include "Animation/WidgetAnimation.h"
 #include "Tablet/BalhwajeomMessengerWidget.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
@@ -135,14 +138,6 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 	{
 		BTN_PhysicalHome->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePhysicalHomeClicked);
 	}
-	if (BTN_EvidencePhoto01)
-	{
-		BTN_EvidencePhoto01->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePhoto01Clicked);
-	}
-	if (BTN_EvidencePhoto02)
-	{
-		BTN_EvidencePhoto02->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePhoto02Clicked);
-	}
 	if (BTN_EvidenceStatement)
 	{
 		BTN_EvidenceStatement->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleStatementClicked);
@@ -154,8 +149,6 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 	if (BTN_PuzzleWord01) BTN_PuzzleWord01->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePuzzleWord01Clicked);
 	if (BTN_PuzzleWord02) BTN_PuzzleWord02->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePuzzleWord02Clicked);
 	if (BTN_PuzzleWord03) BTN_PuzzleWord03->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePuzzleWord03Clicked);
-	if (BTN_PuzzlePhoto01) BTN_PuzzlePhoto01->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePuzzlePhoto01Clicked);
-	if (BTN_PuzzlePhoto02) BTN_PuzzlePhoto02->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePuzzlePhoto02Clicked);
 	if (BTN_StatementSubmit) BTN_StatementSubmit->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleStatementSubmitClicked);
 	if (WBP_Messenger)
 	{
@@ -279,68 +272,74 @@ void UBalhwajeomTabletWidget::RefreshFolderContents()
 		{
 			VisibleStatementIDs.Add(Statement.SentenceID);
 		}
-		if (TXT_FolderTitle && !Statements.IsEmpty() && !Statements[0].FolderName.IsEmpty())
+		FCharacterDefinition Character;
+		if (TXT_FolderTitle &&
+			Investigation->GetCharacterDefinition(GetActiveCharacterID(), Character) &&
+			!Character.FolderName.IsEmpty())
 		{
-			TXT_FolderTitle->SetText(Statements[0].FolderName);
+			TXT_FolderTitle->SetText(Character.FolderName);
 		}
 	}
 
-	auto UpdateFileButton = [this, Investigation](UButton* Button, const FName TextWidgetName, const FName ItemID, bool bPhoto)
+	if (WB_EvidencePhotos && WidgetTree)
 	{
-		if (!Button)
-		{
-			return;
-		}
-		const bool bAvailable = Investigation && !ItemID.IsNone();
-		Button->SetVisibility(bAvailable ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-		Button->SetIsEnabled(bAvailable);
-		UTextBlock* Label = Cast<UTextBlock>(GetWidgetFromName(TextWidgetName));
-		if (!Label || !bAvailable)
-		{
-			return;
-		}
-		if (bPhoto)
+		WB_EvidencePhotos->ClearChildren();
+		for (const FName PhotoID : VisiblePhotoIDs)
 		{
 			FPhotoDefinition Photo;
-			if (Investigation->GetPhotoDefinition(ItemID, Photo))
+			if (!Investigation || !Investigation->GetPhotoDefinition(PhotoID, Photo))
 			{
-				const bool bComplete = Photo.PhotoSentenceID.IsNone() || Investigation->IsSentenceSolved(Photo.PhotoSentenceID);
-				Label->SetText(FText::Format(
-					NSLOCTEXT("Tablet", "PhotoFileLabel", "{0}  {1}"),
-					bComplete ? FText::FromString(TEXT("✓")) : FText::FromString(TEXT("?")),
-					Photo.PhotoName));
+				continue;
 			}
+			const bool bComplete = Photo.PhotoSentenceID.IsNone() ||
+				Investigation->IsSentenceSolved(Photo.PhotoSentenceID);
+			const FText Label = FText::Format(
+				NSLOCTEXT("Tablet", "DynamicPhotoFileLabel", "{0}  {1}"),
+				bComplete ? FText::FromString(TEXT("✓")) : FText::FromString(TEXT("?")),
+				Photo.PhotoName);
+
+			USizeBox* EntrySize = WidgetTree->ConstructWidget<USizeBox>();
+			EntrySize->SetWidthOverride(200.0f);
+			EntrySize->SetHeightOverride(88.0f);
+			UBalhwajeomTabletPhotoButton* Entry =
+				WidgetTree->ConstructWidget<UBalhwajeomTabletPhotoButton>();
+			Entry->Configure(PhotoID, Label);
+			Entry->OnPhotoSelected.AddUniqueDynamic(this, &ThisClass::HandleFolderPhotoSelected);
+			EntrySize->AddChild(Entry);
+			WB_EvidencePhotos->AddChild(EntrySize);
 		}
-		else
+	}
+
+	if (BTN_EvidenceStatement)
+	{
+		const FName StatementID = VisibleStatementIDs.IsValidIndex(0)
+			? VisibleStatementIDs[0] : NAME_None;
+		const bool bAvailable = Investigation && !StatementID.IsNone();
+		BTN_EvidenceStatement->SetVisibility(
+			bAvailable ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		BTN_EvidenceStatement->SetIsEnabled(bAvailable);
+		if (bAvailable)
 		{
-			FSentenceDefinition Sentence;
-			if (Investigation->GetSentenceDefinition(ItemID, Sentence))
+			if (UTextBlock* Label = Cast<UTextBlock>(GetWidgetFromName(TEXT("TXT_EvidenceStatement"))))
 			{
 				Label->SetText(FText::Format(
 					NSLOCTEXT("Tablet", "StatementFileLabel", "{0}  진술서"),
-					Investigation->IsSentenceSolved(ItemID)
+					Investigation->IsSentenceSolved(StatementID)
 						? FText::FromString(TEXT("✓")) : FText::FromString(TEXT("?"))));
 			}
 		}
-	};
-
-	UpdateFileButton(BTN_EvidencePhoto01, TEXT("TXT_EvidencePhoto01"),
-		VisiblePhotoIDs.IsValidIndex(0) ? VisiblePhotoIDs[0] : NAME_None, true);
-	UpdateFileButton(BTN_EvidencePhoto02, TEXT("TXT_EvidencePhoto02"),
-		VisiblePhotoIDs.IsValidIndex(1) ? VisiblePhotoIDs[1] : NAME_None, true);
-	UpdateFileButton(BTN_EvidenceStatement, TEXT("TXT_EvidenceStatement"),
-		VisibleStatementIDs.IsValidIndex(0) ? VisibleStatementIDs[0] : NAME_None, false);
+	}
 }
 
-void UBalhwajeomTabletWidget::OpenPhotoAtIndex(const int32 Index)
+void UBalhwajeomTabletWidget::OpenPhoto(const FName PhotoID)
 {
 	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
-	if (!Investigation || !VisiblePhotoIDs.IsValidIndex(Index))
+	if (!Investigation || PhotoID.IsNone())
 	{
 		return;
 	}
 	FPhotoDefinition Photo;
-	if (!Investigation->GetPhotoDefinition(VisiblePhotoIDs[Index], Photo))
+	if (!Investigation->GetPhotoDefinition(PhotoID, Photo))
 	{
 		return;
 	}
@@ -378,9 +377,14 @@ void UBalhwajeomTabletWidget::PreparePuzzle(FName SentenceID)
 void UBalhwajeomTabletWidget::HidePuzzleControls()
 {
 	for (UButton* Button : {BTN_PuzzleWord01.Get(), BTN_PuzzleWord02.Get(), BTN_PuzzleWord03.Get(),
-		BTN_PuzzlePhoto01.Get(), BTN_PuzzlePhoto02.Get(), BTN_StatementSubmit.Get()})
+		BTN_StatementSubmit.Get()})
 	{
 		if (Button) Button->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	if (WB_PuzzlePhotos)
+	{
+		WB_PuzzlePhotos->ClearChildren();
+		WB_PuzzlePhotos->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }
 
@@ -436,15 +440,26 @@ void UBalhwajeomTabletWidget::RefreshPuzzleControls()
 		if (!ID.IsNone() && Investigation->GetWordDefinition(ID, Word)) Label = Word.DisplayWord;
 		SetChoiceButton(WordButtons[Index], WordLabels[Index], ID, Label);
 	}
-	UButton* PhotoButtons[] = {BTN_PuzzlePhoto01, BTN_PuzzlePhoto02};
-	const FName PhotoLabels[] = {TEXT("TXT_PuzzlePhoto01"), TEXT("TXT_PuzzlePhoto02")};
-	for (int32 Index = 0; Index < 2; ++Index)
+	if (WB_PuzzlePhotos && WidgetTree && Sentence.RequiredPhotoCount > 0)
 	{
-		FText Label;
-		FName ID = AvailablePuzzlePhotoIDs.IsValidIndex(Index) ? AvailablePuzzlePhotoIDs[Index] : NAME_None;
-		FPhotoDefinition Photo;
-		if (!ID.IsNone() && Investigation->GetPhotoDefinition(ID, Photo)) Label = Photo.PhotoName;
-		SetChoiceButton(PhotoButtons[Index], PhotoLabels[Index], ID, Label);
+		WB_PuzzlePhotos->SetVisibility(ESlateVisibility::Visible);
+		for (const FName PhotoID : AvailablePuzzlePhotoIDs)
+		{
+			FPhotoDefinition Photo;
+			if (!Investigation->GetPhotoDefinition(PhotoID, Photo))
+			{
+				continue;
+			}
+			USizeBox* EntrySize = WidgetTree->ConstructWidget<USizeBox>();
+			EntrySize->SetWidthOverride(108.0f);
+			EntrySize->SetHeightOverride(50.0f);
+			UBalhwajeomTabletPhotoButton* Entry =
+				WidgetTree->ConstructWidget<UBalhwajeomTabletPhotoButton>();
+			Entry->Configure(PhotoID, Photo.PhotoName);
+			Entry->OnPhotoSelected.AddUniqueDynamic(this, &ThisClass::HandlePuzzlePhotoSelected);
+			EntrySize->AddChild(Entry);
+			WB_PuzzlePhotos->AddChild(EntrySize);
+		}
 	}
 	if (BTN_StatementSubmit && Sentence.SentenceType == ESentenceType::Statement)
 	{
@@ -465,15 +480,17 @@ void UBalhwajeomTabletWidget::SelectPuzzleWord(const int32 Index)
 	ValidateActivePuzzle(false);
 }
 
-void UBalhwajeomTabletWidget::SelectPuzzlePhoto(const int32 Index)
+void UBalhwajeomTabletWidget::SelectPuzzlePhoto(const FName PhotoID)
 {
 	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
 	FSentenceDefinition Sentence;
-	if (!Investigation || !AvailablePuzzlePhotoIDs.IsValidIndex(Index) ||
-		!Investigation->GetSentenceDefinition(ActiveSentenceID, Sentence) || Sentence.PhotoSlots.IsEmpty()) return;
-	const int32 SlotIndex = Sentence.PhotoSlots[NextPhotoSlotCursor % Sentence.PhotoSlots.Num()].SlotIndex;
+	if (!Investigation || !AvailablePuzzlePhotoIDs.Contains(PhotoID) ||
+		!Investigation->GetSentenceDefinition(ActiveSentenceID, Sentence) ||
+		Sentence.PhotoSlots.IsEmpty() || Sentence.RequiredPhotoCount <= 0) return;
+	const int32 SelectableSlotCount = FMath::Min(Sentence.RequiredPhotoCount, Sentence.PhotoSlots.Num());
+	const int32 SlotIndex = Sentence.PhotoSlots[NextPhotoSlotCursor % SelectableSlotCount].SlotIndex;
 	ActiveSubmission.SubmittedPhotos.RemoveAll([SlotIndex](const FSubmittedPhotoSlot& Candidate) { return Candidate.SlotIndex == SlotIndex; });
-	ActiveSubmission.SubmittedPhotos.Add({SlotIndex, AvailablePuzzlePhotoIDs[Index]});
+	ActiveSubmission.SubmittedPhotos.Add({SlotIndex, PhotoID});
 	++NextPhotoSlotCursor;
 }
 
@@ -585,14 +602,37 @@ void UBalhwajeomTabletWidget::HandlePhysicalHomeClicked()
 	ResetToDesktop();
 }
 
-void UBalhwajeomTabletWidget::HandlePhoto01Clicked()
+void UBalhwajeomTabletPhotoButton::Configure(const FName InPhotoID, const FText& InLabel)
 {
-	OpenPhotoAtIndex(0);
+	PhotoID = InPhotoID;
+	OnClicked.AddUniqueDynamic(this, &ThisClass::HandleClicked);
+
+	UTextBlock* Label = NewObject<UTextBlock>(this);
+	Label->SetText(InLabel);
+	Label->SetJustification(ETextJustify::Center);
+	Label->SetAutoWrapText(true);
+	FSlateFontInfo Font = Label->GetFont();
+	Font.Size = 20;
+	Label->SetFont(Font);
+	SetContent(Label);
 }
 
-void UBalhwajeomTabletWidget::HandlePhoto02Clicked()
+void UBalhwajeomTabletPhotoButton::HandleClicked()
 {
-	OpenPhotoAtIndex(1);
+	if (!PhotoID.IsNone())
+	{
+		OnPhotoSelected.Broadcast(PhotoID);
+	}
+}
+
+void UBalhwajeomTabletWidget::HandleFolderPhotoSelected(const FName PhotoID)
+{
+	OpenPhoto(PhotoID);
+}
+
+void UBalhwajeomTabletWidget::HandlePuzzlePhotoSelected(const FName PhotoID)
+{
+	SelectPuzzlePhoto(PhotoID);
 }
 
 void UBalhwajeomTabletWidget::HandleStatementClicked()
@@ -629,6 +669,4 @@ void UBalhwajeomTabletWidget::HandlePopupCloseClicked()
 void UBalhwajeomTabletWidget::HandlePuzzleWord01Clicked() { SelectPuzzleWord(0); }
 void UBalhwajeomTabletWidget::HandlePuzzleWord02Clicked() { SelectPuzzleWord(1); }
 void UBalhwajeomTabletWidget::HandlePuzzleWord03Clicked() { SelectPuzzleWord(2); }
-void UBalhwajeomTabletWidget::HandlePuzzlePhoto01Clicked() { SelectPuzzlePhoto(0); }
-void UBalhwajeomTabletWidget::HandlePuzzlePhoto02Clicked() { SelectPuzzlePhoto(1); }
 void UBalhwajeomTabletWidget::HandleStatementSubmitClicked() { ValidateActivePuzzle(true); }

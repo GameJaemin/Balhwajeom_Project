@@ -174,6 +174,7 @@ void UBalhwajeomInvestigationSubsystem::LoadConfiguredDataTables()
 		Settings->KeywordChoicesTable,
 		TEXT("KeywordChoicesTable"));
 	SentencesTable = LoadTable(Settings->SentencesTable, TEXT("SentencesTable"));
+	CharactersTable = LoadTable(Settings->CharactersTable, TEXT("CharactersTable"));
 }
 
 void UBalhwajeomInvestigationSubsystem::ClearLoadedDataTables()
@@ -185,6 +186,7 @@ void UBalhwajeomInvestigationSubsystem::ClearLoadedDataTables()
 	KeywordDocumentsTable = nullptr;
 	KeywordChoicesTable = nullptr;
 	SentencesTable = nullptr;
+	CharactersTable = nullptr;
 }
 
 void UBalhwajeomInvestigationSubsystem::InitializeDefaultWords()
@@ -324,6 +326,10 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 		SentencesTable,
 		TEXT("SentencesTable"),
 		[](const FSentenceDefinition& Row) { return Row.SentenceID; });
+	bIsValid &= ValidateTableRowIDs<FCharacterDefinition>(
+		CharactersTable,
+		TEXT("CharactersTable"),
+		[](const FCharacterDefinition& Row) { return Row.CharacterID; });
 
 	if (!bIsValid)
 	{
@@ -355,6 +361,11 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 	{
 		return !DocumentID.IsNone() &&
 			KeywordDocumentsTable->FindRow<FKeywordDocumentDefinition>(DocumentID, Context, false) != nullptr;
+	};
+	auto HasCharacter = [this, &Context](FName CharacterID)
+	{
+		return !CharacterID.IsNone() &&
+			CharactersTable->FindRow<FCharacterDefinition>(CharacterID, Context, false) != nullptr;
 	};
 	auto ReportInvalidReference = [&bIsValid](
 		const TCHAR* OwnerType,
@@ -449,15 +460,10 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 			}
 		}
 
-		if (!Photo->StatementSentenceID.IsNone())
+		if (!HasCharacter(Photo->CharacterID))
 		{
-			const FSentenceDefinition* Statement = SentencesTable->FindRow<FSentenceDefinition>(
-				Photo->StatementSentenceID, Context, false);
-			if (Statement == nullptr || Statement->SentenceType != ESentenceType::Statement)
-			{
-				ReportInvalidReference(
-					TEXT("PhotoDefinition"), Photo->PhotoID, TEXT("StatementSentenceID"), Photo->StatementSentenceID);
-			}
+			ReportInvalidReference(
+				TEXT("PhotoDefinition"), Photo->PhotoID, TEXT("CharacterID"), Photo->CharacterID);
 		}
 	}
 
@@ -494,15 +500,15 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 	{
 		const FSentenceDefinition* Sentence =
 			reinterpret_cast<const FSentenceDefinition*>(Pair.Value);
-		if (Sentence->SentenceType == ESentenceType::Statement &&
-			(Sentence->CharacterID.IsNone() || Sentence->FolderName.IsEmpty()))
+		if (Sentence->SentenceType == ESentenceType::Statement && !HasCharacter(Sentence->CharacterID))
 		{
-			UE_LOG(
-				LogBalhwajeomInvestigation,
-				Error,
-				TEXT("Statement sentence '%s' requires CharacterID and FolderName."),
-				*Sentence->SentenceID.ToString());
-			bIsValid = false;
+			ReportInvalidReference(
+				TEXT("Sentence"), Sentence->SentenceID, TEXT("CharacterID"), Sentence->CharacterID);
+		}
+		else if (!Sentence->CharacterID.IsNone() && !HasCharacter(Sentence->CharacterID))
+		{
+			ReportInvalidReference(
+				TEXT("Sentence"), Sentence->SentenceID, TEXT("CharacterID"), Sentence->CharacterID);
 		}
 		TSet<int32> WordSlotIndices;
 		for (const FSentenceWordSlot& Slot : Sentence->WordSlots)
@@ -612,6 +618,20 @@ bool UBalhwajeomInvestigationSubsystem::GetPhotoDefinition(
 		return false;
 	}
 
+	OutDefinition = *Definition;
+	return true;
+}
+
+bool UBalhwajeomInvestigationSubsystem::GetCharacterDefinition(
+	FName CharacterID,
+	FCharacterDefinition& OutDefinition) const
+{
+	OutDefinition = FCharacterDefinition{};
+	const FCharacterDefinition* Definition = FindCharacterDefinition(CharacterID);
+	if (Definition == nullptr)
+	{
+		return false;
+	}
 	OutDefinition = *Definition;
 	return true;
 }
@@ -759,6 +779,15 @@ const FSentenceDefinition* UBalhwajeomInvestigationSubsystem::FindSentenceDefini
 		SentencesTable,
 		SentenceID,
 		TEXT("SentencesTable"));
+}
+
+const FCharacterDefinition* UBalhwajeomInvestigationSubsystem::FindCharacterDefinition(
+	FName CharacterID) const
+{
+	return FindInvestigationRow<FCharacterDefinition>(
+		CharactersTable,
+		CharacterID,
+		TEXT("CharactersTable"));
 }
 
 bool UBalhwajeomInvestigationSubsystem::RegisterEvidenceActor(
@@ -1050,17 +1079,61 @@ bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 	Progress.SelectedWords = Submission.SubmittedWords;
 	Progress.SelectedPhotos = Submission.SubmittedPhotos;
 
+	TMap<int32, TArray<const FSentenceWordSlot*>> SlotsByGroup;
 	for (const FSentenceWordSlot& CorrectSlot : Sentence->WordSlots)
 	{
-		const FSubmittedWordSlot* SubmittedSlot = Submission.SubmittedWords.FindByPredicate(
-			[&CorrectSlot](const FSubmittedWordSlot& Candidate)
-			{
-				return Candidate.SlotIndex == CorrectSlot.SlotIndex;
-			});
+		SlotsByGroup.FindOrAdd(CorrectSlot.OrderGroup).Add(&CorrectSlot);
+	}
 
-		if (SubmittedSlot == nullptr ||
-			SubmittedSlot->WordID != CorrectSlot.CorrectWordID ||
-			!AcquiredWords.Contains(SubmittedSlot->WordID))
+	for (const TPair<int32, TArray<const FSentenceWordSlot*>>& GroupPair : SlotsByGroup)
+	{
+		if (GroupPair.Key == 0)
+		{
+			for (const FSentenceWordSlot* CorrectSlot : GroupPair.Value)
+			{
+				const FSubmittedWordSlot* SubmittedSlot = Submission.SubmittedWords.FindByPredicate(
+					[CorrectSlot](const FSubmittedWordSlot& Candidate)
+					{
+						return Candidate.SlotIndex == CorrectSlot->SlotIndex;
+					});
+
+				if (SubmittedSlot == nullptr ||
+					SubmittedSlot->WordID != CorrectSlot->CorrectWordID ||
+					!AcquiredWords.Contains(SubmittedSlot->WordID))
+				{
+					return false;
+				}
+			}
+			continue;
+		}
+
+		TSet<int32> GroupSlotIndices;
+		TMap<FName, int32> RemainingRequiredCounts;
+		for (const FSentenceWordSlot* CorrectSlot : GroupPair.Value)
+		{
+			GroupSlotIndices.Add(CorrectSlot->SlotIndex);
+			++RemainingRequiredCounts.FindOrAdd(CorrectSlot->CorrectWordID);
+		}
+
+		int32 SubmittedCountInGroup = 0;
+		for (const FSubmittedWordSlot& SubmittedSlot : Submission.SubmittedWords)
+		{
+			if (!GroupSlotIndices.Contains(SubmittedSlot.SlotIndex))
+			{
+				continue;
+			}
+			++SubmittedCountInGroup;
+
+			int32* RemainingCount = RemainingRequiredCounts.Find(SubmittedSlot.WordID);
+			if (RemainingCount == nullptr || *RemainingCount <= 0 ||
+				!AcquiredWords.Contains(SubmittedSlot.WordID))
+			{
+				return false;
+			}
+			--(*RemainingCount);
+		}
+
+		if (SubmittedCountInGroup != GroupPair.Value.Num())
 		{
 			return false;
 		}
@@ -1139,9 +1212,7 @@ void UBalhwajeomInvestigationSubsystem::GetStatementSentencesForCharacter(
 	}
 	OutSentences.Sort([](const FSentenceDefinition& A, const FSentenceDefinition& B)
 	{
-		return A.FolderSortOrder == B.FolderSortOrder
-			? A.SentenceID.LexicalLess(B.SentenceID)
-			: A.FolderSortOrder < B.FolderSortOrder;
+		return A.SentenceID.LexicalLess(B.SentenceID);
 	});
 }
 
@@ -1157,9 +1228,7 @@ void UBalhwajeomInvestigationSubsystem::GetPhotosForCharacter(
 	for (const TPair<FName, uint8*>& Pair : PhotosTable->GetRowMap())
 	{
 		const FPhotoDefinition* Photo = reinterpret_cast<const FPhotoDefinition*>(Pair.Value);
-		const FSentenceDefinition* Statement = FindSentenceDefinition(Photo->StatementSentenceID);
-		if (Statement != nullptr && Statement->SentenceType == ESentenceType::Statement &&
-			Statement->CharacterID == CharacterID)
+		if (Photo->CharacterID == CharacterID)
 		{
 			OutPhotos.Add(*Photo);
 		}

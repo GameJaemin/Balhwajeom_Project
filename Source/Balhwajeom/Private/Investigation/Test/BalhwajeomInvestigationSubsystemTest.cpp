@@ -18,7 +18,8 @@ struct FInvestigationSubsystemTestAccessor
 		UDataTable* Photos,
 		UDataTable* KeywordDocuments,
 		UDataTable* KeywordChoices,
-		UDataTable* Sentences)
+		UDataTable* Sentences,
+		UDataTable* Characters)
 	{
 		Subsystem->EvidenceDefinitionsTable = EvidenceDefinitions;
 		Subsystem->EvidenceStatesTable = EvidenceStates;
@@ -27,6 +28,7 @@ struct FInvestigationSubsystemTestAccessor
 		Subsystem->KeywordDocumentsTable = KeywordDocuments;
 		Subsystem->KeywordChoicesTable = KeywordChoices;
 		Subsystem->SentencesTable = Sentences;
+		Subsystem->CharactersTable = Characters;
 	}
 
 	static bool Validate(const UBalhwajeomInvestigationSubsystem* Subsystem)
@@ -40,9 +42,11 @@ namespace InvestigationSubsystemTests
 const FName ObjectID(TEXT("OBJ_TEST"));
 const FName StateID(TEXT("STATE_TEST_ONCE"));
 const FName WordID(TEXT("WORD_TEST"));
+const FName AlternateWordID(TEXT("WORD_TEST_ALTERNATE"));
 const FName PhotoID(TEXT("PHOTO_TEST"));
 const FName SentenceID(TEXT("SENT_PHOTO_TEST"));
 const FName StatementID(TEXT("SENT_STATEMENT_TEST"));
+const FName CharacterID(TEXT("CHAR_TEST"));
 
 template <typename RowType>
 UDataTable* MakeTable()
@@ -64,7 +68,13 @@ struct FFixture
 		, KeywordDocuments(MakeTable<FKeywordDocumentDefinition>())
 		, KeywordChoices(MakeTable<FKeywordChoiceDefinition>())
 		, Sentences(MakeTable<FSentenceDefinition>())
+		, Characters(MakeTable<FCharacterDefinition>())
 	{
+		FCharacterDefinition Character;
+		Character.CharacterID = CharacterID;
+		Character.FolderName = FText::FromString(TEXT("테스트 인물"));
+		Characters->AddRow(CharacterID, Character);
+
 		FEvidenceDefinition Evidence;
 		Evidence.ObjectID = ObjectID;
 		Evidence.InitialStateID = StateID;
@@ -82,6 +92,9 @@ struct FFixture
 		FWordDefinition Word;
 		Word.WordID = WordID;
 		Words->AddRow(WordID, Word);
+		FWordDefinition AlternateWord;
+		AlternateWord.WordID = AlternateWordID;
+		Words->AddRow(AlternateWordID, AlternateWord);
 
 		FKeywordDocumentDefinition Document;
 		Document.KeywordDocumentID = TEXT("DOC_TEST");
@@ -98,7 +111,7 @@ struct FFixture
 		FPhotoDefinition Photo;
 		Photo.PhotoID = PhotoID;
 		Photo.PhotoSentenceID = SentenceID;
-		Photo.StatementSentenceID = StatementID;
+		Photo.CharacterID = CharacterID;
 		Photo.GrantedWordIDs.Add(WordID);
 		Photos->AddRow(PhotoID, Photo);
 
@@ -116,8 +129,7 @@ struct FFixture
 		FSentenceDefinition Statement;
 		Statement.SentenceID = StatementID;
 		Statement.SentenceType = ESentenceType::Statement;
-		Statement.CharacterID = TEXT("CHAR_TEST");
-		Statement.FolderName = FText::FromString(TEXT("테스트 인물"));
+		Statement.CharacterID = CharacterID;
 		Statement.ResultText = FText::FromString(TEXT("Test result text"));
 		Statement.RequiredPhotoCount = 1;
 
@@ -135,7 +147,8 @@ struct FFixture
 			Photos,
 			KeywordDocuments,
 			KeywordChoices,
-			Sentences);
+			Sentences,
+			Characters);
 	}
 
 	FGuid RegisterTestEvidence() const
@@ -168,6 +181,7 @@ struct FFixture
 	UDataTable* KeywordDocuments;
 	UDataTable* KeywordChoices;
 	UDataTable* Sentences;
+	UDataTable* Characters;
 };
 }
 
@@ -224,6 +238,10 @@ bool FInvestigationSettingsConfigurationTest::RunTest(const FString& Parameters)
 		TEXT("SentencesTable"),
 		Settings->SentencesTable,
 		FSentenceDefinition::StaticStruct());
+	TestConfiguredTable(
+		TEXT("CharactersTable"),
+		Settings->CharactersTable,
+		FCharacterDefinition::StaticStruct());
 	return true;
 }
 
@@ -238,6 +256,7 @@ bool FInvestigationDefinitionLookupTest::RunTest(const FString& Parameters)
 	FEvidenceDefinition Evidence;
 	FEvidenceStateDefinition State;
 	FPhotoDefinition PhotoDefinition;
+	FCharacterDefinition CharacterDefinition;
 
 	TestTrue(
 		TEXT("A known ObjectID should resolve"),
@@ -258,6 +277,15 @@ bool FInvestigationDefinitionLookupTest::RunTest(const FString& Parameters)
 		TEXT("Resolved PhotoID should match"),
 		PhotoDefinition.PhotoID,
 		InvestigationSubsystemTests::PhotoID);
+	TestTrue(
+		TEXT("A known CharacterID should resolve"),
+		Fixture.Subsystem->GetCharacterDefinition(
+			InvestigationSubsystemTests::CharacterID,
+			CharacterDefinition));
+	TestEqual(
+		TEXT("Resolved CharacterID should match"),
+		CharacterDefinition.CharacterID,
+		InvestigationSubsystemTests::CharacterID);
 	TestFalse(
 		TEXT("Unknown PhotoID should fail"),
 		Fixture.Subsystem->GetPhotoDefinition(
@@ -285,7 +313,8 @@ bool FInvestigationConfiguredDataValidationTest::RunTest(const FString& Paramete
 		Settings->PhotosTable.LoadSynchronous(),
 		Settings->KeywordDocumentsTable.LoadSynchronous(),
 		Settings->KeywordChoicesTable.LoadSynchronous(),
-		Settings->SentencesTable.LoadSynchronous());
+		Settings->SentencesTable.LoadSynchronous(),
+		Settings->CharactersTable.LoadSynchronous());
 	TestTrue(TEXT("Configured prototype DataTables should pass all cross-reference checks"),
 		FInvestigationSubsystemTestAccessor::Validate(Subsystem));
 	return true;
@@ -450,6 +479,47 @@ bool FInvestigationSentenceValidationTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInvestigationSentenceOrderGroupTest,
+	"Balhwajeom.Investigation.SentenceOrderGroup",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FInvestigationSentenceOrderGroupTest::RunTest(const FString& Parameters)
+{
+	const InvestigationSubsystemTests::FFixture Fixture;
+	Fixture.Subsystem->AcquireWord(
+		InvestigationSubsystemTests::WordID,
+		EWordAcquisitionSource::EvidenceInteraction,
+		InvestigationSubsystemTests::ObjectID);
+	Fixture.Subsystem->AcquireWord(
+		InvestigationSubsystemTests::AlternateWordID,
+		EWordAcquisitionSource::EvidenceInteraction,
+		InvestigationSubsystemTests::ObjectID);
+
+	FSentenceDefinition* Sentence = Fixture.Sentences->FindRow<FSentenceDefinition>(
+		InvestigationSubsystemTests::SentenceID,
+		TEXT("OrderGroup test"));
+	if (!TestNotNull(TEXT("The test sentence should exist"), Sentence))
+	{
+		return false;
+	}
+	Sentence->WordSlots.Reset();
+	Sentence->WordSlots.Add({0, InvestigationSubsystemTests::WordID, 1});
+	Sentence->WordSlots.Add({1, InvestigationSubsystemTests::AlternateWordID, 1});
+
+	FSentenceSubmission Submission;
+	Submission.SubmittedWords.Add({0, InvestigationSubsystemTests::AlternateWordID});
+	Submission.SubmittedWords.Add({1, InvestigationSubsystemTests::WordID});
+	FText ResultText;
+	TestTrue(
+		TEXT("Words in the same non-zero OrderGroup should be accepted in either order"),
+		Fixture.Subsystem->ValidateSentence(
+			InvestigationSubsystemTests::SentenceID,
+			Submission,
+			ResultText));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FInvestigationDataValidationTest,
 	"Balhwajeom.Investigation.DataValidation",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -462,6 +532,7 @@ bool FInvestigationDataValidationTest::RunTest(const FString& Parameters)
 	FPhotoDefinition MismatchedPhoto;
 	MismatchedPhoto.PhotoID = FName(TEXT("PHOTO_WRONG_INTERNAL_ID"));
 	MismatchedPhoto.PhotoSentenceID = InvestigationSubsystemTests::SentenceID;
+	MismatchedPhoto.CharacterID = InvestigationSubsystemTests::CharacterID;
 	Fixture.Photos->RemoveRow(InvestigationSubsystemTests::PhotoID);
 	Fixture.Photos->AddRow(InvestigationSubsystemTests::PhotoID, MismatchedPhoto);
 

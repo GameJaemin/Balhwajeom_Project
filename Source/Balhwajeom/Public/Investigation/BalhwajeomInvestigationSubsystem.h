@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
+#include "Investigation/CharacterDefinitions.h"
 #include "Investigation/EvidenceDefinitions.h"
 #include "Investigation/InvestigationRuntimeTypes.h"
 #include "Investigation/PhotoDefinitions.h"
@@ -48,6 +49,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
 	bool GetPhotoDefinition(FName PhotoID, FPhotoDefinition& OutDefinition) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
+	bool GetCharacterDefinition(FName CharacterID, FCharacterDefinition& OutDefinition) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
 	bool GetWordDefinition(FName WordID, FWordDefinition& OutDefinition) const;
@@ -142,6 +146,7 @@ private:
 	const FPhotoDefinition* FindPhotoDefinition(FName PhotoID) const;
 	const FKeywordDocumentDefinition* FindKeywordDocumentDefinition(FName KeywordDocumentID) const;
 	const FSentenceDefinition* FindSentenceDefinition(FName SentenceID) const;
+	const FCharacterDefinition* FindCharacterDefinition(FName CharacterID) const;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDataTable> EvidenceDefinitionsTable;
@@ -163,6 +168,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UDataTable> SentencesTable;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UDataTable> CharactersTable;
 
 	UPROPERTY(Transient)
 	TMap<FGuid, FEvidenceRuntimeState> EvidenceRuntimeStates;

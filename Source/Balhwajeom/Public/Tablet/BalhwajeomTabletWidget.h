@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/Button.h"
 #include "Investigation/InvestigationRuntimeTypes.h"
 #include "BalhwajeomTabletWidget.generated.h"
 
@@ -10,6 +11,7 @@ class UBalhwajeomMessengerWidget;
 class UButton;
 class UOverlay;
 class UTextBlock;
+class UWrapBox;
 class UWidgetSwitcher;
 class UWidgetAnimation;
 class UBalhwajeomInvestigationSubsystem;
@@ -30,6 +32,27 @@ enum class EFamilyMember : uint8
 	Sister,
 	Brother,
 	Mother
+};
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPhotoSelected, FName, PhotoID);
+
+/** Runtime-created photo entry shared by the folder and statement candidate lists. */
+UCLASS()
+class BALHWAJEOM_API UBalhwajeomTabletPhotoButton : public UButton
+{
+	GENERATED_BODY()
+
+public:
+	void Configure(FName InPhotoID, const FText& InLabel);
+
+	UPROPERTY()
+	FOnTabletPhotoSelected OnPhotoSelected;
+
+private:
+	UFUNCTION()
+	void HandleClicked();
+
+	FName PhotoID = NAME_None;
 };
 
 /** Navigation/state logic for the designer-owned WBP_Tablet visual tree. */
@@ -97,12 +120,12 @@ private:
 	void RefreshFolderContents();
 	FName GetActiveCharacterID() const;
 	UBalhwajeomInvestigationSubsystem* GetInvestigationSubsystem() const;
-	void OpenPhotoAtIndex(int32 Index);
+	void OpenPhoto(FName PhotoID);
 	void PreparePuzzle(FName SentenceID);
 	void RefreshPuzzleControls();
 	void HidePuzzleControls();
 	void SelectPuzzleWord(int32 Index);
-	void SelectPuzzlePhoto(int32 Index);
+	void SelectPuzzlePhoto(FName PhotoID);
 	void ValidateActivePuzzle(bool bExplicitStatementSubmit);
 	void ShowPopup(const FText& Title, const FText& Body);
 	void HidePopup();
@@ -144,10 +167,10 @@ private:
 	void HandlePhysicalHomeClicked();
 
 	UFUNCTION()
-	void HandlePhoto01Clicked();
+	void HandleFolderPhotoSelected(FName PhotoID);
 
 	UFUNCTION()
-	void HandlePhoto02Clicked();
+	void HandlePuzzlePhotoSelected(FName PhotoID);
 
 	UFUNCTION()
 	void HandleStatementClicked();
@@ -161,10 +184,6 @@ private:
 	void HandlePuzzleWord02Clicked();
 	UFUNCTION()
 	void HandlePuzzleWord03Clicked();
-	UFUNCTION()
-	void HandlePuzzlePhoto01Clicked();
-	UFUNCTION()
-	void HandlePuzzlePhoto02Clicked();
 	UFUNCTION()
 	void HandleStatementSubmitClicked();
 
@@ -223,10 +242,7 @@ private:
 	TObjectPtr<UButton> BTN_PhysicalHome;
 
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> BTN_EvidencePhoto01;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> BTN_EvidencePhoto02;
+	TObjectPtr<UWrapBox> WB_EvidencePhotos;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_EvidenceStatement;
@@ -241,9 +257,7 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_PuzzleWord03;
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> BTN_PuzzlePhoto01;
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> BTN_PuzzlePhoto02;
+	TObjectPtr<UWrapBox> WB_PuzzlePhotos;
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_StatementSubmit;
 
