@@ -832,41 +832,55 @@ bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 	Progress.SelectedWords = Submission.SubmittedWords;
 	Progress.SelectedPhotos = Submission.SubmittedPhotos;
 
-	if (Sentence->bWordOrderMatters)
+	// Slots are graded per OrderGroup: group 0 slots must each match their exact SlotIndex,
+	// while slots sharing the same non-zero group may be filled in any order among themselves.
+	TMap<int32, TArray<const FSentenceWordSlot*>> SlotsByGroup;
+	for (const FSentenceWordSlot& CorrectSlot : Sentence->WordSlots)
 	{
-		for (const FSentenceWordSlot& CorrectSlot : Sentence->WordSlots)
-		{
-			const FSubmittedWordSlot* SubmittedSlot = Submission.SubmittedWords.FindByPredicate(
-				[&CorrectSlot](const FSubmittedWordSlot& Candidate)
-				{
-					return Candidate.SlotIndex == CorrectSlot.SlotIndex;
-				});
-
-			if (SubmittedSlot == nullptr ||
-				SubmittedSlot->WordID != CorrectSlot.CorrectWordID ||
-				!AcquiredWords.Contains(SubmittedSlot->WordID))
-			{
-				return false;
-			}
-		}
+		SlotsByGroup.FindOrAdd(CorrectSlot.OrderGroup).Add(&CorrectSlot);
 	}
-	else
+
+	for (const TPair<int32, TArray<const FSentenceWordSlot*>>& GroupPair : SlotsByGroup)
 	{
-		// Order-independent: the submitted words must match the required words as a multiset,
-		// regardless of which slot each one was placed in.
-		if (Submission.SubmittedWords.Num() != Sentence->WordSlots.Num())
+		if (GroupPair.Key == 0)
 		{
-			return false;
+			for (const FSentenceWordSlot* CorrectSlot : GroupPair.Value)
+			{
+				const FSubmittedWordSlot* SubmittedSlot = Submission.SubmittedWords.FindByPredicate(
+					[CorrectSlot](const FSubmittedWordSlot& Candidate)
+					{
+						return Candidate.SlotIndex == CorrectSlot->SlotIndex;
+					});
+
+				if (SubmittedSlot == nullptr ||
+					SubmittedSlot->WordID != CorrectSlot->CorrectWordID ||
+					!AcquiredWords.Contains(SubmittedSlot->WordID))
+				{
+					return false;
+				}
+			}
+			continue;
 		}
 
+		// Non-zero group: compare the submitted words at this group's slots to the
+		// required words as a multiset, ignoring which specific slot each one landed in.
+		TSet<int32> GroupSlotIndices;
 		TMap<FName, int32> RemainingRequiredCounts;
-		for (const FSentenceWordSlot& CorrectSlot : Sentence->WordSlots)
+		for (const FSentenceWordSlot* CorrectSlot : GroupPair.Value)
 		{
-			++RemainingRequiredCounts.FindOrAdd(CorrectSlot.CorrectWordID);
+			GroupSlotIndices.Add(CorrectSlot->SlotIndex);
+			++RemainingRequiredCounts.FindOrAdd(CorrectSlot->CorrectWordID);
 		}
 
+		int32 SubmittedCountInGroup = 0;
 		for (const FSubmittedWordSlot& SubmittedSlot : Submission.SubmittedWords)
 		{
+			if (!GroupSlotIndices.Contains(SubmittedSlot.SlotIndex))
+			{
+				continue;
+			}
+			++SubmittedCountInGroup;
+
 			int32* RemainingCount = RemainingRequiredCounts.Find(SubmittedSlot.WordID);
 			if (RemainingCount == nullptr ||
 				*RemainingCount <= 0 ||
@@ -875,6 +889,11 @@ bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 				return false;
 			}
 			--(*RemainingCount);
+		}
+
+		if (SubmittedCountInGroup != GroupPair.Value.Num())
+		{
+			return false;
 		}
 	}
 

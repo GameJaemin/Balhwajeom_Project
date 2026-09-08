@@ -15,6 +15,10 @@ struct BALHWAJEOM_API FSentenceWordSlot
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
 	FName CorrectWordID = NAME_None;
+
+	/** 0 = this slot's position is fixed. Slots sharing the same non-zero group may be filled in any order among themselves. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
+	int32 OrderGroup = 0;
 };
 
 USTRUCT(BlueprintType)
@@ -49,10 +53,6 @@ struct BALHWAJEOM_API FSentenceDefinition : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
 	TArray<FSentenceWordSlot> WordSlots;
-
-	/** If false, WordSlots may be filled in any order; only the set of correct words matters. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
-	bool bWordOrderMatters = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
 	TArray<FSentencePhotoSlot> PhotoSlots;
