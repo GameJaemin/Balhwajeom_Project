@@ -146,9 +146,6 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 	{
 		BTN_PopupClose->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePopupCloseClicked);
 	}
-	if (BTN_PuzzleWord01) BTN_PuzzleWord01->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePuzzleWord01Clicked);
-	if (BTN_PuzzleWord02) BTN_PuzzleWord02->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePuzzleWord02Clicked);
-	if (BTN_PuzzleWord03) BTN_PuzzleWord03->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePuzzleWord03Clicked);
 	if (BTN_StatementSubmit) BTN_StatementSubmit->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleStatementSubmitClicked);
 	if (WBP_Messenger)
 	{
@@ -310,6 +307,31 @@ void UBalhwajeomTabletWidget::RefreshFolderContents()
 		}
 	}
 
+	if (WB_AcquiredWords && WidgetTree)
+	{
+		WB_AcquiredWords->ClearChildren();
+		if (Investigation)
+		{
+			TArray<FAcquiredWordRecord> FolderWords;
+			Investigation->GetAcquiredWordsForCharacter(GetActiveCharacterID(), FolderWords);
+			for (const FAcquiredWordRecord& Record : FolderWords)
+			{
+				FWordDefinition Definition;
+				if (!Investigation->GetWordDefinition(Record.WordID, Definition))
+				{
+					continue;
+				}
+				UTextBlock* Entry = WidgetTree->ConstructWidget<UTextBlock>();
+				Entry->SetText(Definition.DisplayWord);
+				Entry->SetColorAndOpacity(FSlateColor(FLinearColor(0.91f, 0.60f, 0.18f, 1.0f)));
+				FSlateFontInfo Font = Entry->GetFont();
+				Font.Size = 20;
+				Entry->SetFont(Font);
+				WB_AcquiredWords->AddChild(Entry);
+			}
+		}
+	}
+
 	if (BTN_EvidenceStatement)
 	{
 		const FName StatementID = VisibleStatementIDs.IsValidIndex(0)
@@ -376,8 +398,12 @@ void UBalhwajeomTabletWidget::PreparePuzzle(FName SentenceID)
 
 void UBalhwajeomTabletWidget::HidePuzzleControls()
 {
-	for (UButton* Button : {BTN_PuzzleWord01.Get(), BTN_PuzzleWord02.Get(), BTN_PuzzleWord03.Get(),
-		BTN_StatementSubmit.Get()})
+	if (WB_PuzzleWords)
+	{
+		WB_PuzzleWords->ClearChildren();
+		WB_PuzzleWords->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	for (UButton* Button : {BTN_StatementSubmit.Get()})
 	{
 		if (Button) Button->SetVisibility(ESlateVisibility::Collapsed);
 	}
@@ -400,7 +426,14 @@ void UBalhwajeomTabletWidget::RefreshPuzzleControls()
 
 	AvailablePuzzleWordIDs.Reset();
 	TArray<FAcquiredWordRecord> AcquiredWords;
-	Investigation->GetAcquiredWords(AcquiredWords);
+	if (Sentence.SentenceType == ESentenceType::Statement)
+	{
+		Investigation->GetAcquiredWordsForCharacter(Sentence.CharacterID, AcquiredWords);
+	}
+	else
+	{
+		Investigation->GetAcquiredWords(AcquiredWords);
+	}
 	for (const FAcquiredWordRecord& Word : AcquiredWords) AvailablePuzzleWordIDs.Add(Word.WordID);
 
 	AvailablePuzzlePhotoIDs.Reset();
@@ -419,26 +452,27 @@ void UBalhwajeomTabletWidget::RefreshPuzzleControls()
 		}
 	}
 
-	auto SetChoiceButton = [this](UButton* Button, FName LabelName, FName ID, const FText& Label)
+	if (WB_PuzzleWords && WidgetTree)
 	{
-		if (!Button) return;
-		const bool bVisible = !ID.IsNone();
-		Button->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-		Button->SetIsEnabled(bVisible);
-		if (bVisible)
+		WB_PuzzleWords->SetVisibility(
+			AvailablePuzzleWordIDs.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		for (const FName WordID : AvailablePuzzleWordIDs)
 		{
-			if (UTextBlock* Text = Cast<UTextBlock>(GetWidgetFromName(LabelName))) Text->SetText(Label);
+			FWordDefinition Word;
+			if (!Investigation->GetWordDefinition(WordID, Word))
+			{
+				continue;
+			}
+			USizeBox* EntrySize = WidgetTree->ConstructWidget<USizeBox>();
+			EntrySize->SetWidthOverride(220.0f);
+			EntrySize->SetHeightOverride(50.0f);
+			UBalhwajeomTabletWordButton* Entry =
+				WidgetTree->ConstructWidget<UBalhwajeomTabletWordButton>();
+			Entry->Configure(WordID, Word.DisplayWord);
+			Entry->OnWordSelected.AddUniqueDynamic(this, &ThisClass::HandlePuzzleWordSelected);
+			EntrySize->AddChild(Entry);
+			WB_PuzzleWords->AddChild(EntrySize);
 		}
-	};
-	UButton* WordButtons[] = {BTN_PuzzleWord01, BTN_PuzzleWord02, BTN_PuzzleWord03};
-	const FName WordLabels[] = {TEXT("TXT_PuzzleWord01"), TEXT("TXT_PuzzleWord02"), TEXT("TXT_PuzzleWord03")};
-	for (int32 Index = 0; Index < 3; ++Index)
-	{
-		FText Label;
-		FName ID = AvailablePuzzleWordIDs.IsValidIndex(Index) ? AvailablePuzzleWordIDs[Index] : NAME_None;
-		FWordDefinition Word;
-		if (!ID.IsNone() && Investigation->GetWordDefinition(ID, Word)) Label = Word.DisplayWord;
-		SetChoiceButton(WordButtons[Index], WordLabels[Index], ID, Label);
 	}
 	if (WB_PuzzlePhotos && WidgetTree && Sentence.RequiredPhotoCount > 0)
 	{
@@ -625,6 +659,29 @@ void UBalhwajeomTabletPhotoButton::HandleClicked()
 	}
 }
 
+void UBalhwajeomTabletWordButton::Configure(const FName InWordID, const FText& InLabel)
+{
+	WordID = InWordID;
+	OnClicked.AddUniqueDynamic(this, &ThisClass::HandleClicked);
+
+	UTextBlock* Label = NewObject<UTextBlock>(this);
+	Label->SetText(InLabel);
+	Label->SetJustification(ETextJustify::Center);
+	Label->SetAutoWrapText(true);
+	FSlateFontInfo Font = Label->GetFont();
+	Font.Size = 20;
+	Label->SetFont(Font);
+	SetContent(Label);
+}
+
+void UBalhwajeomTabletWordButton::HandleClicked()
+{
+	if (!WordID.IsNone())
+	{
+		OnWordSelected.Broadcast(WordID);
+	}
+}
+
 void UBalhwajeomTabletWidget::HandleFolderPhotoSelected(const FName PhotoID)
 {
 	OpenPhoto(PhotoID);
@@ -633,6 +690,15 @@ void UBalhwajeomTabletWidget::HandleFolderPhotoSelected(const FName PhotoID)
 void UBalhwajeomTabletWidget::HandlePuzzlePhotoSelected(const FName PhotoID)
 {
 	SelectPuzzlePhoto(PhotoID);
+}
+
+void UBalhwajeomTabletWidget::HandlePuzzleWordSelected(const FName WordID)
+{
+	const int32 Index = AvailablePuzzleWordIDs.IndexOfByKey(WordID);
+	if (Index != INDEX_NONE)
+	{
+		SelectPuzzleWord(Index);
+	}
 }
 
 void UBalhwajeomTabletWidget::HandleStatementClicked()
@@ -666,7 +732,4 @@ void UBalhwajeomTabletWidget::HandlePopupCloseClicked()
 	HidePopup();
 }
 
-void UBalhwajeomTabletWidget::HandlePuzzleWord01Clicked() { SelectPuzzleWord(0); }
-void UBalhwajeomTabletWidget::HandlePuzzleWord02Clicked() { SelectPuzzleWord(1); }
-void UBalhwajeomTabletWidget::HandlePuzzleWord03Clicked() { SelectPuzzleWord(2); }
 void UBalhwajeomTabletWidget::HandleStatementSubmitClicked() { ValidateActivePuzzle(true); }

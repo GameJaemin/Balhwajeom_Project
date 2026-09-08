@@ -384,6 +384,21 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 		bIsValid = false;
 	};
 
+	for (const TPair<FName, uint8*>& Pair : WordsTable->GetRowMap())
+	{
+		const FWordDefinition* Word = reinterpret_cast<const FWordDefinition*>(Pair.Value);
+		TSet<FName> SeenCharacterIDs;
+		for (const FName CharacterID : Word->RelatedCharacterIDs)
+		{
+			if (!HasCharacter(CharacterID) || SeenCharacterIDs.Contains(CharacterID))
+			{
+				ReportInvalidReference(
+					TEXT("WordDefinition"), Word->WordID, TEXT("RelatedCharacterIDs"), CharacterID);
+			}
+			SeenCharacterIDs.Add(CharacterID);
+		}
+	}
+
 	for (const TPair<FName, uint8*>& Pair : EvidenceDefinitionsTable->GetRowMap())
 	{
 		const FEvidenceDefinition* Definition =
@@ -519,10 +534,22 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 					TEXT("Sentence"), Sentence->SentenceID, TEXT("WordSlotIndex"), FName(*FString::FromInt(Slot.SlotIndex)));
 			}
 			WordSlotIndices.Add(Slot.SlotIndex);
-			if (!HasWord(Slot.CorrectWordID))
+			const FWordDefinition* CorrectWord = Slot.CorrectWordID.IsNone()
+				? nullptr
+				: WordsTable->FindRow<FWordDefinition>(Slot.CorrectWordID, Context, false);
+			if (!CorrectWord)
 			{
 				ReportInvalidReference(
 					TEXT("Sentence"), Sentence->SentenceID, TEXT("CorrectWordID"), Slot.CorrectWordID);
+			}
+			else if (Sentence->SentenceType == ESentenceType::Statement &&
+				!CorrectWord->RelatedCharacterIDs.Contains(Sentence->CharacterID))
+			{
+				ReportInvalidReference(
+					TEXT("Sentence"),
+					Sentence->SentenceID,
+					TEXT("CorrectWordIDFolderAssignment"),
+					Slot.CorrectWordID);
 			}
 		}
 
@@ -978,6 +1005,33 @@ void UBalhwajeomInvestigationSubsystem::GetAcquiredWords(
 	TArray<FAcquiredWordRecord>& OutWords) const
 {
 	AcquiredWords.GenerateValueArray(OutWords);
+	OutWords.Sort([](const FAcquiredWordRecord& A, const FAcquiredWordRecord& B)
+	{
+		return A.AcquiredTime == B.AcquiredTime
+			? A.WordID.LexicalLess(B.WordID)
+			: A.AcquiredTime < B.AcquiredTime;
+	});
+}
+
+void UBalhwajeomInvestigationSubsystem::GetAcquiredWordsForCharacter(
+	const FName CharacterID,
+	TArray<FAcquiredWordRecord>& OutWords) const
+{
+	OutWords.Reset();
+	if (CharacterID.IsNone())
+	{
+		return;
+	}
+
+	for (const TPair<FName, FAcquiredWordRecord>& Pair : AcquiredWords)
+	{
+		const FWordDefinition* Definition = FindWordDefinition(Pair.Key);
+		if (Definition && Definition->RelatedCharacterIDs.Contains(CharacterID))
+		{
+			OutWords.Add(Pair.Value);
+		}
+	}
+
 	OutWords.Sort([](const FAcquiredWordRecord& A, const FAcquiredWordRecord& B)
 	{
 		return A.AcquiredTime == B.AcquiredTime

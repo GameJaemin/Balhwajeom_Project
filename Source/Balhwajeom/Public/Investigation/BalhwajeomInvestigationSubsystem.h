@@ -93,6 +93,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Words")
 	void GetAcquiredWords(TArray<FAcquiredWordRecord>& OutWords) const;
 
+	/** Returns acquired words assigned to the requested character folder by DT_Words. */
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Words")
+	void GetAcquiredWordsForCharacter(
+		FName CharacterID,
+		TArray<FAcquiredWordRecord>& OutWords) const;
+
 	UFUNCTION(BlueprintPure, Category = "Investigation|Photos")
 	bool HasCapturedPhoto(FName PhotoID) const;
 

@@ -91,9 +91,11 @@ struct FFixture
 
 		FWordDefinition Word;
 		Word.WordID = WordID;
+		Word.RelatedCharacterIDs.Add(CharacterID);
 		Words->AddRow(WordID, Word);
 		FWordDefinition AlternateWord;
 		AlternateWord.WordID = AlternateWordID;
+		AlternateWord.RelatedCharacterIDs.Add(CharacterID);
 		Words->AddRow(AlternateWordID, AlternateWord);
 
 		FKeywordDocumentDefinition Document;
@@ -348,12 +350,31 @@ bool FInvestigationDuplicateWordTest::RunTest(const FString& Parameters)
 	const InvestigationSubsystemTests::FFixture Fixture;
 	TestTrue(TEXT("A known word should be acquired once"), Fixture.Subsystem->AcquireWord(
 		InvestigationSubsystemTests::WordID,
-		EWordAcquisitionSource::EvidenceInteraction,
-		InvestigationSubsystemTests::ObjectID));
-	TestFalse(TEXT("The same WordID should not be acquired twice"), Fixture.Subsystem->AcquireWord(
-		InvestigationSubsystemTests::WordID,
 		EWordAcquisitionSource::Messenger,
 		FName(TEXT("MESSAGE_TEST"))));
+	TestFalse(TEXT("The same WordID should not be acquired twice"), Fixture.Subsystem->AcquireWord(
+		InvestigationSubsystemTests::WordID,
+		EWordAcquisitionSource::EvidenceInteraction,
+		InvestigationSubsystemTests::ObjectID));
+	TArray<FAcquiredWordRecord> CharacterWords;
+	Fixture.Subsystem->GetAcquiredWordsForCharacter(
+		InvestigationSubsystemTests::CharacterID,
+		CharacterWords);
+	TestEqual(TEXT("The acquired word should appear in its assigned character folder"), CharacterWords.Num(), 1);
+	TestEqual(
+		TEXT("The character-folder query should preserve the acquired WordID"),
+		CharacterWords[0].WordID,
+		InvestigationSubsystemTests::WordID);
+	TestEqual(
+		TEXT("The character-folder query should preserve Messenger provenance"),
+		CharacterWords[0].SourceType,
+		EWordAcquisitionSource::Messenger);
+	TestEqual(
+		TEXT("The character-folder query should preserve MessageID"),
+		CharacterWords[0].SourceID,
+		FName(TEXT("MESSAGE_TEST")));
+	Fixture.Subsystem->GetAcquiredWordsForCharacter(TEXT("CHAR_OTHER"), CharacterWords);
+	TestTrue(TEXT("An unrelated character folder should not receive the word"), CharacterWords.IsEmpty());
 	return true;
 }
 

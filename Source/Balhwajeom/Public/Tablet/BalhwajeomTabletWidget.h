@@ -35,6 +35,7 @@ enum class EFamilyMember : uint8
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPhotoSelected, FName, PhotoID);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletWordSelected, FName, WordID);
 
 /** Runtime-created photo entry shared by the folder and statement candidate lists. */
 UCLASS()
@@ -53,6 +54,25 @@ private:
 	void HandleClicked();
 
 	FName PhotoID = NAME_None;
+};
+
+/** Runtime-created keyword entry used by statement and photo-analysis puzzles. */
+UCLASS()
+class BALHWAJEOM_API UBalhwajeomTabletWordButton : public UButton
+{
+	GENERATED_BODY()
+
+public:
+	void Configure(FName InWordID, const FText& InLabel);
+
+	UPROPERTY()
+	FOnTabletWordSelected OnWordSelected;
+
+private:
+	UFUNCTION()
+	void HandleClicked();
+
+	FName WordID = NAME_None;
 };
 
 /** Navigation/state logic for the designer-owned WBP_Tablet visual tree. */
@@ -173,17 +193,14 @@ private:
 	void HandlePuzzlePhotoSelected(FName PhotoID);
 
 	UFUNCTION()
+	void HandlePuzzleWordSelected(FName WordID);
+
+	UFUNCTION()
 	void HandleStatementClicked();
 
 	UFUNCTION()
 	void HandlePopupCloseClicked();
 
-	UFUNCTION()
-	void HandlePuzzleWord01Clicked();
-	UFUNCTION()
-	void HandlePuzzleWord02Clicked();
-	UFUNCTION()
-	void HandlePuzzleWord03Clicked();
 	UFUNCTION()
 	void HandleStatementSubmitClicked();
 
@@ -245,17 +262,16 @@ private:
 	TObjectPtr<UWrapBox> WB_EvidencePhotos;
 
 	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWrapBox> WB_AcquiredWords;
+
+	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_EvidenceStatement;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_PopupClose;
 
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> BTN_PuzzleWord01;
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> BTN_PuzzleWord02;
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> BTN_PuzzleWord03;
+	TObjectPtr<UWrapBox> WB_PuzzleWords;
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWrapBox> WB_PuzzlePhotos;
 	UPROPERTY(meta = (BindWidgetOptional))

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Investigation/InvestigationRuntimeTypes.h"
 #include "Tablet/BalhwajeomMessengerTypes.h"
 #include "BalhwajeomMessengerWidget.generated.h"
 
@@ -10,6 +11,7 @@ class UBalhwajeomMessengerDateSeparator;
 class UBalhwajeomMessengerRoomWidget;
 class UBalhwajeomMessengerCatalogDataAsset;
 class UBalhwajeomMessengerRoomDataAsset;
+class UBalhwajeomInvestigationSubsystem;
 class UButton;
 class UScrollBox;
 class UTextBlock;
@@ -81,6 +83,7 @@ protected:
 	TSoftClassPtr<UBalhwajeomMessengerDateSeparator> DateSeparatorClass;
 
 	virtual void NativeOnInitialized() override;
+	virtual void NativeDestruct() override;
 
 	/** Planner-owned source data. InitialUnreadCount and messages are never mutated at runtime. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Messenger")
@@ -100,12 +103,20 @@ private:
 	TSubclassOf<UBalhwajeomMessengerRoomWidget> ResolveRoomWidgetClass();
 	TSubclassOf<UBalhwajeomMessengerMessageWidget> ResolveMessageWidgetClass();
 	void BroadcastUnreadCount();
+	UBalhwajeomInvestigationSubsystem* GetInvestigationSubsystem() const;
+	void RefreshDisplayedKeywordStates();
 
 	UFUNCTION()
 	void HandleRoomClicked(const FString& RoomID);
 
 	UFUNCTION()
 	void HandleBackClicked();
+
+	UFUNCTION()
+	void HandleKeywordClicked(FName WordID, FName MessageID);
+
+	UFUNCTION()
+	void HandleWordAcquired(const FAcquiredWordRecord& WordRecord);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tablet|Messenger", meta = (AllowPrivateAccess = "true"))
 	FString CurrentRoomID;

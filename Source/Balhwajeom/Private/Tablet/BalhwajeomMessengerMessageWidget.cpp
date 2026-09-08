@@ -26,6 +26,14 @@ void UBalhwajeomMessengerMessageWidget::SetupMessage(const FST_MessengerMessage&
 	RenderMessage();
 }
 
+void UBalhwajeomMessengerMessageWidget::SetKeywordAcquired(const bool bAcquired)
+{
+	if (ActiveKeywordWidget)
+	{
+		ActiveKeywordWidget->SetAcquired(bAcquired);
+	}
+}
+
 bool UBalhwajeomMessengerMessageWidget::IsKeywordDataValid(
 	const FST_MessengerMessage& InMessageData)
 {
@@ -91,6 +99,7 @@ void UBalhwajeomMessengerMessageWidget::RenderMessage()
 	SetSpacerRule(Spacer_Right, MessageData.bIsPlayer ? ESlateSizeRule::Automatic : ESlateSizeRule::Fill);
 
 	bHasInteractiveKeyword = false;
+	ActiveKeywordWidget = nullptr;
 	if (!WB_MessageContent)
 	{
 		return;
@@ -127,9 +136,19 @@ void UBalhwajeomMessengerMessageWidget::RenderMessage()
 	}
 #endif
 	KeywordWidget->SetupKeyword(MessageData.KeywordText, MessageData.WordID);
+	KeywordWidget->OnKeywordClicked.AddUniqueDynamic(this, &ThisClass::HandleKeywordClicked);
 	WB_MessageContent->AddChild(KeywordWidget);
+	ActiveKeywordWidget = KeywordWidget;
 	AddTextSegment(FullMessage.Mid(KeywordIndex + Keyword.Len()));
 	bHasInteractiveKeyword = true;
+}
+
+void UBalhwajeomMessengerMessageWidget::HandleKeywordClicked(const FString& WordID)
+{
+	if (!WordID.IsEmpty())
+	{
+		OnKeywordClicked.Broadcast(FName(*WordID), MessageData.MessageID);
+	}
 }
 
 void UBalhwajeomMessengerMessageWidget::AddTextSegment(const FString& Segment)

@@ -154,7 +154,8 @@ namespace TabletDesigner
 		const TCHAR* Message,
 		const bool bIsPlayer,
 		const TCHAR* Keyword = TEXT(""),
-		const TCHAR* WordID = TEXT(""))
+		const TCHAR* WordID = TEXT(""),
+		const TCHAR* MessageID = TEXT(""))
 	{
 		FST_MessengerMessage Result;
 		Result.SenderName = FText::FromString(Sender);
@@ -162,6 +163,7 @@ namespace TabletDesigner
 		Result.bIsPlayer = bIsPlayer;
 		Result.KeywordText = FText::FromString(Keyword);
 		Result.WordID = WordID;
+		Result.MessageID = MessageID;
 		return Result;
 	}
 
@@ -459,7 +461,13 @@ namespace TabletDesigner
 			PhotoScroll->AddChild(PhotoWrap);
 			Place(Records, PhotoScroll, 18, 64, 664, 150);
 			Place(Records, MakeTextButton(TEXT("BTN_EvidenceStatement"), TEXT("▤  진술서"), 22), 699, 76, 210, 110);
-			Place(Records, MakeText(TEXT("TXT_Episode02"), TEXT("EPISODE 02     잠김"), 22, WarmMuted), 12, 230, 600, 42);
+			Place(Records, MakeText(TEXT("TXT_AcquiredWords"), TEXT("획득 키워드"), 20, WarmMuted), 12, 220, 400, 36);
+			UScrollBox* WordScroll = Make<UScrollBox>(TEXT("SB_AcquiredWords"));
+			UWrapBox* WordWrap = Make<UWrapBox>(TEXT("WB_AcquiredWords"), true);
+			WordWrap->SetInnerSlotPadding(FVector2D(18.0f, 8.0f));
+			WordScroll->AddChild(WordWrap);
+			Place(Records, WordScroll, 18, 258, 890, 62);
+			Place(Records, MakeText(TEXT("TXT_Episode02"), TEXT("EPISODE 02     잠김"), 22, WarmMuted), 12, 330, 600, 42);
 			Place(Page, RecordArea, 120, 220, 1200, 410, 5);
 			return Page;
 		}
@@ -726,9 +734,11 @@ namespace TabletDesigner
 			UBorder* Preview = MakeBorder(TEXT("BRD_PopupPreview"), PagePanel);
 			Place(Canvas, Preview, 20, 95, 450, 330);
 			Place(Canvas, MakeText(TEXT("TXT_PuzzleKeywordLabel"), TEXT("획득 키워드"), 18, WarmMuted), 500, 95, 240, 34);
-			Place(Canvas, MakeTextButton(TEXT("BTN_PuzzleWord01"), TEXT("키워드 1"), 21), 500, 135, 240, 54);
-			Place(Canvas, MakeTextButton(TEXT("BTN_PuzzleWord02"), TEXT("키워드 2"), 21), 500, 195, 240, 54);
-			Place(Canvas, MakeTextButton(TEXT("BTN_PuzzleWord03"), TEXT("키워드 3"), 21), 500, 255, 240, 54);
+			UScrollBox* PuzzleWordScroll = Make<UScrollBox>(TEXT("SB_PuzzleWords"));
+			UWrapBox* PuzzleWordWrap = Make<UWrapBox>(TEXT("WB_PuzzleWords"), true);
+			PuzzleWordWrap->SetInnerSlotPadding(FVector2D(8.0f, 8.0f));
+			PuzzleWordScroll->AddChild(PuzzleWordWrap);
+			Place(Canvas, PuzzleWordScroll, 500, 135, 240, 174);
 			Place(Canvas, MakeText(TEXT("TXT_PuzzlePhotoLabel"), TEXT("완성 사진"), 18, WarmMuted), 500, 325, 240, 34);
 			UScrollBox* PuzzlePhotoScroll = Make<UScrollBox>(TEXT("SB_PuzzlePhotos"));
 			UWrapBox* PuzzlePhotoWrap = Make<UWrapBox>(TEXT("WB_PuzzlePhotos"), true);
@@ -1019,7 +1029,8 @@ namespace TabletDesigner
 					TEXT("현관 비밀번호 바뀐 거 잊지 마."),
 					false,
 					TEXT("현관 비밀번호"),
-					TEXT("Mother_DoorCode")),
+					TEXT("WORD_DOOR_CODE"),
+					TEXT("MSG_MOTHER_DOOR_CODE")),
 			}));
 		RoomAssets.Add(EnsureRoom(
 			TEXT("DA_MessengerRoom_Sister"),
@@ -1033,13 +1044,15 @@ namespace TabletDesigner
 					TEXT("당연하지. 5월 13일."),
 					true,
 					TEXT("5월 13일"),
-					TEXT("Sister_Birthday")),
+					TEXT("WORD_SISTER_BIRTHDAY"),
+					TEXT("MSG_SISTER_BIRTHDAY")),
 				MakeArchivedMessage(
 					TEXT("여동생"),
 					TEXT("내 생일에 스노우 글로브 사준다고 했잖아"),
 					false,
 					TEXT("스노우 글로브"),
-					TEXT("Sister_SnowGlobe")),
+					TEXT("WORD_SNOW_GLOBE"),
+					TEXT("MSG_SISTER_SNOW_GLOBE")),
 				MakeArchivedMessage(TEXT("나"), TEXT("기억하고 있어. 걱정하지 마."), true),
 				MakeArchivedMessage(TEXT("여동생"), TEXT("약속이다!"), false),
 			}));
@@ -1054,7 +1067,8 @@ namespace TabletDesigner
 					TEXT("차 키 식탁 위에 뒀어."),
 					false,
 					TEXT("차 키"),
-					TEXT("Brother_CarKey")),
+					TEXT("WORD_CAR_KEY"),
+					TEXT("MSG_BROTHER_CAR_KEY")),
 				MakeArchivedMessage(TEXT("나"), TEXT("확인했어. 내일 가져다줄게."), true),
 				MakeArchivedMessage(TEXT("형"), TEXT("그래, 고맙다."), false),
 			}));
@@ -1473,10 +1487,15 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 		bPassed &= Require(Messenger->GetDisplayedMessageCount() == 5, TEXT("changing rooms clears old messages"));
 		bPassed &= Require(Messenger->GetCurrentUnreadCount(TEXT("Sister")) == 0, TEXT("Sister room becomes read"));
 		bPassed &= Require(Messenger->GetTotalUnreadCount() == 3, TEXT("unread totals remain isolated per room"));
-		if (const UBalhwajeomMessengerMessageWidget* PlayerMessage = Messenger->GetDisplayedMessageWidget(1))
+		if (UBalhwajeomMessengerMessageWidget* PlayerMessage = Messenger->GetDisplayedMessageWidget(1))
 		{
 			bPassed &= Require(PlayerMessage->IsPlayerMessage(), TEXT("player message retains right-side alignment state"));
 			bPassed &= Require(PlayerMessage->HasInteractiveKeyword(), TEXT("valid WordID keyword is interactive"));
+			UBalhwajeomMessengerKeywordWidget* KeywordWidget = PlayerMessage->GetActiveKeywordWidget();
+			UButton* KeywordButton = KeywordWidget
+				? Cast<UButton>(KeywordWidget->GetWidgetFromName(TEXT("BTN_Keyword")))
+				: nullptr;
+			bPassed &= Require(KeywordButton != nullptr, TEXT("interactive keyword button exists"));
 		}
 		else
 		{
@@ -1536,6 +1555,10 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 	bPassed &= Require(Tablet->GetActiveFamilyMember() == EFamilyMember::Sister, TEXT("active member is Sister"));
 	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_EvidencePhotos"))) != nullptr,
 		TEXT("dynamic evidence photo list exists"));
+	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_AcquiredWords"))) != nullptr,
+		TEXT("character folder acquired-word list exists"));
+	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_PuzzleWords"))) != nullptr,
+		TEXT("dynamic puzzle word candidate list exists"));
 	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_PuzzlePhotos"))) != nullptr,
 		TEXT("dynamic puzzle photo candidate list exists"));
 	if (UTextBlock* FolderTitle = FindText(TEXT("TXT_FolderTitle")))
@@ -1682,12 +1705,13 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		Words->GetRowMap().IsEmpty() && Photos->GetRowMap().IsEmpty() &&
 		Documents->GetRowMap().IsEmpty() && Choices->GetRowMap().IsEmpty() && Sentences->GetRowMap().IsEmpty())
 	{
-		auto AddWord = [Words, &SeededRows](const TCHAR* ID, const TCHAR* Display, const TCHAR* Description)
+		auto AddWord = [Words, &SeededRows, SisterCharacterID](const TCHAR* ID, const TCHAR* Display, const TCHAR* Description)
 		{
 			FWordDefinition Row;
 			Row.WordID = ID;
 			Row.DisplayWord = FText::FromString(Display);
 			Row.Description = FText::FromString(Description);
+			Row.RelatedCharacterIDs.Add(SisterCharacterID);
 			Words->AddRow(Row.WordID, Row);
 			++SeededRows;
 		};
@@ -1800,6 +1824,107 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		++SeededRows;
 	}
 
+	// Keep DT_Words authoritative while preserving all existing messenger conversation assets.
+	auto EnsureSisterWord = [Words, &SeededRows, SisterCharacterID](
+		const FName WordID,
+		const TCHAR* Display,
+		const TCHAR* Description)
+	{
+		FWordDefinition* Word = Words->FindRow<FWordDefinition>(
+			WordID, TEXT("Messenger investigation upgrade"), false);
+		if (!Word)
+		{
+			FWordDefinition NewWord;
+			NewWord.WordID = WordID;
+			NewWord.DisplayWord = FText::FromString(Display);
+			NewWord.Description = FText::FromString(Description);
+			NewWord.RelatedCharacterIDs.Add(SisterCharacterID);
+			Words->AddRow(WordID, NewWord);
+			++SeededRows;
+			return;
+		}
+		if (Word->RelatedCharacterIDs.IsEmpty())
+		{
+			Word->RelatedCharacterIDs.Add(SisterCharacterID);
+			++SeededRows;
+		}
+	};
+
+	EnsureSisterWord(TEXT("WORD_PIG"), TEXT("돼지"), TEXT("거울 앞에 놓여 있던 작은 돼지 장식."));
+	EnsureSisterWord(TEXT("WORD_MIRROR"), TEXT("거울"), TEXT("불에 그을렸지만 반사면 일부가 남아 있다."));
+	EnsureSisterWord(TEXT("WORD_SNOW_GLOBE"), TEXT("스노우 글로브"), TEXT("가족이 생일 선물로 준비했던 장식품."));
+	EnsureSisterWord(TEXT("WORD_SISTER_BIRTHDAY"), TEXT("5월 13일"), TEXT("여동생의 생일."));
+	EnsureSisterWord(TEXT("WORD_DOOR_CODE"), TEXT("현관 비밀번호"), TEXT("가족이 바꾼 현관 비밀번호에 대한 단서."));
+	EnsureSisterWord(TEXT("WORD_CAR_KEY"), TEXT("차 키"), TEXT("식탁 위에 놓여 있던 형의 차 키."));
+	if (Characters->GetRowMap().Num() == 1)
+	{
+		const FName SoleCharacterID = Characters->GetRowMap().CreateConstIterator().Key();
+		for (const TPair<FName, uint8*>& Pair : Words->GetRowMap())
+		{
+			FWordDefinition* Word = reinterpret_cast<FWordDefinition*>(Pair.Value);
+			if (Word->RelatedCharacterIDs.IsEmpty())
+			{
+				Word->RelatedCharacterIDs.Add(SoleCharacterID);
+				++SeededRows;
+			}
+		}
+	}
+
+	bool bMessengerDataSaved = true;
+	UBalhwajeomMessengerCatalogDataAsset* MessengerCatalog =
+		LoadObject<UBalhwajeomMessengerCatalogDataAsset>(
+			nullptr, TabletDesigner::MessengerCatalogAssetPath);
+	if (MessengerCatalog)
+	{
+		const TMap<FString, FName> CanonicalWordIDs = {
+			{TEXT("Mother_DoorCode"), TEXT("WORD_DOOR_CODE")},
+			{TEXT("Sister_Birthday"), TEXT("WORD_SISTER_BIRTHDAY")},
+			{TEXT("Sister_SnowGlobe"), TEXT("WORD_SNOW_GLOBE")},
+			{TEXT("Brother_CarKey"), TEXT("WORD_CAR_KEY")}
+		};
+		const TMap<FName, FName> MessageIDs = {
+			{TEXT("WORD_DOOR_CODE"), TEXT("MSG_MOTHER_DOOR_CODE")},
+			{TEXT("WORD_SISTER_BIRTHDAY"), TEXT("MSG_SISTER_BIRTHDAY")},
+			{TEXT("WORD_SNOW_GLOBE"), TEXT("MSG_SISTER_SNOW_GLOBE")},
+			{TEXT("WORD_CAR_KEY"), TEXT("MSG_BROTHER_CAR_KEY")}
+		};
+
+		for (UBalhwajeomMessengerRoomDataAsset* Room : MessengerCatalog->Rooms)
+		{
+			if (!Room)
+			{
+				continue;
+			}
+			bool bRoomChanged = false;
+			for (FST_MessengerMessage& Message : Room->Messages)
+			{
+				if (const FName* CanonicalID = CanonicalWordIDs.Find(Message.WordID))
+				{
+					Message.WordID = CanonicalID->ToString();
+					bRoomChanged = true;
+				}
+				const FName WordID(*Message.WordID);
+				if (!Message.WordID.IsEmpty() && Message.MessageID.IsNone())
+				{
+					if (const FName* StableMessageID = MessageIDs.Find(WordID))
+					{
+						Message.MessageID = *StableMessageID;
+					}
+					else
+					{
+						Message.MessageID = FName(*FString::Printf(
+							TEXT("MSG_%s_%s"), *Room->RoomID.ToUpper(), *WordID.ToString()));
+					}
+					bRoomChanged = true;
+				}
+			}
+			if (bRoomChanged)
+			{
+				bMessengerDataSaved &= TabletDesigner::SaveDataAsset(Room);
+			}
+		}
+	}
+
 	const auto SaveTable = [](UDataTable* Table)
 	{
 		UPackage* Package = Table->GetOutermost();
@@ -1813,7 +1938,7 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		return UPackage::SavePackage(Package, Table, *Filename, SaveArgs);
 	};
 
-	const bool bSaved = SaveTable(EvidenceDefinitions) && SaveTable(EvidenceStates) &&
+	const bool bSaved = bMessengerDataSaved && SaveTable(EvidenceDefinitions) && SaveTable(EvidenceStates) &&
 		SaveTable(Words) && SaveTable(Photos) && SaveTable(Documents) &&
 		SaveTable(Choices) && SaveTable(Sentences) && SaveTable(Characters);
 	if (bSaved)

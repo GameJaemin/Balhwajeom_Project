@@ -64,6 +64,12 @@ EDataValidationResult UBalhwajeomMessengerRoomDataAsset::IsDataValid(
 
 	for (int32 Index = 0; Index < Messages.Num(); ++Index)
 	{
+		const bool bHasKeyword = !Messages[Index].KeywordText.IsEmpty() || !Messages[Index].WordID.IsEmpty();
+		if (bHasKeyword && Messages[Index].MessageID.IsNone())
+		{
+			AddError(FText::FromString(FString::Printf(
+				TEXT("Message %d: a keyword-bearing message needs a stable MessageID."), Index)));
+		}
 		if (Messages[Index].SentAt == FDateTime::MinValue()
 			|| (Index > 0 && Messages[Index].SentAt < Messages[Index - 1].SentAt))
 		{

@@ -18,6 +18,10 @@ struct BALHWAJEOM_API FWordDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Word", meta = (MultiLine = "true"))
 	FText Description;
 
+	/** Character folders where this word is visible and can be used as a statement candidate. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Word")
+	TArray<FName> RelatedCharacterIDs;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Word")
 	bool bUnlockedByDefault = false;
 };
