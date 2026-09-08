@@ -15,6 +15,10 @@ struct BALHWAJEOM_API FSentenceWordSlot
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
 	FName CorrectWordID = NAME_None;
+
+	/** 0 = this slot's position is fixed. Slots sharing the same non-zero group may be filled in any order among themselves. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
+	int32 OrderGroup = 0;
 };
 
 USTRUCT(BlueprintType)
@@ -54,6 +58,10 @@ struct BALHWAJEOM_API FSentenceDefinition : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
 	ESentenceType SentenceType = ESentenceType::PhotoAnalysis;
+
+	/** The person this Statement-type sentence belongs to, for tablet folder placement. Empty for PhotoAnalysis rows. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
+	FName CharacterID = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (MultiLine = "true"))
 	FText SentenceTemplate;
