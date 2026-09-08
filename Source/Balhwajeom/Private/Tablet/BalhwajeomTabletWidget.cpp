@@ -356,7 +356,7 @@ void UBalhwajeomTabletWidget::OpenPhoto(const FName PhotoID)
 	}
 	else if (Body.IsEmpty())
 	{
-		Body = Photo.WorldStoryText;
+		Body = FText::Join(FText::FromString(TEXT("\n")), Photo.WorldStoryLines);
 	}
 	ShowPopup(Photo.PhotoName, Body);
 	if (!Photo.PhotoSentenceID.IsNone() && !Investigation->IsSentenceSolved(Photo.PhotoSentenceID))

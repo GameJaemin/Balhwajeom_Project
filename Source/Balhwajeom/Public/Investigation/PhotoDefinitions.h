@@ -35,11 +35,11 @@ struct BALHWAJEOM_API FPhotoDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo")
 	TArray<FName> GrantedWordIDs;
 
-	/** World-locked 3D story text shown after capture, and again when reopening the photo from the tablet. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo", meta = (MultiLine = "true"))
-	FText WorldStoryText;
+	/** World-locked 3D story lines shown after capture (and again when reopening the photo from the tablet), in order. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo")
+	TArray<FText> WorldStoryLines;
 
-	/** Narration voice played alongside WorldStoryText. */
+	/** Narration voice played alongside WorldStoryLines. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo|Audio")
 	TSoftObjectPtr<USoundBase> StoryVoice;
 };

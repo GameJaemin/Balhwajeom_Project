@@ -1742,7 +1742,7 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		MirrorPhoto.PhotoSentenceID = Analysis.SentenceID;
 		MirrorPhoto.CharacterID = SisterCharacterID;
 		MirrorPhoto.GrantedWordIDs.Add(TEXT("WORD_PIG"));
-		MirrorPhoto.WorldStoryText = FText::FromString(TEXT("불탄 거울 속에 돼지 장식의 실루엣이 남아 있다."));
+		MirrorPhoto.WorldStoryLines.Add(FText::FromString(TEXT("불탄 거울 속에 돼지 장식의 실루엣이 남아 있다.")));
 		Photos->AddRow(MirrorPhoto.PhotoID, MirrorPhoto);
 		++SeededRows;
 
@@ -1753,7 +1753,7 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		StoryPhoto.CustomDescription = FText::FromString(TEXT("그을린 유리 안에서 작은 눈송이가 흔들린다."));
 		StoryPhoto.CharacterID = SisterCharacterID;
 		StoryPhoto.GrantedWordIDs.Add(TEXT("WORD_SNOW_GLOBE"));
-		StoryPhoto.WorldStoryText = FText::FromString(TEXT("가족의 대화가 잠시 귓가에 되살아난다."));
+		StoryPhoto.WorldStoryLines.Add(FText::FromString(TEXT("가족의 대화가 잠시 귓가에 되살아난다.")));
 		Photos->AddRow(StoryPhoto.PhotoID, StoryPhoto);
 		++SeededRows;
 

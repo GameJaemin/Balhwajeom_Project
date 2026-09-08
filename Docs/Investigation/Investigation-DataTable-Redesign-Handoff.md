@@ -119,8 +119,9 @@ CharacterID          FName   이 사진이 표시될 인물 폴더 → DT_Charac
                              "진술서 증거로 채택되는지"와는 완전히 별개 — 그건 그 진술서의
                              PhotoSlots.CorrectPhotoID가 결정. 인물의 문장을 거치지 않고 직접 참조함
                              (한때 StatementSentenceID로 문장을 거쳐 인물을 찾는 구조였으나 혼란을 줘서 직접 참조로 변경)
-WorldStoryText       FText   촬영 직후 & 폴더 재열람 시 월드 고정 3D 텍스트
-StoryVoice           TSoftObjectPtr<USoundBase>  WorldStoryText 낭독 음성
+WorldStoryLines      TArray<FText>  촬영 직후 & 폴더 재열람 시 월드 고정 3D 텍스트. 여러 문장을 배열에 순서대로 담고,
+                     표시할 때는 그 순서대로 출력(현재 태블릿 팝업에서는 줄바꿈으로 이어붙여 표시)
+StoryVoice           TSoftObjectPtr<USoundBase>  WorldStoryLines 낭독 음성
 ```
 
 `PhotoTags`(사용처 없음), `CaptureSound`(별도 촬영효과음, 내레이션만 쓰기로 결정)는 삭제됨. `GrantedWordIDs`는 아직 미구현 — 4.1절 참고.
