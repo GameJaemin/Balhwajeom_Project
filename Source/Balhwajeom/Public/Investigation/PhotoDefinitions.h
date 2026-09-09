@@ -31,6 +31,11 @@ struct BALHWAJEOM_API FPhotoDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo")
 	FName CharacterID = NAME_None;
 
+	/** Optional extra fill-in-blank sentence (usually SentenceType=PhotoAnalysis) that must also be
+	 * solved before this photo counts as valid evidence in any statement's photo slot. Empty = none required. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo")
+	FName EvidenceSentenceID = NAME_None;
+
 	/** Keywords granted once when this photo is successfully captured. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo")
 	TArray<FName> GrantedWordIDs;

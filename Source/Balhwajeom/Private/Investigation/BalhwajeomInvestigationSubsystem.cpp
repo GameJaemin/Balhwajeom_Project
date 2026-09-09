@@ -475,6 +475,17 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 			}
 		}
 
+		if (!Photo->EvidenceSentenceID.IsNone())
+		{
+			const FSentenceDefinition* EvidenceSentence = SentencesTable->FindRow<FSentenceDefinition>(
+				Photo->EvidenceSentenceID, Context, false);
+			if (EvidenceSentence == nullptr || EvidenceSentence->SentenceType != ESentenceType::PhotoAnalysis)
+			{
+				ReportInvalidReference(
+					TEXT("PhotoDefinition"), Photo->PhotoID, TEXT("EvidenceSentenceID"), Photo->EvidenceSentenceID);
+			}
+		}
+
 		if (!HasCharacter(Photo->CharacterID))
 		{
 			ReportInvalidReference(
@@ -1215,10 +1226,24 @@ bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 		const FSentenceRuntimeProgress* AnalysisProgress =
 			SubmittedPhoto != nullptr ? SentenceProgress.Find(SubmittedPhoto->PhotoSentenceID) : nullptr;
 
-		if (AnalysisProgress != nullptr && AnalysisProgress->bSolved)
+		if (AnalysisProgress == nullptr || !AnalysisProgress->bSolved)
 		{
-			++CorrectPhotoCount;
+			continue;
 		}
+
+		// If this photo requires an extra evidence-specific sentence (e.g. "why does this photo
+		// disprove the statement"), that must be solved too before the photo counts as evidence here.
+		if (SubmittedPhoto != nullptr && !SubmittedPhoto->EvidenceSentenceID.IsNone())
+		{
+			const FSentenceRuntimeProgress* EvidenceProgress =
+				SentenceProgress.Find(SubmittedPhoto->EvidenceSentenceID);
+			if (EvidenceProgress == nullptr || !EvidenceProgress->bSolved)
+			{
+				continue;
+			}
+		}
+
+		++CorrectPhotoCount;
 	}
 
 	if (CorrectPhotoCount < Sentence->RequiredPhotoCount)
