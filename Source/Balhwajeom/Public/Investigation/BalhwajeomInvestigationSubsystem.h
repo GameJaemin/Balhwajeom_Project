@@ -108,6 +108,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Photos")
 	void GetCapturedPhotos(TArray<FCapturedPhotoRecord>& OutPhotos) const;
 
+	/** Single-record lookup, e.g. to resolve ImageRelativePath for a tablet thumbnail. */
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Photos")
+	bool GetCapturedPhoto(FName PhotoID, FCapturedPhotoRecord& OutRecord) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Sentences")
 	bool ValidateSentence(
 		FName SentenceID,

@@ -9,7 +9,9 @@
 class UBorder;
 class UBalhwajeomMessengerWidget;
 class UButton;
+class UImage;
 class UOverlay;
+class USizeBox;
 class UTextBlock;
 class UTexture2D;
 class UWrapBox;
@@ -31,14 +33,15 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPhotoSelected, FName, Photo
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletWordSelected, FName, WordID);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletFolderSelected, FName, CharacterID);
 
-/** Runtime-created photo entry shared by the folder and statement candidate lists. */
+/** Runtime-created photo entry shared by the folder grid, the statement tile, and the puzzle candidate lists. */
 UCLASS()
 class BALHWAJEOM_API UBalhwajeomTabletPhotoButton : public UButton
 {
 	GENERATED_BODY()
 
 public:
-	void Configure(FName InPhotoID, const FText& InLabel);
+	/** Thumbnail is optional: puzzle-candidate entries and the statement tile pass nullptr for a text-only tile. */
+	void Configure(FName InPhotoID, const FText& InLabel, UTexture2D* Thumbnail = nullptr);
 
 	UPROPERTY()
 	FOnTabletPhotoSelected OnPhotoSelected;
@@ -165,9 +168,17 @@ private:
 	void SelectPuzzleWord(int32 Index);
 	void SelectPuzzlePhoto(FName PhotoID);
 	void ValidateActivePuzzle(bool bExplicitStatementSubmit);
-	void ShowPopup(const FText& Title, const FText& Body);
+	void ShowPopup(const FText& Title, const FText& Body, UTexture2D* PhotoTexture = nullptr);
 	void HidePopup();
 	void UpdateUnreadBadge();
+
+	/** Populates WB_PuzzleWords with the active folder's acquired keywords. Called whenever a photo or
+	 * statement popup opens, so keywords stay visible whether or not there's an active puzzle to solve;
+	 * PreparePuzzle/RefreshPuzzleControls overwrites this with the interactive candidate list when one applies. */
+	void RefreshAcquiredWordsDisplay();
+
+	/** Loads (and caches) the PNG a camera capture saved to disk for PhotoID, for folder thumbnails and the detail popup. */
+	UTexture2D* GetOrLoadCapturedPhotoTexture(FName PhotoID);
 
 	UPROPERTY(Transient, meta = (BindWidgetAnimOptional))
 	TObjectPtr<UWidgetAnimation> TabletUpAnim;
@@ -207,8 +218,9 @@ private:
 	UFUNCTION()
 	void HandlePuzzleWordSelected(FName WordID);
 
+	/** Bound to the folder grid's statement tile (reuses UBalhwajeomTabletPhotoButton; the broadcast FName is a SentenceID here, not a PhotoID). */
 	UFUNCTION()
-	void HandleStatementClicked();
+	void HandleStatementTileSelected(FName SentenceID);
 
 	UFUNCTION()
 	void HandlePopupCloseClicked();
@@ -228,11 +240,19 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TXT_FolderTitle;
 
+	/** Small icon next to TXT_FolderTitle, styled like a Windows Explorer window's title-bar icon. Shares DefaultFolderIcon. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> IMG_FolderTitleIcon;
+
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TXT_PopupTitle;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TXT_PopupBody;
+
+	/** Shows the captured PNG for the photo currently open in the popup. Collapsed for non-photo popups (e.g. the statement). */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> IMG_PopupPhoto;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> BRD_MessengerBadge;
@@ -253,8 +273,9 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_Memo;
 
+	/** Windows-Explorer-style "x" close button in the folder window's title bar (still just navigates back). */
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> BTN_FolderBack;
+	TObjectPtr<UButton> BTN_FolderClose;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_InternetBack;
@@ -268,11 +289,9 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWrapBox> WB_EvidencePhotos;
 
+	/** Single-slot container pinned at the bottom-center of the folder window, holding the statement tile. */
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UWrapBox> WB_AcquiredWords;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> BTN_EvidenceStatement;
+	TObjectPtr<USizeBox> SB_StatementTile;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_PopupClose;
@@ -293,4 +312,8 @@ private:
 	TArray<FName> AvailablePuzzlePhotoIDs;
 	int32 NextWordSlotCursor = 0;
 	int32 NextPhotoSlotCursor = 0;
+
+	/** PhotoID -> decoded PNG, so reopening a folder/photo doesn't re-read the file from disk. */
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<UTexture2D>> CapturedPhotoTextureCache;
 };

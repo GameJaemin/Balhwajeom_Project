@@ -1125,6 +1125,20 @@ void UBalhwajeomInvestigationSubsystem::GetCapturedPhotos(
 	});
 }
 
+bool UBalhwajeomInvestigationSubsystem::GetCapturedPhoto(
+	FName PhotoID,
+	FCapturedPhotoRecord& OutRecord) const
+{
+	OutRecord = FCapturedPhotoRecord{};
+	const FCapturedPhotoRecord* Record = CapturedPhotos.Find(PhotoID);
+	if (Record == nullptr)
+	{
+		return false;
+	}
+	OutRecord = *Record;
+	return true;
+}
+
 bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 	FName SentenceID,
 	const FSentenceSubmission& Submission,
