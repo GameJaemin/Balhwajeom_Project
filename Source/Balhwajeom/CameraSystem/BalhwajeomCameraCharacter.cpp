@@ -207,6 +207,20 @@ bool ABalhwajeomCameraCharacter::IsInCameraMode() const
 	return PhotoCameraComponent && PhotoCameraComponent->IsInCameraMode();
 }
 
+void ABalhwajeomCameraCharacter::RestoreExplorationView(float BlendTime)
+{
+	if (ActiveCameraZone)
+	{
+		ActiveCameraZone->ActivateCamera(this);
+		return;
+	}
+
+	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
+	{
+		PlayerController->SetViewTargetWithBlend(this, BlendTime, VTBlend_Cubic);
+	}
+}
+
 TArray<FBalhwajeomEvidenceData> ABalhwajeomCameraCharacter::GetCollectedEvidence() const
 {
 	return PhotoCameraComponent ? PhotoCameraComponent->GetCollectedEvidence() : TArray<FBalhwajeomEvidenceData>();
