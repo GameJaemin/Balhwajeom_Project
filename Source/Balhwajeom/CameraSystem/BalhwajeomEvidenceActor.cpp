@@ -204,9 +204,9 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID)
 	{
 		InspectionComponent->FarLabel = State.FarLabel;
 		InspectionComponent->MidLabel = State.MidLabel;
-		InspectionComponent->NearLabel = State.ObservationText;
+		InspectionComponent->NearLabel = State.NearLabel;
 		InspectionComponent->InspectionText = State.InteractionText.IsEmpty()
-			? State.ObservationText : State.InteractionText;
+			? State.NearLabel : State.InteractionText;
 	}
 	FEvidenceDefinition ObjectDefinition;
 	if (Investigation->GetEvidenceDefinition(ObjectID, ObjectDefinition))

@@ -63,7 +63,7 @@ struct BALHWAJEOM_API FBalhwajeomCameraTargetInfo
 	FBalhwajeomEvidenceData EvidenceData;
 
 	/** Object-authored lines shown only while the target is focused and centered. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target", meta = (DeprecatedProperty, DeprecationMessage = "Use EvidenceStateDefinition.ObservationText instead."))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target", meta = (DeprecatedProperty, DeprecationMessage = "Use EvidenceStateDefinition.NearLabel instead."))
 	TArray<FText> InformationStages;
 
 	/** Allows informational targets that can be focused but should not be collected. */

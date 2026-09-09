@@ -56,7 +56,7 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 	FText MidLabel;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inspection", meta = (MultiLine = "true"))
-	FText ObservationText;
+	FText NearLabel;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture")
 	bool bCanCapture = false;

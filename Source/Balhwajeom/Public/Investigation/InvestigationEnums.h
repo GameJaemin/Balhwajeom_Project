@@ -24,7 +24,7 @@ UENUM(BlueprintType)
 enum class EPhotoDescriptionSource : uint8
 {
 	None,
-	ObservationText,
+	NearLabel,
 	InteractionText,
 	Custom
 };

@@ -1,3 +1,3 @@
-Name,StateID,ObjectID,StateName,InteractionBehavior,InteractionPresentation,NextStateID,InteractionText,KeywordDocumentID,FarLabel,MidLabel,ObservationText,bCanCapture,PhotoID
+Name,StateID,ObjectID,StateName,InteractionBehavior,InteractionPresentation,NextStateID,InteractionText,KeywordDocumentID,FarLabel,MidLabel,NearLabel,bCanCapture,PhotoID
 STATE_PIG_MIRROR,STATE_PIG_MIRROR,OBJ_PIG_MIRROR,그을린 상태,Once,KeywordSelectionWindow,,,DOC_MIRROR_LABEL,,그을린 거울이 있다.,돼지 장식이 거울을 향해 놓여 있다.,true,PHOTO_PIG_MIRROR
 STATE_SNOW_GLOBE,STATE_SNOW_GLOBE,OBJ_SNOW_GLOBE,발견 상태,Repeatable,SimpleText,,가족이 주고받던 생일 선물이다.,,,유리 장식품이 있다.,불길을 견딘 스노우글로브가 놓여 있다.,true,PHOTO_SNOW_GLOBE

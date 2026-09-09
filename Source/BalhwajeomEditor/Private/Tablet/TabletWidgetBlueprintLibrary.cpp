@@ -1762,7 +1762,7 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		FPhotoDefinition MirrorPhoto;
 		MirrorPhoto.PhotoID = TEXT("PHOTO_PIG_MIRROR");
 		MirrorPhoto.PhotoName = FText::FromString(TEXT("돼지가 보던 거울"));
-		MirrorPhoto.DescriptionSource = EPhotoDescriptionSource::ObservationText;
+		MirrorPhoto.DescriptionSource = EPhotoDescriptionSource::NearLabel;
 		MirrorPhoto.PhotoSentenceID = Analysis.SentenceID;
 		MirrorPhoto.CharacterID = SisterCharacterID;
 		MirrorPhoto.GrantedWordIDs.Add(TEXT("WORD_PIG"));
@@ -1796,7 +1796,7 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		MirrorState.InteractionPresentation = EEvidenceInteractionPresentation::KeywordSelectionWindow;
 		MirrorState.KeywordDocumentID = Document.KeywordDocumentID;
 		MirrorState.MidLabel = FText::FromString(TEXT("그을린 거울이 있다"));
-		MirrorState.ObservationText = FText::FromString(TEXT("돼지 장식이 거울을 향해 놓여 있다."));
+		MirrorState.NearLabel = FText::FromString(TEXT("돼지 장식이 거울을 향해 놓여 있다."));
 		MirrorState.bCanCapture = true;
 		MirrorState.PhotoID = MirrorPhoto.PhotoID;
 		EvidenceStates->AddRow(MirrorState.StateID, MirrorState);
@@ -1817,7 +1817,7 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		SnowGlobeState.InteractionPresentation = EEvidenceInteractionPresentation::SimpleText;
 		SnowGlobeState.InteractionText = FText::FromString(TEXT("가족이 주고받던 생일 선물이다."));
 		SnowGlobeState.MidLabel = FText::FromString(TEXT("유리 장식품이 있다"));
-		SnowGlobeState.ObservationText = FText::FromString(TEXT("불길을 견딘 스노우글로브가 놓여 있다."));
+		SnowGlobeState.NearLabel = FText::FromString(TEXT("불길을 견딘 스노우글로브가 놓여 있다."));
 		SnowGlobeState.bCanCapture = true;
 		SnowGlobeState.PhotoID = StoryPhoto.PhotoID;
 		EvidenceStates->AddRow(SnowGlobeState.StateID, SnowGlobeState);

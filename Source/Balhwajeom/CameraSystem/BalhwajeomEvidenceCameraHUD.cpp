@@ -134,23 +134,23 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 
 		if (bShowCenteredText)
 		{
-			FText ObservationText;
+			FText NearLabelText;
 			if (bResolvedInvestigationDefinitions)
 			{
-				ObservationText = StateDefinition.ObservationText;
+				NearLabelText = StateDefinition.NearLabel;
 			}
 			else
 			{
 				const UInspectionComponent* Inspection = DisplayedEvidence
 					? DisplayedEvidence->GetInspectionComponent()
 					: nullptr;
-				ObservationText = Inspection ? Inspection->NearLabel : FText::GetEmpty();
+				NearLabelText = Inspection ? Inspection->NearLabel : FText::GetEmpty();
 			}
 
-			if (!ObservationText.IsEmptyOrWhitespace())
+			if (!NearLabelText.IsEmptyOrWhitespace())
 			{
 				DrawText(
-					ObservationText.ToString(),
+					NearLabelText.ToString(),
 					GuideColor,
 					DisplayedGuidePosition.X + 15.0f,
 					DisplayedGuidePosition.Y - 9.0f,

@@ -70,7 +70,7 @@ EvidenceActor / Camera / Tablet / Messenger
 | `DT_Sentences` | 사진 분석 문장과 진술서 반증 조건 |
 | `DT_Characters` | 태블릿 인물 폴더 이름과 정렬 순서 |
 
-`DT_OutputTexts.uasset`은 저장소에 남아 있지만 최신 구조에서는 제거된 테이블로 보인다. 참조 여부를 확인한 뒤 정리 대상으로 다룬다.
+`DT_OutputTexts.uasset`은 최신 구조에서 참조되지 않는 테이블로 확인되어 저장소에서 제거했다(2026-09-09).
 
 ### 2.3 기능별 연결 구조
 
@@ -237,7 +237,6 @@ Gameplay Tag 기반 `StoryStateSubsystem`과 자동 테스트가 존재한다. �
 #### P1-4. 레거시와 문서 정리
 
 - Deprecated 카메라 필드·함수의 Blueprint 참조 0건 확인 후 제거
-- `DT_OutputTexts.uasset` 실제 참조 확인 후 제거 여부 결정
 - `DT_KeywordDocuments`의 구형 중첩 선택지 필드 제거
 - `Scripts/Investigation/README.md`의 “7종” 표기를 실제 8종에 맞게 수정
 - 과거 설계 문서에 `역사 기록/최신 문서 아님` 상태를 명시
@@ -256,25 +255,41 @@ Gameplay Tag 기반 `StoryStateSubsystem`과 자동 테스트가 존재한다. �
 
 ## 6. 제안 일정
 
-아래 일정은 **2026-09-09 시작, 현재 프로토타입을 유지하며 본편 1개 흐름을 완성한다는 가정**의 4주 제안이다. 인원과 콘텐츠 분량이 확정되면 날짜보다 완료 조건을 우선해 조정한다.
+프로젝트 마감은 **2026-09-18**이다. 아래 일정은 **2026-09-09 시작, 마감일 기준 9일 남은 상태**에서 다음 8개 작업을 병렬로 끝내는 것을 가정한 제안이다.
+
+```text
+① 태블릿 세부 기능 구현 (진술서·사진·브라우저·메신저)
+② 카메라 세부 시스템 수정
+③ 상호작용 세부 시스템 수정
+④ 아트워크 파일 통합
+⑤ 이펙트 연결
+⑥ 사운드 재생 처리
+⑦ 저장 시스템(SaveGame) 구현
+⑧ QA
+```
+
+담당자별 세부 변경사항·필요작업은 각 트랙의 담당 문서([9. 문서 기준과 참고 자료](#9-문서-기준과-참고-자료))를 먼저 확인한 뒤 작업한다. 이 표는 날짜보다 완료 조건을 우선한다 — 일정이 늦어지면 QA(9/18) 범위를 줄이는 것이 아니라 P2급 연출 항목부터 줄인다.
 
 | 기간 | 마일스톤 | 주요 작업 | 종료 조건 |
 |---|---|---|---|
-| 9/9–9/11 | M0 기준선 고정 | 최신 빌드·자동화·프로토타입 회귀 테스트, 실패 목록 작성 | 알려진 오류와 담당자가 정리됨 |
-| 9/12–9/18 | M1 본편 데이터 | 마스터 ID 목록, 8개 DataTable, 메신저 연표, 증거 Blueprint 이전 | 본편 데이터 교차 검증 통과 |
-| 9/19–9/25 | M2 메인 흐름·저장 | Level_Main 통합, 전체 조사 루프, 전체 진행 SaveGame | 종료·재실행 후 진행 복원 성공 |
-| 9/26–10/2 | M3 연출·정리 | 카메라/태블릿 UX, 사진 수명주기, 레거시 제거, 문서 정리 | Blueprint Compile 및 PIE 회귀 통과 |
-| 10/3–10/6 | M4 패키지 QA | Development 패키지, 촬영 이미지, 성능, 전체 플레이 테스트 | 릴리스 후보 빌드와 잔여 버그 목록 확정 |
+| 9/9 | M0 킥오프 | 트랙별 담당 배정, 담당 문서 확인, 마스터 ID 목록 착수, 브라우저 최소 범위 확정 | 8개 작업 각각에 담당자와 범위가 정해짐 |
+| 9/10–9/12 | M1 세부 시스템 1차 구현 | ①③②(태블릿·상호작용·카메라 세부 시스템) 1차 구현, ⑦저장 시스템 구조 설계 및 1차 구현, 본편 데이터 1차 입력 | 트랙별 1차 구현 완료, DataTable 1차 교차 검증 통과 |
+| 9/13–9/15 | M2 콘텐츠 통합 | ④아트워크 통합, ⑤이펙트 연결, ⑥사운드 재생 처리, ⑦저장 시스템 완료, ①②③ 세부 시스템 마무리 | 종료·재실행 후 진행 복원 성공, 연출·사운드 1차 반영 완료 |
+| 9/16–9/17 | M3 전체 통합·회귀 | Level_Main 전체 흐름 연결(메신저→조사→촬영→태블릿→스토리), 트랙 간 통합 버그 수정, 전체 Blueprint Compile | PIE에서 시작 맵부터 진술 반증까지 막힘없이 1회 진행 |
+| 9/18 | M4 최종 QA | ⑧패키지 빌드 QA, 잔여 버그 수정, 릴리스 후보 확정 | 치명 오류·진행 불가·데이터 참조 오류 0건, 릴리스 후보 빌드 확정 |
 
 ### 권장 병렬 분배
 
-| 트랙 | 담당 범위 | 충돌 주의 대상 |
-|---|---|---|
-| 데이터·진행 | 8개 DataTable, SaveGame, StoryState | Investigation C++와 DataTable `.uasset` |
-| 월드·상호작용 | Level_Main, EvidenceActor, 증거 Blueprint | `.umap`, `BP_Evidence_*` |
-| 카메라·UI | 사진 저장, 태블릿, 메신저, 연출 | `WBP_Tablet`, 메신저 WBP, 카메라 BP |
+| 트랙 | 담당 작업 | 담당 문서 | 충돌 주의 대상 |
+|---|---|---|---|
+| 데이터·저장 | 본편 데이터 입력(8개 DataTable), ⑦저장 시스템 구현 | [DataTable-Handoff.md](./Systems/DataTable-Handoff.md), [Subsystem-Handoff.md](./Systems/Subsystem-Handoff.md) | Investigation C++와 DataTable `.uasset` |
+| 상호작용 | ③상호작용 세부 시스템 수정, 본편 증거 Blueprint 이전 | [Interaction-Handoff.md](./Systems/Interaction-Handoff.md) | `.umap`, `BP_Evidence_*` |
+| 카메라 | ②카메라 세부 시스템 수정, 패키지 촬영 검증 | [Camera-Handoff.md](./Systems/Camera-Handoff.md) | 카메라 관련 `.uasset` |
+| 태블릿 | ①진술서·사진·브라우저·메신저 세부 기능 구현 | [태블릿_폴더.md](./Systems/Tablet/태블릿_폴더.md), [태블릿_브라우져.md](./Systems/Tablet/태블릿_브라우져.md), [태블릿_메신져.md](./Systems/Tablet/태블릿_메신져.md) | `WBP_Tablet`, 메신저 WBP |
+| 아트·이펙트·사운드 | ④아트워크 파일 통합, ⑤이펙트 연결, ⑥사운드 재생 처리 | 각 시스템 문서의 "변경 필요 사항" 항목 | 각 트랙의 비주얼·사운드 컴포넌트(사전 조율 필수) |
+| QA | ⑧전체 회귀·패키지 QA | 5개 담당 문서의 "완료 조건" 전체 | 없음(관찰·검증 전담, M1부터 상시 스모크 테스트 권장) |
 
-같은 `.uasset` 또는 `.umap`은 한 시점에 한 명만 수정한다. CSV 원본과 DataTable 재임포트 담당도 한 명으로 고정한다.
+같은 `.uasset` 또는 `.umap`은 한 시점에 한 명만 수정한다. CSV 원본과 DataTable 재임포트 담당도 한 명으로 고정한다. 아트·이펙트·사운드 트랙은 특정 파일을 전담하지 않고 다른 트랙의 결과물에 붙는 작업이므로, 착수 전 대상 트랙 담당자와 연동 지점을 반드시 맞춘다.
 
 ## 7. 마일스톤 공통 완료 기준
 
@@ -310,23 +325,16 @@ Gameplay Tag 기반 `StoryStateSubsystem`과 자동 테스트가 존재한다. �
 
 ```text
 현재 코드·Config·에셋
-→ Final-Prototype-Handoff.md
-→ Investigation-DataTable-Redesign-Handoff.md
-→ Camera-Photo-System-Final-Design.md
-→ 초기 구현 인수인계 및 3인 분배안
 ```
 
-참고 문서:
+참고 문서 — 트랙별 담당자는 작업 전 해당 문서에서 변경 필요사항과 체크리스트를 확인한다:
 
-- [최종 프로토타입 인수인계](./Investigation/Final-Prototype-Handoff.md)
-- [프로토타입 레벨 테스트 가이드](./Investigation/Prototype-Level-Test-Guide.md)
-- [DataTable/Subsystem 재설계 기록](./Investigation/Investigation-DataTable-Redesign-Handoff.md)
-- [카메라·사진 최종 설계](./Investigation/Camera-Photo-System-Final-Design.md)
-- [초기 Investigation 구현 인수인계](./Investigation/Investigation-System-Implementation-Handoff.md)
-- [3인 구현 분배안](./Investigation/Three-Person-Implementation-Plan.md)
-- [메신저 날짜·시간 편집 가이드](./MessengerTimeline.md)
+- [DataTable 담당 작업 문서](./Systems/DataTable-Handoff.md) — 8개 DataTable 본편 데이터 입력
+- [Subsystem 담당 작업 문서](./Systems/Subsystem-Handoff.md) — InvestigationSubsystem·StoryStateSubsystem·전체 진행 SaveGame
+- [카메라 시스템 담당 작업 문서](./Systems/Camera-Handoff.md) — 카메라 세부 시스템 수정
+- [상호작용 담당 작업 문서](./Systems/Interaction-Handoff.md) — 상호작용 세부 시스템 수정
+- 태블릿 담당 작업 문서 — 진술서·사진·브라우저·메신저 세부 기능: [태블릿_폴더](./Systems/Tablet/태블릿_폴더.md)(사진·진술서) / [태블릿_브라우져](./Systems/Tablet/태블릿_브라우져.md) / [태블릿_메신져](./Systems/Tablet/태블릿_메신져.md)
 
-과거 문서의 “미구현” 목록은 작성 당시 상태다. 현재 구현 여부를 판단할 때는 이 문서와 실제 코드를 우선한다. 특히 사진 키워드 지급, KeywordChoices 분리, LieText, 문장 해결 조회, 인물별 목록 조회, DT_Characters, 태블릿 프로토타입은 이미 구현된 항목이다.
 
 ## 10. 진행 기록 갱신 규칙
 
