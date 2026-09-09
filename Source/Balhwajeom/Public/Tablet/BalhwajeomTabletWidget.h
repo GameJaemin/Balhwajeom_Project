@@ -1,9 +1,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Blueprint/DragDropOperation.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Button.h"
 #include "Investigation/InvestigationRuntimeTypes.h"
+#include "Investigation/SentenceDefinitions.h"
 #include "BalhwajeomTabletWidget.generated.h"
 
 class UBorder;
@@ -30,17 +32,18 @@ enum class ETabletPage : uint8
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPhotoSelected, FName, PhotoID);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletWordSelected, FName, WordID);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletFolderSelected, FName, CharacterID);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTabletBlankDropped, int32, SlotIndex, FName, WordID);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTabletPhotoSlotDropped, int32, SlotIndex, FName, PhotoID);
 
-/** Runtime-created photo entry shared by the folder grid, the statement tile, and the puzzle candidate lists. */
+/** Runtime-created photo entry shared by the folder grid and the statement tile. */
 UCLASS()
 class BALHWAJEOM_API UBalhwajeomTabletPhotoButton : public UButton
 {
 	GENERATED_BODY()
 
 public:
-	/** Thumbnail is optional: puzzle-candidate entries and the statement tile pass nullptr for a text-only tile. */
+	/** Thumbnail is optional: the statement tile passes nullptr for a text-only tile. */
 	void Configure(FName InPhotoID, const FText& InLabel, UTexture2D* Thumbnail = nullptr);
 
 	UPROPERTY()
@@ -51,25 +54,6 @@ private:
 	void HandleClicked();
 
 	FName PhotoID = NAME_None;
-};
-
-/** Runtime-created keyword entry used by statement and photo-analysis puzzles. */
-UCLASS()
-class BALHWAJEOM_API UBalhwajeomTabletWordButton : public UButton
-{
-	GENERATED_BODY()
-
-public:
-	void Configure(FName InWordID, const FText& InLabel);
-
-	UPROPERTY()
-	FOnTabletWordSelected OnWordSelected;
-
-private:
-	UFUNCTION()
-	void HandleClicked();
-
-	FName WordID = NAME_None;
 };
 
 /** Runtime-created home-page entry for one DT_Characters folder. */
@@ -89,6 +73,124 @@ private:
 	void HandleClicked();
 
 	FName CharacterID = NAME_None;
+};
+
+/** Drag payload: which acquired keyword is being dragged onto a sentence blank. */
+UCLASS()
+class BALHWAJEOM_API UBalhwajeomWordDragDropOperation : public UDragDropOperation
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(BlueprintReadWrite, Category = "Tablet")
+	FName WordID = NAME_None;
+};
+
+/**
+ * Draggable keyword tag. Used both as the puzzle's candidate list (drag onto a sentence
+ * blank to submit it) and as the folder's plain acquired-word display (drag has nowhere to
+ * land there, so it's inert). A UUserWidget rather than a UButton because native drag
+ * detection (NativeOnMouseButtonDown/NativeOnDragDetected) is only overridable on UUserWidget.
+ */
+UCLASS()
+class BALHWAJEOM_API UBalhwajeomTabletWordChip : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	void Configure(FName InWordID, const FText& InLabel);
+	FName GetWordID() const { return WordID; }
+
+protected:
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
+
+private:
+	FName WordID = NAME_None;
+	FText DisplayLabel;
+};
+
+/** One droppable blank ("[]") inside the interactive sentence-builder row. */
+UCLASS()
+class BALHWAJEOM_API UBalhwajeomTabletSentenceBlank : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	void Configure(int32 InSlotIndex);
+	void SetFilled(const FText& WordText);
+	void SetEmpty();
+	int32 GetSlotIndex() const { return SlotIndex; }
+
+	UPROPERTY()
+	FOnTabletBlankDropped OnBlankDropped;
+
+protected:
+	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
+
+private:
+	int32 SlotIndex = 0;
+
+	UPROPERTY()
+	TObjectPtr<UTextBlock> DisplayText;
+};
+
+/** Drag payload: which captured (and analysis-solved) photo is being dragged onto a photo evidence slot. */
+UCLASS()
+class BALHWAJEOM_API UBalhwajeomPhotoDragDropOperation : public UDragDropOperation
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(BlueprintReadWrite, Category = "Tablet")
+	FName PhotoID = NAME_None;
+};
+
+/**
+ * Draggable photo-evidence tag, shown for a captured photo once its own analysis sentence
+ * (PhotoSentenceID) is solved. Drag onto a UBalhwajeomTabletPhotoSlot to submit it as evidence.
+ */
+UCLASS()
+class BALHWAJEOM_API UBalhwajeomTabletPhotoChip : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	void Configure(FName InPhotoID, const FText& InLabel);
+	FName GetPhotoID() const { return PhotoID; }
+
+protected:
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
+
+private:
+	FName PhotoID = NAME_None;
+	FText DisplayLabel;
+};
+
+/** One droppable photo-evidence slot (FSentencePhotoSlot) inside the active sentence's photo evidence row. */
+UCLASS()
+class BALHWAJEOM_API UBalhwajeomTabletPhotoSlot : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	void Configure(int32 InSlotIndex);
+	void SetFilled(const FText& PhotoLabel);
+	void SetEmpty();
+	int32 GetSlotIndex() const { return SlotIndex; }
+
+	UPROPERTY()
+	FOnTabletPhotoSlotDropped OnPhotoSlotDropped;
+
+protected:
+	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
+
+private:
+	int32 SlotIndex = 0;
+
+	UPROPERTY()
+	TObjectPtr<UTextBlock> DisplayText;
 };
 
 /** Navigation/state logic for the designer-owned WBP_Tablet visual tree. */
@@ -164,10 +266,14 @@ private:
 	void OpenPhoto(FName PhotoID);
 	void PreparePuzzle(FName SentenceID);
 	void RefreshPuzzleControls();
+	void BuildSentenceBuilder(const FSentenceDefinition& Sentence);
+	void BuildPhotoSlots(const FSentenceDefinition& Sentence);
 	void HidePuzzleControls();
-	void SelectPuzzleWord(int32 Index);
-	void SelectPuzzlePhoto(FName PhotoID);
 	void ValidateActivePuzzle(bool bExplicitStatementSubmit);
+	/** Runs ValidateActivePuzzle once every word blank and photo slot has something in it, so
+	 * failure feedback ("잘못된 증거인 것 같다") only appears after the puzzle is fully filled in,
+	 * not after every single drop. */
+	void EvaluatePuzzleIfComplete();
 	void ShowPopup(const FText& Title, const FText& Body, UTexture2D* PhotoTexture = nullptr);
 	void HidePopup();
 	void UpdateUnreadBadge();
@@ -212,11 +318,13 @@ private:
 	UFUNCTION()
 	void HandleFolderPhotoSelected(FName PhotoID);
 
+	/** Bound to a UBalhwajeomTabletSentenceBlank's OnBlankDropped; fills that word slot (correctness is judged once the whole puzzle is filled in). */
 	UFUNCTION()
-	void HandlePuzzlePhotoSelected(FName PhotoID);
+	void HandleSentenceBlankDropped(int32 SlotIndex, FName WordID);
 
+	/** Bound to a UBalhwajeomTabletPhotoSlot's OnPhotoSlotDropped; fills that photo evidence slot. */
 	UFUNCTION()
-	void HandlePuzzleWordSelected(FName WordID);
+	void HandlePhotoSlotDropped(int32 SlotIndex, FName PhotoID);
 
 	/** Bound to the folder grid's statement tile (reuses UBalhwajeomTabletPhotoButton; the broadcast FName is a SentenceID here, not a PhotoID). */
 	UFUNCTION()
@@ -298,8 +406,26 @@ private:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWrapBox> WB_PuzzleWords;
+
+	/** Interactive sentence row built from SentenceTemplate: static text segments plus one
+	 * UBalhwajeomTabletSentenceBlank per "[]". Shown instead of TXT_PopupBody while an unsolved
+	 * puzzle is active. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWrapBox> WB_SentenceBuilder;
+
+	/** Shows "잘못된 증거인 것 같다" briefly after an incorrect drop. Cleared on the next correct drop or popup open. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TXT_PuzzleFeedback;
+
+	/** Draggable photo-evidence candidates: captured photos whose own analysis sentence is solved.
+	 * Only populated/shown while the active sentence has PhotoSlots. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWrapBox> WB_PuzzlePhotos;
+
+	/** Droppable photo-evidence slots (FSentencePhotoSlot), one per required/optional photo slot. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWrapBox> WB_PhotoSlots;
+
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_StatementSubmit;
 
@@ -309,9 +435,14 @@ private:
 	FName ActiveSentenceID = NAME_None;
 	FSentenceSubmission ActiveSubmission;
 	TArray<FName> AvailablePuzzleWordIDs;
-	TArray<FName> AvailablePuzzlePhotoIDs;
-	int32 NextWordSlotCursor = 0;
-	int32 NextPhotoSlotCursor = 0;
+
+	/** Blank widgets for the sentence currently open, keyed by SlotIndex. Rebuilt each PreparePuzzle. */
+	UPROPERTY(Transient)
+	TMap<int32, TObjectPtr<UBalhwajeomTabletSentenceBlank>> ActiveBlanksBySlot;
+
+	/** Photo evidence slot widgets for the sentence currently open, keyed by SlotIndex. Rebuilt each PreparePuzzle. */
+	UPROPERTY(Transient)
+	TMap<int32, TObjectPtr<UBalhwajeomTabletPhotoSlot>> ActivePhotoSlotsBySlot;
 
 	/** PhotoID -> decoded PNG, so reopening a folder/photo doesn't re-read the file from disk. */
 	UPROPERTY(Transient)

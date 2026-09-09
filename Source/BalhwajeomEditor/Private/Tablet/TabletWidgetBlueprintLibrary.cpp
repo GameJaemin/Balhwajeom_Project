@@ -710,7 +710,7 @@ namespace TabletDesigner
 
 			USizeBox* PopupSize = Make<USizeBox>(TEXT("SB_Popup"));
 			PopupSize->SetWidthOverride(820.0f);
-			PopupSize->SetHeightOverride(680.0f);
+			PopupSize->SetHeightOverride(860.0f);
 			UOverlaySlot* PopupSizeSlot = Popup->AddChildToOverlay(PopupSize);
 			PopupSizeSlot->SetHorizontalAlignment(HAlign_Center);
 			PopupSizeSlot->SetVerticalAlignment(VAlign_Center);
@@ -727,24 +727,52 @@ namespace TabletDesigner
 			UImage* PopupPhotoImage = Make<UImage>(TEXT("IMG_PopupPhoto"), true);
 			PopupPhotoImage->SetVisibility(ESlateVisibility::Collapsed);
 			Preview->SetContent(PopupPhotoImage);
+			// Acquired-keyword list is always populated (ShowPopup -> RefreshAcquiredWordsDisplay),
+			// whether or not a puzzle is active; entries are drag sources onto WB_SentenceBuilder's
+			// blanks (see UBalhwajeomTabletWordChip).
 			Place(Canvas, MakeText(TEXT("TXT_PuzzleKeywordLabel"), TEXT("획득 키워드"), 18, WarmMuted), 500, 95, 240, 34);
 			UScrollBox* PuzzleWordScroll = Make<UScrollBox>(TEXT("SB_PuzzleWords"));
 			UWrapBox* PuzzleWordWrap = Make<UWrapBox>(TEXT("WB_PuzzleWords"), true);
 			PuzzleWordWrap->SetInnerSlotPadding(FVector2D(8.0f, 8.0f));
 			PuzzleWordScroll->AddChild(PuzzleWordWrap);
-			Place(Canvas, PuzzleWordScroll, 500, 135, 240, 174);
-			Place(Canvas, MakeText(TEXT("TXT_PuzzlePhotoLabel"), TEXT("완성 사진"), 18, WarmMuted), 500, 325, 240, 34);
-			UScrollBox* PuzzlePhotoScroll = Make<UScrollBox>(TEXT("SB_PuzzlePhotos"));
-			UWrapBox* PuzzlePhotoWrap = Make<UWrapBox>(TEXT("WB_PuzzlePhotos"), true);
-			PuzzlePhotoWrap->SetInnerSlotPadding(FVector2D(8.0f, 8.0f));
-			PuzzlePhotoScroll->AddChild(PuzzlePhotoWrap);
-			Place(Canvas, PuzzlePhotoScroll, 500, 365, 240, 100);
+			Place(Canvas, PuzzleWordScroll, 500, 135, 240, 330);
+
+			// Interactive sentence (static text segments + draggable blanks), built at runtime by
+			// UBalhwajeomTabletWidget::BuildSentenceBuilder from SentenceTemplate. Occupies the same
+			// spot as TXT_PopupBody; only one of the two is visible at a time.
+			UWrapBox* SentenceBuilder = Make<UWrapBox>(TEXT("WB_SentenceBuilder"), true);
+			SentenceBuilder->SetInnerSlotPadding(FVector2D(4.0f, 6.0f));
+			SentenceBuilder->SetVisibility(ESlateVisibility::Collapsed);
+			Place(Canvas, SentenceBuilder, 40, 450, 700, 85);
+
 			UTextBlock* Body = MakeText(
 				TEXT("TXT_PopupBody"), TEXT("증거 Placeholder"), 22, WarmMuted, true);
 			Body->SetJustification(ETextJustify::Center);
 			Body->SetAutoWrapText(true);
-			Place(Canvas, Body, 40, 450, 700, 100);
-			Place(Canvas, MakeTextButton(TEXT("BTN_StatementSubmit"), TEXT("자백 반증"), 23), 530, 565, 210, 62);
+			Place(Canvas, Body, 40, 450, 700, 85);
+
+			// Photo-evidence drag-and-drop (only relevant when the active sentence has PhotoSlots):
+			// WB_PuzzlePhotos lists eligible captured photos (analysis sentence already solved) to
+			// drag from, WB_PhotoSlots holds the drop targets. Built at runtime by
+			// UBalhwajeomTabletWidget::RefreshPuzzleControls/BuildPhotoSlots; both collapsed until then.
+			Place(Canvas, MakeText(TEXT("TXT_PuzzlePhotoLabel"), TEXT("증거 사진"), 18, WarmMuted), 40, 550, 300, 30);
+			UWrapBox* PuzzlePhotos = Make<UWrapBox>(TEXT("WB_PuzzlePhotos"), true);
+			PuzzlePhotos->SetInnerSlotPadding(FVector2D(8.0f, 8.0f));
+			PuzzlePhotos->SetVisibility(ESlateVisibility::Collapsed);
+			Place(Canvas, PuzzlePhotos, 40, 582, 700, 75);
+
+			UWrapBox* PhotoSlots = Make<UWrapBox>(TEXT("WB_PhotoSlots"), true);
+			PhotoSlots->SetInnerSlotPadding(FVector2D(8.0f, 8.0f));
+			PhotoSlots->SetVisibility(ESlateVisibility::Collapsed);
+			Place(Canvas, PhotoSlots, 40, 660, 700, 75);
+
+			UTextBlock* Feedback = MakeText(
+				TEXT("TXT_PuzzleFeedback"), TEXT("잘못된 증거인 것 같다."), 20, FLinearColor(0.82f, 0.30f, 0.24f, 1.0f), true);
+			Feedback->SetJustification(ETextJustify::Center);
+			Feedback->SetVisibility(ESlateVisibility::Collapsed);
+			Place(Canvas, Feedback, 40, 740, 700, 28);
+
+			Place(Canvas, MakeTextButton(TEXT("BTN_StatementSubmit"), TEXT("자백 반증"), 23), 530, 775, 210, 62);
 			Popup->SetVisibility(ESlateVisibility::Collapsed);
 			return Popup;
 		}
@@ -1584,8 +1612,12 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 	// opens, not as a standing list on the folder page -- see UBalhwajeomTabletWidget::ShowPopup.
 	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_PuzzleWords"))) != nullptr,
 		TEXT("dynamic puzzle word candidate list exists"));
+	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_SentenceBuilder"))) != nullptr,
+		TEXT("interactive sentence-builder row exists"));
 	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_PuzzlePhotos"))) != nullptr,
-		TEXT("dynamic puzzle photo candidate list exists"));
+		TEXT("draggable photo-evidence candidate list exists"));
+	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_PhotoSlots"))) != nullptr,
+		TEXT("photo-evidence drop slot row exists"));
 	if (UTextBlock* FolderTitle = FindText(TEXT("TXT_FolderTitle")))
 	{
 		bPassed &= Require(FolderTitle->GetText().ToString() == TEXT("여동생"), TEXT("folder title updates"));

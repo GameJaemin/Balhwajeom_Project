@@ -23,10 +23,9 @@
 ### 남은 수동 작업 (에디터에서 진행 필요)
 
 - [x] `WBP_Tablet` 재생성 완료(2026-09-09, `redesign_tablet_widget_blueprint.py` 헤드리스 실행). `BTN_Sister`/`BTN_Brother`/`BTN_Mother`/`BTN_EvidenceStatement`/`TXT_EvidenceStatement`/`TXT_FolderSubtitle`는 삭제됐고, `WB_PersonFolders`/`IMG_PopupPhoto`/`IMG_FolderTitleIcon`/`BTN_FolderClose`가 새로 생성됨.
-- [ ] `WBP_Tablet` Class Defaults에서 `Default Folder Icon`에 공용 폴더 아이콘 텍스처를 지정(홈 화면 폴더 버튼과 폴더 창 타이틀 아이콘에 함께 쓰인다).
+- [x] `WBP_Tablet` Class Defaults의 `Default Folder Icon`에 `/Game/Balhwajeom/UI/Tablet/Folder` 텍스처 적용 완료(2026-09-09, `set_tablet_folder_icon.py`). 홈 화면 폴더 버튼과 폴더 창 타이틀 아이콘에 함께 쓰인다.
 - [x] `TABLET_SMOKE` 자동화(`RunTabletWidgetSmokeTest`) 재실행 통과 확인(2026-09-09). `Balhwajeom.Investigation` 자동화는 별도로 재실행 필요.
-- [ ] 본편 인물 구성이 확정되면 `DT_Characters` CSV에 실제 인물 행(현재는 `SISTER` 1건)과 `FolderSortOrder`를 채운다 — [DataTable-Handoff.md](../DataTable-Handoff.md) 담당자와 진행.
-- [ ] `Default Folder Icon`을 아직 지정하지 않았다면 `IMG_FolderTitleIcon`/홈 화면 폴더 버튼 모두 아이콘 없이(텍스트만) 보인다 — 아트 통합 트랙에서 처리.
+- [x] Chapter 1(여동생) 실 데이터로 `DT_Characters` 포함 8종 DataTable 교체 완료(2026-09-09) — [DataTable-Handoff.md](../DataTable-Handoff.md) 참고. 현재는 `CHARACTER_SISTER` 1건뿐이라 홈 화면 폴더도 1개만 보인다.
 
 ## 2. 사진 / 진술서 폴더 타일 (완료, 2026-09-09)
 
@@ -34,32 +33,38 @@
 - `WB_EvidencePhotos`(WrapBox): 촬영된 사진 타일들만(진술서는 더 이상 여기 없음). 각 타일은 ~170x170(`SizeBox`)로 홈 화면 폴더 아이콘과 거의 같은 크기다. `UBalhwajeomTabletWidget::GetOrLoadCapturedPhotoTexture(PhotoID)`가 `FImageUtils::ImportFileAsTexture2D`로 촬영된 PNG(`FCapturedPhotoRecord::ImageRelativePath`)를 런타임에 디코드해 실제 썸네일로 보여준다(디코드 결과는 `CapturedPhotoTextureCache`에 캐시).
 - `SB_StatementTile`(SizeBox, 170x170 고정): 폴더 창 **하단 중앙**에 단독으로 배치된 진술서 타일(있는 경우만 표시, 없으면 `Collapsed`). 사진과 같은 위젯(`UBalhwajeomTabletPhotoButton`)을 재사용하지만 썸네일 없이 텍스트만(`"{FolderName} 진술서"`) 표시하고 `HandleStatementTileSelected(SentenceID)`로 연결된다 — 인물별 진술서는 현재 1개까지만 지원(`VisibleStatementIDs[0]`).
 
-두 타일 종류 모두 라벨은 `SetAutoWrapText(false)` + `SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis)`로, 실제 윈도우 탐색기처럼 한 줄로 표시하고 넘치면 "..."으로 잘리게 했다(썸네일이 생기면서 줄바꿈 텍스트가 타일 밖으로 잘려 보이던 문제 해결).
+두 타일 종류 모두 (2026-09-09 재수정) 라벨 앞의 ✓/? 표시는 제거했고(사용자 확인: 불필요), `SetAutoWrapText(false)` + `SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis)`로 실제 윈도우 탐색기처럼 한 줄로 표시하고 넘치면 "..."으로 잘리게 했다. 버튼 자체의 기본 회색 배경/패딩도 `MakeButtonTransparent()`(스타일을 `NoDrawType` 브러시 + 0 패딩으로 교체)로 제거해, 사진 썸네일 뒤에 남던 회색 박스를 없앴다(윈도우 사진 아이콘처럼 사진만 보이도록).
 
 사진을 클릭하면 `OpenPhoto`가 `Photo.PhotoSentenceID` 존재 여부로 화면을 분기한다(둘 다 팝업 이미지(`IMG_PopupPhoto`)에 같은 캐시된 텍스처를 표시):
-- **분석 문장 있음**(`SentenceType=PhotoAnalysis`): 문장 빈칸(`SentenceTemplate`/해결 시 `ResultText`)과 함께 `PreparePuzzle`이 키워드 후보 목록(`WB_PuzzleWords`)을 인터랙티브하게 띄운다.
-- **분석 문장 없음**(자연어만) 또는 이미 해결된 문장: `CustomDescription`/`WorldStoryLines`/`ResultText`를 그대로 보여주고, 퍼즐 컨트롤(단어 슬롯 채우기 등)은 띄우지 않는다.
+- **분석 문장 있음**(`SentenceType=PhotoAnalysis`): 문장 빈칸(`SentenceTemplate`/해결 시 `ResultText`)과 함께 `PreparePuzzle`이 아래 3절의 드래그 앤 드롭 퍼즐을 띄운다.
+- **분석 문장 없음**(자연어만) 또는 이미 해결된 문장: `CustomDescription`/`WorldStoryLines`/`ResultText`를 그대로 보여주고, 퍼즐 컨트롤은 띄우지 않는다.
 
 `ShowPopup(Title, Body, PhotoTexture = nullptr)`가 팝업의 단일 진입점이다. `PhotoTexture`가 없으면(예: 진술서 팝업) `IMG_PopupPhoto`를 `Collapsed` 처리한다.
 
-**획득 키워드 표시 위치 변경(완료, 2026-09-09)**: 예전에는 폴더 페이지 자체에 `TXT_AcquiredWords`/`WB_AcquiredWords`가 상시 노출됐지만, 지금은 폴더 페이지에서 완전히 제거하고 **사진 또는 진술서를 열었을 때만** 팝업 안에서 보이도록 옮겼다. `ShowPopup`이 항상 `RefreshAcquiredWordsDisplay()`를 호출해 팝업의 `WB_PuzzleWords`에 그 인물의 획득 키워드 전체를 표시한다(해결 여부·문장 유무와 무관하게 항상 표시). 이후 `PreparePuzzle`→`RefreshPuzzleControls`가 실행되면(분석 문장이 있고 미해결일 때) 같은 `WB_PuzzleWords`를 퍼즐용 인터랙티브 후보 목록으로 덮어써 대체한다. 즉 `WB_PuzzleWords`는 이제 "정보 표시"와 "퍼즐 후보 선택" 두 역할을 겸한다. `EPISODE 01`/`EPISODE 02` 구분 텍스트는 요청대로 완전히 제거했다.
+**획득 키워드 표시 위치(완료, 2026-09-09)**: 폴더 페이지 자체에는 없고, **사진 또는 진술서를 열었을 때만** 팝업 안(`WB_PuzzleWords`)에 보인다. `ShowPopup`이 항상 `RefreshAcquiredWordsDisplay()`를 호출해 그 인물의 획득 키워드 전체를 드래그 가능한 칩(`UBalhwajeomTabletWordChip`)으로 채운다(해결 여부·문장 유무와 무관하게 항상 표시). 이후 `PreparePuzzle`→`RefreshPuzzleControls`가 실행되면(분석 문장이 있고 미해결일 때) 같은 `WB_PuzzleWords`를 퍼즐용 후보 목록으로 덮어써 대체한다.
 
 **폴더 창 UI(완료, 2026-09-09)**: 실제 윈도우 탐색기 창처럼 보이도록 폴더 페이지 상단을 "타이틀바" 구조로 바꿨다 — 사용자 확인 사항: 색상은 태블릿 기존 세피아톤 유지(구조만 윈도우식), 주소창/검색창은 만들지 않음, 아이콘 배치는 기존 그리드(큰 아이콘) 뷰 유지.
 - 왼쪽: `IMG_FolderTitleIcon`(작은 폴더 아이콘, `DefaultFolderIcon` 공유) + `TXT_FolderTitle`.
-- 오른쪽: `BTN_FolderClose`("×" 버튼, 실제로는 기존 `HandleBackClicked`/`NavigateBack()`을 그대로 호출 — 어차피 PersonFolder에서 갈 수 있는 이전 페이지는 Home뿐이라 "닫기"와 "뒤로가기"가 동일하다).
-- `TXT_FolderSubtitle`("보관된 기록")은 윈도우 타이틀바에 없는 요소라 제거했다. 주소창/검색창은 만들지 않았다(사용자 확인).
-- 기존 `BTN_FolderBack`은 `BTN_FolderClose`로 이름을 바꿨다(`BTN_PopupClose`와 네이밍 통일).
+- 오른쪽: `BTN_FolderClose`("×" 버튼, 실제로는 기존 `HandleBackClicked`/`NavigateBack()`을 그대로 호출).
+- 주소창/검색창은 만들지 않았다(사용자 확인).
+- 폴더 아이콘 텍스처는 `/Game/Balhwajeom/UI/Tablet/Folder`를 `DefaultFolderIcon`에 적용해 홈 화면 폴더 버튼·타이틀바 아이콘에 공용으로 쓴다.
 
 변경 필요 사항:
-- [ ] 사진 퍼즐(`AvailablePuzzleWordIDs`/`AvailablePuzzlePhotoIDs`, `NextWordSlotCursor`/`NextPhotoSlotCursor`)의 슬롯 수가 본편 문장 길이와 맞는지 실제 데이터로 검증.
 - [ ] 사진 갤러리의 읽음/안읽음 표시(`bViewedInTablet`, 로드맵 P1-2)를 이 페이지에 반영할지 확정.
 - [ ] 인물별 진술서가 2개 이상 필요해지면 `VisibleStatementIDs[0]` 고정 대신 여러 타일을 만들도록 확장한다.
 
-## 3. 진술서 (Statement / 진술 반증)
+## 3. 퍼즐 — 드래그 앤 드롭 (문장 빈칸 + 증거 사진), 진술서 반증 (완료, 2026-09-09)
 
-현재 상태: 완료. 위 폴더 그리드의 진술서 타일 클릭 → `HandleStatementTileSelected(SentenceID)` → `ActiveSentenceID`+`ActiveSubmission`(`FSentenceSubmission`)에 선택한 키워드·완성 사진을 채운 뒤 `BTN_StatementSubmit`/`HandleStatementSubmitClicked` → `ValidateActivePuzzle(true)` → `InvestigationSubsystem::ValidateSentence`로 반증한다. 해결된 추리 사진만 `GetStatementSentencesForCharacter`를 통해 후보로 노출된다. (기존에는 `BTN_EvidenceStatement`라는 별도 고정 버튼이었으나, 2026-09-09에 폴더 그리드의 동적 타일로 통합했다.)
+기존의 "후보 목록 클릭 → 다음 빈 슬롯에 순서대로 채움" 방식(`AvailablePuzzleWordIDs`/`NextWordSlotCursor` 커서)을 걷어내고, **드래그 앤 드롭**으로 완전히 교체했다.
+
+**문장 빈칸(`WordSlots`)**: `PreparePuzzle`→`RefreshPuzzleControls`가 실행되면 `BuildSentenceBuilder(Sentence)`가 `SentenceTemplate`을 `[]` 기준으로 나눠, 고정 텍스트 구간은 `UTextBlock`으로, 각 `[]`(즉 `WordSlots`의 `SlotIndex` 순서)는 드롭 가능한 `UBalhwajeomTabletSentenceBlank`(`UUserWidget`, `NativeOnDrop` 재정의)로 `WB_SentenceBuilder`(WrapBox)에 채워 넣는다. `WB_PuzzleWords`의 각 획득 키워드는 `UBalhwajeomTabletWordChip`(`UUserWidget`, `NativeOnMouseButtonDown`+`NativeOnDragDetected`로 `FReply::DetectDrag`를 사용해 드래그를 시작)이며, 드래그 페이로드는 `UBalhwajeomWordDragDropOperation::WordID`로 전달된다. 칩을 빈칸 위에 놓으면 `UBalhwajeomTabletSentenceBlank::NativeOnDrop`이 `OnBlankDropped`를 브로드캐스트하고, `UBalhwajeomTabletWidget::HandleSentenceBlankDropped`가 `ActiveSubmission.SubmittedWords`에 (정답 여부와 무관하게) 채워 넣는다.
+
+**증거 사진 슬롯(`PhotoSlots`, "완성 사진" 재도입)**: 진술서(`SentenceType=Statement`)가 `PhotoSlots`를 요구하면(현재 본편 Chapter 1 데이터는 전부 `RequiredPhotoCount=0`이라 실제로는 비어 있는 상태 — 향후 데이터에서 채워지면 자동 노출됨), `BuildPhotoSlots(Sentence)`가 `FSentencePhotoSlot`마다 드롭 대상 `UBalhwajeomTabletPhotoSlot`을 `WB_PhotoSlots`에 채운다. 드래그 후보는 `WB_PuzzlePhotos`에 `UBalhwajeomTabletPhotoChip`으로 나열되는데, **자기 자신의 분석 문장(`PhotoSentenceID`)이 이미 해결된 촬영 사진만** 후보로 노출된다(`RefreshPuzzleControls`에서 `Investigation->GetCapturedPhotos()` 전체를 순회하며 `!PhotoSentenceID.IsNone() && IsSentenceSolved(PhotoSentenceID)` 필터). 칩을 슬롯에 놓으면 `HandlePhotoSlotDropped`가 `ActiveSubmission.SubmittedPhotos`에 채워 넣는다. 정답 판정(사진이 맞는 증거인지, `EvidenceSentenceID` 요구 여부 등)은 전부 `InvestigationSubsystem::ValidateSentence`가 담당한다.
+
+**정답 판정 타이밍(2026-09-09 수정)**: 예전에는 빈칸에 잘못된 키워드를 놓을 때마다 즉시 "잘못된 증거인 것 같다"가 떴지만, **사용자 피드백에 따라 모든 빈칸(단어+사진)이 채워진 뒤에만** 판정하도록 바꿨다. `HandleSentenceBlankDropped`/`HandlePhotoSlotDropped`는 이제 드롭된 값을 그냥 채워 넣기만 하고, `EvaluatePuzzleIfComplete()`가 `ActiveSubmission.SubmittedWords.Num() == WordSlots.Num() && SubmittedPhotos.Num() == PhotoSlots.Num()`일 때만 `ValidateActivePuzzle(false)`를 호출한다. `ValidateActivePuzzle`은 `InvestigationSubsystem::ValidateSentence`가 실패를 반환하면 그때 `TXT_PuzzleFeedback`("잘못된 증거인 것 같다")을 띄우고, 성공하면 `ResultText`를 보여주며 퍼즐을 닫는다. `SentenceType=Statement`는 여전히 다 채워졌어도 자동 판정하지 않고 `BTN_StatementSubmit`("자백 반증") 클릭 → `HandleStatementSubmitClicked` → `ValidateActivePuzzle(true)`을 명시적으로 눌러야 판정한다(단, 이제는 실패해도 피드백이 뜬다 — 예전엔 진술서 실패 시 아무 표시도 없었다).
 
 변경 필요 사항:
+- [ ] `PhotoSlots`/`RequiredPhotoCount`를 실제로 요구하는 진술서 데이터가 아직 없어(Chapter 1은 전부 0), `WB_PuzzlePhotos`/`WB_PhotoSlots` 드래그 앤 드롭 경로는 PIE로 수동 검증만 했고 실 데이터 기준 검증은 못함 — 해당 데이터가 추가되면 재검증 필요.
 - [ ] 본편 시나리오의 `LieText`/반증 조건이 [DataTable-Handoff.md](../DataTable-Handoff.md)에서 입력되는 대로 정상 매칭되는지 확인.
 - [ ] 반증 실패/성공 피드백(`ShowPopup`)의 실제 문구·연출을 최종 확정(아트/이펙트/사운드 트랙과 연동).
 - [ ] 인물별로 진술서가 여러 개일 때 진행 순서(잠금/해금)가 스토리 상태와 어긋나지 않는지 확인.
