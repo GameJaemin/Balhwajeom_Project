@@ -4,12 +4,14 @@
 #include "Components/HorizontalBox.h"
 #include "Components/SizeBox.h"
 #include "Components/WidgetSwitcher.h"
+#include "Editor.h"
 #include "Engine/DataTable.h"
 #include "Investigation/WordDefinitions.h"
 #include "Tablet/BalhwajeomInternetKeywordWidget.h"
 #include "Tablet/BalhwajeomInternetPageWidget.h"
 #include "Tablet/BalhwajeomInternetTabWidget.h"
 #include "Tablet/BalhwajeomInternetWidget.h"
+#include "Tablet/BalhwajeomMessengerDataAssets.h"
 #include "Blueprint/WidgetTree.h"
 #include "WidgetBlueprint.h"
 
@@ -80,15 +82,57 @@ bool FBalhwajeomInternetWidgetAssetTest::RunTest(const FString& Parameters)
 		TestNotNull(TEXT("Close button exists"), Cast<UButton>(Internet->WidgetTree->FindWidget(TEXT("BTN_Close"))));
 	}
 
-	UWidgetBlueprint* News1 = LoadObject<UWidgetBlueprint>(
-		nullptr,
-		TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetPage_News1.WBP_InternetPage_News1"));
-	if (News1 && News1->WidgetTree)
+	struct FExpectedPageKeyword
 	{
-		TestNotNull(
-			TEXT("News1 contains the related-agency keyword widget"),
-			Cast<UBalhwajeomInternetKeywordWidget>(
-				News1->WidgetTree->FindWidget(TEXT("WBP_Keyword_RelatedAgency"))));
+		const TCHAR* PagePath;
+		const TCHAR* WidgetName;
+		EBalhwajeomInternetPage PageID;
+		const TCHAR* WordID;
+	};
+	const FExpectedPageKeyword ExpectedPageKeywords[] = {
+		{TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetPage_Weather.WBP_InternetPage_Weather"), TEXT("WBP_Keyword_Cloud"), EBalhwajeomInternetPage::Weather, TEXT("WORD_01_014")},
+		{TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetPage_Weather.WBP_InternetPage_Weather"), TEXT("WBP_Keyword_Clear"), EBalhwajeomInternetPage::Weather, TEXT("WORD_01_015")},
+		{TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetPage_News1.WBP_InternetPage_News1"), TEXT("WBP_Keyword_Ignition"), EBalhwajeomInternetPage::News1, TEXT("WORD_01_019")},
+		{TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetPage_News2.WBP_InternetPage_News2"), TEXT("WBP_Keyword_BurnedOut"), EBalhwajeomInternetPage::News2, TEXT("WORD_01_020")},
+		{TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetPage_Ad.WBP_InternetPage_Ad"), TEXT("WBP_Keyword_Light"), EBalhwajeomInternetPage::Ad, TEXT("WORD_01_016")},
+		{TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetPage_Ad.WBP_InternetPage_Ad"), TEXT("WBP_Keyword_Fire"), EBalhwajeomInternetPage::Ad, TEXT("WORD_01_017")}
+	};
+	UWorld* EditorWorld = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	TestNotNull(TEXT("Editor world exists for Internet page setup"), EditorWorld);
+	for (const FExpectedPageKeyword& Expected : ExpectedPageKeywords)
+	{
+		UWidgetBlueprint* Page = LoadObject<UWidgetBlueprint>(nullptr, Expected.PagePath);
+		TestNotNull(FString::Printf(TEXT("Keyword page exists: %s"), Expected.PagePath), Page);
+		if (Page && Page->WidgetTree)
+		{
+			UBalhwajeomInternetKeywordWidget* Keyword =
+				Cast<UBalhwajeomInternetKeywordWidget>(Page->WidgetTree->FindWidget(Expected.WidgetName));
+			TestNotNull(
+				FString::Printf(TEXT("Keyword widget exists: %s"), Expected.WidgetName),
+				Keyword);
+			if (EditorWorld && Page->GeneratedClass)
+			{
+				const TSubclassOf<UUserWidget> PageClass(Page->GeneratedClass.Get());
+				UBalhwajeomInternetPageWidget* PageInstance =
+					CreateWidget<UBalhwajeomInternetPageWidget>(EditorWorld, PageClass);
+				TestNotNull(TEXT("Internet page instance can be created"), PageInstance);
+				if (PageInstance)
+				{
+					PageInstance->SetupPage(Expected.PageID);
+					UBalhwajeomInternetKeywordWidget* KeywordInstance =
+						Cast<UBalhwajeomInternetKeywordWidget>(
+							PageInstance->GetWidgetFromName(Expected.WidgetName));
+					TestNotNull(TEXT("Internet keyword instance can be created"), KeywordInstance);
+					if (KeywordInstance)
+					{
+						TestEqual(
+							FString::Printf(TEXT("Internet keyword binding: %s"), Expected.WidgetName),
+							KeywordInstance->GetWordID(),
+							FName(Expected.WordID));
+					}
+				}
+			}
+		}
 	}
 
 	UDataTable* Words = LoadObject<UDataTable>(
@@ -97,13 +141,65 @@ bool FBalhwajeomInternetWidgetAssetTest::RunTest(const FString& Parameters)
 	TestNotNull(TEXT("DT_Words exists"), Words);
 	if (Words)
 	{
-		const FWordDefinition* Word = Words->FindRow<FWordDefinition>(
-			TEXT("WORD_RELATED_AGENCY"), TEXT("Internet asset test"), false);
-		TestNotNull(TEXT("Related-agency keyword row exists"), Word);
-		if (Word)
+		struct FExpectedWord
 		{
-			TestEqual(TEXT("Keyword display text"), Word->DisplayWord.ToString(), FString(TEXT("관계기관")));
+			const TCHAR* WordID;
+			const TCHAR* DisplayWord;
+		};
+		const FExpectedWord ExpectedWords[] = {
+			{TEXT("WORD_01_013"), TEXT("스노우글로브")},
+			{TEXT("WORD_01_014"), TEXT("구름")},
+			{TEXT("WORD_01_015"), TEXT("맑음")},
+			{TEXT("WORD_01_016"), TEXT("빛")},
+			{TEXT("WORD_01_017"), TEXT("화재")},
+			{TEXT("WORD_01_019"), TEXT("발화")},
+			{TEXT("WORD_01_020"), TEXT("전소")}
+		};
+		for (const FExpectedWord& Expected : ExpectedWords)
+		{
+			const FWordDefinition* Word = Words->FindRow<FWordDefinition>(
+				Expected.WordID, TEXT("Tablet keyword asset test"), false);
+			TestNotNull(FString::Printf(TEXT("Word row exists: %s"), Expected.WordID), Word);
+			if (Word)
+			{
+				TestEqual(
+					FString::Printf(TEXT("Word display text: %s"), Expected.WordID),
+					Word->DisplayWord.ToString(),
+					FString(Expected.DisplayWord));
+			}
 		}
+	}
+
+	UBalhwajeomMessengerCatalogDataAsset* MessengerCatalog =
+		LoadObject<UBalhwajeomMessengerCatalogDataAsset>(
+			nullptr,
+			TEXT("/Game/Balhwajeom/Data/Messenger/DA_MessengerCatalog.DA_MessengerCatalog"));
+	TestNotNull(TEXT("Messenger catalog exists"), MessengerCatalog);
+	if (MessengerCatalog)
+	{
+		int32 KeywordMessageCount = 0;
+		for (const UBalhwajeomMessengerRoomDataAsset* Room : MessengerCatalog->Rooms)
+		{
+			if (!Room)
+			{
+				continue;
+			}
+			for (const FST_MessengerMessage& Message : Room->Messages)
+			{
+				if (Message.WordID.IsEmpty() && Message.KeywordText.IsEmpty())
+				{
+					continue;
+				}
+				++KeywordMessageCount;
+				TestEqual(TEXT("Messenger keyword WordID"), Message.WordID, FString(TEXT("WORD_01_013")));
+				TestEqual(TEXT("Messenger keyword text"), Message.KeywordText.ToString(), FString(TEXT("스노우 글로브")));
+				TestEqual(
+					TEXT("Messenger keyword message content remains unchanged"),
+					Message.Message.ToString(),
+					FString(TEXT("내 생일에 스노우 글로브 사준다고 했잖아")));
+			}
+		}
+		TestEqual(TEXT("Only the snow-globe messenger keyword remains interactive"), KeywordMessageCount, 1);
 	}
 	return true;
 }

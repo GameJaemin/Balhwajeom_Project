@@ -33,15 +33,46 @@ void UBalhwajeomInternetPageWidget::NativeOnInitialized()
 
 void UBalhwajeomInternetPageWidget::SetupPage(const EBalhwajeomInternetPage InPageID)
 {
-	if (IsValidInternetPage(InPageID))
+	if (!IsValidInternetPage(InPageID))
 	{
-		PageID = InPageID;
-		if (PageID == EBalhwajeomInternetPage::News1 && WBP_Keyword_RelatedAgency)
+		return;
+	}
+
+	PageID = InPageID;
+	if (PageID == EBalhwajeomInternetPage::Weather)
+	{
+		if (WBP_Keyword_Cloud)
 		{
-			WBP_Keyword_RelatedAgency->SetupKeyword(
-				TEXT("WORD_RELATED_AGENCY"),
-				TEXT("WEB_NEWS_01"),
-				FText::FromString(TEXT("관계기관")));
+			WBP_Keyword_Cloud->SetupKeyword(
+				TEXT("WORD_01_014"), TEXT("WEB_WEATHER"), FText::FromString(TEXT("구름")));
+		}
+		if (WBP_Keyword_Clear)
+		{
+			WBP_Keyword_Clear->SetupKeyword(
+				TEXT("WORD_01_015"), TEXT("WEB_WEATHER"), FText::FromString(TEXT("맑음")));
+		}
+	}
+	else if (PageID == EBalhwajeomInternetPage::News1 && WBP_Keyword_Ignition)
+	{
+		WBP_Keyword_Ignition->SetupKeyword(
+			TEXT("WORD_01_019"), TEXT("WEB_NEWS_01"), FText::FromString(TEXT("발화")));
+	}
+	else if (PageID == EBalhwajeomInternetPage::News2 && WBP_Keyword_BurnedOut)
+	{
+		WBP_Keyword_BurnedOut->SetupKeyword(
+			TEXT("WORD_01_020"), TEXT("WEB_NEWS_02"), FText::FromString(TEXT("전소")));
+	}
+	else if (PageID == EBalhwajeomInternetPage::Ad)
+	{
+		if (WBP_Keyword_Light)
+		{
+			WBP_Keyword_Light->SetupKeyword(
+				TEXT("WORD_01_016"), TEXT("WEB_FIRE_PSA"), FText::FromString(TEXT("빛")));
+		}
+		if (WBP_Keyword_Fire)
+		{
+			WBP_Keyword_Fire->SetupKeyword(
+				TEXT("WORD_01_017"), TEXT("WEB_FIRE_PSA"), FText::FromString(TEXT("화재")));
 		}
 	}
 }

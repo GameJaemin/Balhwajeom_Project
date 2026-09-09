@@ -779,7 +779,7 @@ namespace TabletDesigner
 		{
 			UButton* Root = MakeTransparentButton(TEXT("BTN_Keyword"));
 			UTextBlock* Label = MakeText(
-				TEXT("TXT_Keyword"), TEXT("관계기관"), 23, FLinearColor(0.10f, 0.42f, 0.92f, 1.0f), true);
+				TEXT("TXT_Keyword"), TEXT("키워드"), 23, FLinearColor(0.10f, 0.42f, 0.92f, 1.0f), true);
 			FSlateFontInfo Font = Label->GetFont();
 			Font.TypefaceFontName = TEXT("Bold");
 			Label->SetFont(Font);
@@ -801,17 +801,17 @@ namespace TabletDesigner
 				FLinearColor(0.42f, 0.70f, 0.94f, 1.0f)));
 			WeatherSlot->SetPadding(FMargin(0, 0, 14, 0));
 			FirstRow->AddChildToHorizontalBox(MakeInternetCard(
-				TEXT("BTN_OpenNews1"), TEXT("뉴스 1"), TEXT("실종자 수색 관련 속보"),
+				TEXT("BTN_OpenNews1"), TEXT("뉴스 1"), TEXT("화재 현장 발화 지점 조사"),
 				FLinearColor(0.72f, 0.76f, 0.82f, 1.0f)));
 			AddInternetBlock(Column, FirstRow, FMargin(44, 0, 44, 18));
 
 			UHorizontalBox* SecondRow = Make<UHorizontalBox>(TEXT("HB_MainCardsBottom"));
 			auto* News2Slot = SecondRow->AddChildToHorizontalBox(MakeInternetCard(
-				TEXT("BTN_OpenNews2"), TEXT("뉴스 2"), TEXT("현장 주변 통제 확대"),
+				TEXT("BTN_OpenNews2"), TEXT("뉴스 2"), TEXT("도심 상가 화재 속보"),
 				FLinearColor(0.56f, 0.61f, 0.69f, 1.0f)));
 			News2Slot->SetPadding(FMargin(0, 0, 14, 0));
 			SecondRow->AddChildToHorizontalBox(MakeInternetCard(
-				TEXT("BTN_OpenAd"), TEXT("광고"), TEXT("이번 주 특별 기획전"),
+				TEXT("BTN_OpenAd"), TEXT("광고"), TEXT("화재 예방 공익광고"),
 				FLinearColor(0.94f, 0.63f, 0.33f, 1.0f)));
 			AddInternetBlock(Column, SecondRow, FMargin(44, 0, 44, 38));
 		}
@@ -823,16 +823,45 @@ namespace TabletDesigner
 			ImageSize->SetHeightOverride(300.0f);
 			ImageSize->SetContent(MakeColorImage(TEXT("IMG_WeatherHero"), FLinearColor(0.42f, 0.70f, 0.94f, 1.0f)));
 			AddInternetBlock(Column, ImageSize, FMargin(44, 0, 44, 28));
+			UClass* KeywordClass = LoadClass<UUserWidget>(
+				nullptr, TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetKeyword.WBP_InternetKeyword_C"));
+			UHorizontalBox* CloudLine = Make<UHorizontalBox>(TEXT("HB_WeatherCloudLine"));
+			CloudLine->AddChildToHorizontalBox(MakeText(
+				TEXT("TXT_WeatherCloudPrefix"), TEXT("오늘  "), 27, FLinearColor(0.16f, 0.19f, 0.24f, 1.0f)));
+			if (KeywordClass)
+			{
+				CloudLine->AddChildToHorizontalBox(MakeUserWidget(KeywordClass, TEXT("WBP_Keyword_Cloud"), true));
+			}
+			CloudLine->AddChildToHorizontalBox(MakeText(
+				TEXT("TXT_WeatherCloudSuffix"), TEXT(" 많고 오후부터 비  18℃ / 25℃"), 27,
+				FLinearColor(0.16f, 0.19f, 0.24f, 1.0f)));
+			AddInternetBlock(Column, CloudLine, FMargin(54, 8, 54, 18));
+
+			UTextBlock* Tomorrow = MakeText(
+				TEXT("TXT_WeatherTomorrow"), TEXT("내일  오전 비  17℃ / 23℃"), 27,
+				FLinearColor(0.16f, 0.19f, 0.24f, 1.0f));
+			AddInternetBlock(Column, Tomorrow, FMargin(54, 8, 54, 18));
+
+			UHorizontalBox* ClearLine = Make<UHorizontalBox>(TEXT("HB_WeatherClearLine"));
+			ClearLine->AddChildToHorizontalBox(MakeText(
+				TEXT("TXT_WeatherClearPrefix"), TEXT("모레  대체로 "), 27,
+				FLinearColor(0.16f, 0.19f, 0.24f, 1.0f)));
+			if (KeywordClass)
+			{
+				ClearLine->AddChildToHorizontalBox(MakeUserWidget(KeywordClass, TEXT("WBP_Keyword_Clear"), true));
+			}
+			ClearLine->AddChildToHorizontalBox(MakeText(
+				TEXT("TXT_WeatherClearSuffix"), TEXT("  16℃ / 26℃"), 27,
+				FLinearColor(0.16f, 0.19f, 0.24f, 1.0f)));
+			AddInternetBlock(Column, ClearLine, FMargin(54, 8, 54, 18));
+
 			const TCHAR* Lines[] = {
-				TEXT("오늘  흐림 뒤 비  18℃ / 25℃"),
-				TEXT("내일  오전 비  17℃ / 23℃"),
-				TEXT("모레  대체로 맑음  16℃ / 26℃"),
 				TEXT("강수 확률은 오후부터 높아지며, 늦은 밤에는 강한 바람이 예상됩니다."),
 				TEXT("외출 시 우산을 준비하고 하천 주변 통행에 주의하십시오.")
 			};
 			for (int32 Index = 0; Index < UE_ARRAY_COUNT(Lines); ++Index)
 			{
-				UTextBlock* Line = MakeText(*FString::Printf(TEXT("TXT_WeatherLine%d"), Index), Lines[Index], Index < 3 ? 27 : 21,
+				UTextBlock* Line = MakeText(*FString::Printf(TEXT("TXT_WeatherNotice%d"), Index), Lines[Index], 21,
 					FLinearColor(0.16f, 0.19f, 0.24f, 1.0f));
 				Line->SetAutoWrapText(true);
 				AddInternetBlock(Column, Line, FMargin(54, 8, 54, 18));
@@ -841,8 +870,8 @@ namespace TabletDesigner
 
 		void BuildInternetNews1Page() const
 		{
-			UVerticalBox* Column = MakeInternetPageRoot(TEXT("실종자 수색, 디지털 기록 확보 요청"));
-			UTextBlock* Date = MakeText(TEXT("TXT_News1Date"), TEXT("사회 · 2026년 5월 26일"), 18,
+			UVerticalBox* Column = MakeInternetPageRoot(TEXT("화재 현장 감식, 발화 지점 조사"));
+			UTextBlock* Date = MakeText(TEXT("TXT_News1Date"), TEXT("사회 · 2026년 5월 12일"), 18,
 				FLinearColor(0.38f, 0.42f, 0.48f, 1.0f));
 			AddInternetBlock(Column, Date, FMargin(44, 0, 44, 22));
 			USizeBox* ImageSize = Make<USizeBox>(TEXT("Size_News1Image"));
@@ -852,22 +881,24 @@ namespace TabletDesigner
 
 			UHorizontalBox* KeywordLine = Make<UHorizontalBox>(TEXT("HB_News1KeywordLine"));
 			KeywordLine->AddChildToHorizontalBox(MakeText(
-				TEXT("TXT_News1Prefix"), TEXT("정부는 실종자들의 정확한 위치를 파악하기 위해 "), 23,
+				TEXT("TXT_News1Prefix"), TEXT("감식팀은 정확한 "), 23,
 				FLinearColor(0.16f, 0.19f, 0.24f, 1.0f)));
 			if (UClass* KeywordClass = LoadClass<UUserWidget>(
 				nullptr, TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetKeyword.WBP_InternetKeyword_C")))
 			{
 				KeywordLine->AddChildToHorizontalBox(MakeUserWidget(
-					KeywordClass, TEXT("WBP_Keyword_RelatedAgency"), true));
+					KeywordClass, TEXT("WBP_Keyword_Ignition"), true));
 			}
+			KeywordLine->AddChildToHorizontalBox(MakeText(
+				TEXT("TXT_News1Suffix"), TEXT(" 지점을 확인하기 위해 현장 잔해를 수거했다."), 23,
+				FLinearColor(0.16f, 0.19f, 0.24f, 1.0f)));
 			AddInternetBlock(Column, KeywordLine, FMargin(44, 4, 44, 4));
 
 			const TCHAR* Paragraphs[] = {
-				TEXT("과 국내외 정보기술 기업에 사고 당시 휴대전화 위치와 인터넷 연결 기록 제공도 요청했다."),
-				TEXT("수색 당국은 확보된 자료의 시간대를 대조해 마지막 이동 경로를 다시 구성할 계획이다."),
-				TEXT("현장 주변 도로와 시설의 영상 기록도 같은 기준으로 분석 중이다."),
-				TEXT("관계자는 확인되지 않은 정보의 확산을 자제해 달라고 당부했다."),
-				TEXT("추가로 확인되는 내용은 공식 브리핑을 통해 공개될 예정이다.")
+				TEXT("조사는 전기 설비와 가열 기구를 중심으로 진행되고 있다."),
+				TEXT("현장 주변의 영상 기록과 신고 시각도 함께 대조 중이다."),
+				TEXT("정확한 원인은 정밀 감식이 끝난 뒤 공개될 예정이다."),
+				TEXT("소방 당국은 확인되지 않은 정보의 확산을 자제해 달라고 당부했다.")
 			};
 			for (int32 Index = 0; Index < UE_ARRAY_COUNT(Paragraphs); ++Index)
 			{
@@ -880,17 +911,30 @@ namespace TabletDesigner
 
 		void BuildInternetNews2Page() const
 		{
-			UVerticalBox* Column = MakeInternetPageRoot(TEXT("현장 주변 통제 범위 확대"));
+			UVerticalBox* Column = MakeInternetPageRoot(TEXT("도심 상가 화재로 건물 전소"));
 			USizeBox* ImageSize = Make<USizeBox>(TEXT("Size_News2Image"));
 			ImageSize->SetHeightOverride(330.0f);
 			ImageSize->SetContent(MakeColorImage(TEXT("IMG_News2Hero"), FLinearColor(0.48f, 0.53f, 0.61f, 1.0f)));
 			AddInternetBlock(Column, ImageSize, FMargin(44, 0, 44, 28));
+			UHorizontalBox* KeywordLine = Make<UHorizontalBox>(TEXT("HB_News2KeywordLine"));
+			KeywordLine->AddChildToHorizontalBox(MakeText(
+				TEXT("TXT_News2Prefix"), TEXT("소방 당국은 상가 건물이 "), 23,
+				FLinearColor(0.16f, 0.19f, 0.24f, 1.0f)));
+			if (UClass* KeywordClass = LoadClass<UUserWidget>(
+				nullptr, TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetKeyword.WBP_InternetKeyword_C")))
+			{
+				KeywordLine->AddChildToHorizontalBox(MakeUserWidget(
+					KeywordClass, TEXT("WBP_Keyword_BurnedOut"), true));
+			}
+			KeywordLine->AddChildToHorizontalBox(MakeText(
+				TEXT("TXT_News2Suffix"), TEXT("됐으며 인명 피해 여부를 확인 중이라고 밝혔다."), 23,
+				FLinearColor(0.16f, 0.19f, 0.24f, 1.0f)));
+			AddInternetBlock(Column, KeywordLine, FMargin(44, 4, 44, 10));
 			const TCHAR* Paragraphs[] = {
-				TEXT("사고 현장 주변의 출입 통제 범위가 오늘 오전부터 확대됐다."),
+				TEXT("현장 주변의 출입 통제 범위가 오늘 오전부터 확대됐다."),
 				TEXT("통제 구간을 지나는 시민은 안내 표지와 현장 요원의 지시에 따라 우회해야 한다."),
-				TEXT("당국은 안전 점검이 끝나는 대로 구간별 통제를 순차적으로 해제할 예정이다."),
-				TEXT("인근 주민에게는 문자와 지역 방송을 통해 변경 사항이 안내된다."),
-				TEXT("현장 접근이 필요한 경우 공식 연락처를 통해 사전 확인이 필요하다.")
+				TEXT("안전 점검이 끝나는 대로 구간별 통제를 순차적으로 해제할 예정이다."),
+				TEXT("정확한 피해 규모와 원인은 추가 조사 뒤 발표된다.")
 			};
 			for (int32 Index = 0; Index < UE_ARRAY_COUNT(Paragraphs); ++Index)
 			{
@@ -903,18 +947,37 @@ namespace TabletDesigner
 
 		void BuildInternetAdPage() const
 		{
-			UVerticalBox* Column = MakeInternetPageRoot(TEXT("이번 주 특별 기획전"));
+			UVerticalBox* Column = MakeInternetPageRoot(TEXT("화재 정보 공익광고"));
 			USizeBox* ImageSize = Make<USizeBox>(TEXT("Size_AdImage"));
 			ImageSize->SetHeightOverride(430.0f);
 			ImageSize->SetContent(MakeColorImage(TEXT("IMG_AdHero"), FLinearColor(0.94f, 0.63f, 0.33f, 1.0f)));
 			AddInternetBlock(Column, ImageSize, FMargin(44, 0, 44, 28));
+			UHorizontalBox* KeywordLine = Make<UHorizontalBox>(TEXT("HB_AdKeywordLine"));
+			KeywordLine->AddChildToHorizontalBox(MakeText(
+				TEXT("TXT_AdLightPrefix"), TEXT("어두운 곳에서 갑작스러운 "), 25,
+				FLinearColor(0.16f, 0.19f, 0.24f, 1.0f)));
+			UClass* KeywordClass = LoadClass<UUserWidget>(
+				nullptr, TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetKeyword.WBP_InternetKeyword_C"));
+			if (KeywordClass)
+			{
+				KeywordLine->AddChildToHorizontalBox(MakeUserWidget(KeywordClass, TEXT("WBP_Keyword_Light"), true));
+			}
+			KeywordLine->AddChildToHorizontalBox(MakeText(
+				TEXT("TXT_AdFirePrefix"), TEXT("이 보인다면 "), 25,
+				FLinearColor(0.16f, 0.19f, 0.24f, 1.0f)));
+			if (KeywordClass)
+			{
+				KeywordLine->AddChildToHorizontalBox(MakeUserWidget(KeywordClass, TEXT("WBP_Keyword_Fire"), true));
+			}
+			KeywordLine->AddChildToHorizontalBox(MakeText(
+				TEXT("TXT_AdFireSuffix"), TEXT("를 의심하세요."), 25,
+				FLinearColor(0.16f, 0.19f, 0.24f, 1.0f)));
+			AddInternetBlock(Column, KeywordLine, FMargin(44, 16, 44, 18));
 			UTextBlock* Copy = MakeText(
-				TEXT("TXT_AdCopy"),
-				TEXT("기억에 남는 하루를 위한 작은 선물\n오프라인 매장에서 이번 주말까지 만나보세요."),
-				30,
+				TEXT("TXT_AdCopy"), TEXT("즉시 주변에 알리고 안전한 곳으로 대피한 뒤 119에 신고하세요."), 25,
 				FLinearColor(0.16f, 0.19f, 0.24f, 1.0f));
 			Copy->SetJustification(ETextJustify::Center);
-			AddInternetBlock(Column, Copy, FMargin(44, 16, 44, 50));
+			AddInternetBlock(Column, Copy, FMargin(44, 0, 44, 50));
 		}
 
 		void BuildInternet() const
@@ -1323,7 +1386,7 @@ namespace TabletDesigner
 				[](const FBuilder& Builder) { Builder.BuildMessenger(); });
 	}
 
-	bool EnsureInternetKeywordData()
+	bool ValidateInternetKeywordData()
 	{
 		UDataTable* Words = LoadObject<UDataTable>(
 			nullptr,
@@ -1334,35 +1397,33 @@ namespace TabletDesigner
 			return false;
 		}
 
-		const FName WordID(TEXT("WORD_RELATED_AGENCY"));
-		if (Words->FindRow<FWordDefinition>(WordID, TEXT("Internet setup"), false))
+		const FName RequiredWordIDs[] = {
+			TEXT("WORD_01_014"),
+			TEXT("WORD_01_015"),
+			TEXT("WORD_01_016"),
+			TEXT("WORD_01_017"),
+			TEXT("WORD_01_019"),
+			TEXT("WORD_01_020")
+		};
+		bool bAllRowsExist = true;
+		for (const FName WordID : RequiredWordIDs)
 		{
-			return true;
+			if (!Words->FindRow<FWordDefinition>(WordID, TEXT("Internet setup"), false))
+			{
+				UE_LOG(
+					LogTemp,
+					Error,
+					TEXT("Internet setup requires existing DT_Words row '%s'."),
+					*WordID.ToString());
+				bAllRowsExist = false;
+			}
 		}
-
-		FWordDefinition Definition;
-		Definition.WordID = WordID;
-		Definition.DisplayWord = FText::FromString(TEXT("관계기관"));
-		Definition.Description = FText::FromString(TEXT("실종자 위치 정보 제공 요청을 받은 관계기관."));
-		Definition.RelatedCharacterIDs.Add(TEXT("SISTER"));
-		Words->AddRow(WordID, Definition);
-
-		UPackage* Package = Words->GetOutermost();
-		Package->MarkPackageDirty();
-		const FString Filename = FPackageName::LongPackageNameToFilename(
-			Package->GetName(), FPackageName::GetAssetPackageExtension());
-		FSavePackageArgs SaveArgs;
-		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
-		SaveArgs.SaveFlags = SAVE_NoError;
-		SaveArgs.bSlowTask = false;
-		const bool bSaved = UPackage::SavePackage(Package, Words, *Filename, SaveArgs);
-		UE_LOG(LogTemp, Display, TEXT("INTERNET_WORD_SETUP Result=%s"), bSaved ? TEXT("Success") : TEXT("Failure"));
-		return bSaved;
+		return bAllRowsExist;
 	}
 
 	bool BuildInternetWidgetBlueprints(const bool bRedesignExisting)
 	{
-		return EnsureInternetKeywordData()
+		return ValidateInternetKeywordData()
 			&& BuildWidgetBlueprint(
 				TEXT("WBP_InternetTab"),
 				InternetTabAssetPath,
@@ -1411,6 +1472,74 @@ namespace TabletDesigner
 				UBalhwajeomInternetWidget::StaticClass(),
 				bRedesignExisting,
 				[](const FBuilder& Builder) { Builder.BuildInternet(); });
+	}
+
+	bool MigrateMessengerKeywordReferences(UBalhwajeomMessengerCatalogDataAsset* Catalog)
+	{
+		UDataTable* Words = LoadObject<UDataTable>(
+			nullptr,
+			TEXT("/Game/Balhwajeom/Data/Investigation/DT_Words.DT_Words"));
+		const FName SnowGlobeWordID(TEXT("WORD_01_013"));
+		if (!Catalog || !Words || Words->GetRowStruct() != FWordDefinition::StaticStruct()
+			|| !Words->FindRow<FWordDefinition>(SnowGlobeWordID, TEXT("Messenger keyword migration"), false))
+		{
+			UE_LOG(LogTemp, Error, TEXT("Messenger setup requires existing DT_Words row 'WORD_01_013'."));
+			return false;
+		}
+
+		bool bAllSaved = true;
+		for (UBalhwajeomMessengerRoomDataAsset* Room : Catalog->Rooms)
+		{
+			if (!Room)
+			{
+				continue;
+			}
+			bool bRoomChanged = false;
+			for (FST_MessengerMessage& Message : Room->Messages)
+			{
+				const bool bIsSnowGlobeKeyword =
+					Message.WordID == TEXT("WORD_SNOW_GLOBE")
+					|| Message.WordID == TEXT("Sister_SnowGlobe")
+					|| Message.WordID == SnowGlobeWordID.ToString()
+					|| Message.MessageID == TEXT("MSG_SISTER_SNOW_GLOBE");
+				if (bIsSnowGlobeKeyword)
+				{
+					if (Message.WordID != SnowGlobeWordID.ToString()
+						|| Message.KeywordText.ToString() != TEXT("스노우 글로브")
+						|| Message.MessageID != TEXT("MSG_SISTER_SNOW_GLOBE"))
+					{
+						Message.WordID = SnowGlobeWordID.ToString();
+						Message.KeywordText = FText::FromString(TEXT("스노우 글로브"));
+						Message.MessageID = TEXT("MSG_SISTER_SNOW_GLOBE");
+						bRoomChanged = true;
+					}
+					continue;
+				}
+
+				const bool bIsRemovedLegacyKeyword =
+					Message.WordID == TEXT("WORD_DOOR_CODE")
+					|| Message.WordID == TEXT("Mother_DoorCode")
+					|| Message.WordID == TEXT("WORD_SISTER_BIRTHDAY")
+					|| Message.WordID == TEXT("Sister_Birthday")
+					|| Message.WordID == TEXT("WORD_CAR_KEY")
+					|| Message.WordID == TEXT("Brother_CarKey")
+					|| Message.MessageID == TEXT("MSG_MOTHER_DOOR_CODE")
+					|| Message.MessageID == TEXT("MSG_SISTER_BIRTHDAY")
+					|| Message.MessageID == TEXT("MSG_BROTHER_CAR_KEY");
+				if (bIsRemovedLegacyKeyword)
+				{
+					Message.WordID.Reset();
+					Message.KeywordText = FText::GetEmpty();
+					Message.MessageID = NAME_None;
+					bRoomChanged = true;
+				}
+			}
+			if (bRoomChanged)
+			{
+				bAllSaved &= SaveDataAsset(Room);
+			}
+		}
+		return bAllSaved;
 	}
 
 	bool CreateMessengerDataAssetsInternal()
@@ -1467,13 +1596,7 @@ namespace TabletDesigner
 			{
 				MakeArchivedMessage(TEXT("엄마"), TEXT("오늘 저녁 먹고 들어오니?"), false),
 				MakeArchivedMessage(TEXT("나"), TEXT("응. 너무 늦지는 않을 거야."), true),
-				MakeArchivedMessage(
-					TEXT("엄마"),
-					TEXT("현관 비밀번호 바뀐 거 잊지 마."),
-					false,
-					TEXT("현관 비밀번호"),
-					TEXT("WORD_DOOR_CODE"),
-					TEXT("MSG_MOTHER_DOOR_CODE")),
+				MakeArchivedMessage(TEXT("엄마"), TEXT("현관 비밀번호 바뀐 거 잊지 마."), false),
 			}));
 		RoomAssets.Add(EnsureRoom(
 			TEXT("DA_MessengerRoom_Sister"),
@@ -1482,19 +1605,13 @@ namespace TabletDesigner
 			4,
 			{
 				MakeArchivedMessage(TEXT("여동생"), TEXT("내 생일 기억하고 있지?"), false),
-				MakeArchivedMessage(
-					TEXT("나"),
-					TEXT("당연하지. 5월 13일."),
-					true,
-					TEXT("5월 13일"),
-					TEXT("WORD_SISTER_BIRTHDAY"),
-					TEXT("MSG_SISTER_BIRTHDAY")),
+				MakeArchivedMessage(TEXT("나"), TEXT("당연하지. 5월 13일."), true),
 				MakeArchivedMessage(
 					TEXT("여동생"),
 					TEXT("내 생일에 스노우 글로브 사준다고 했잖아"),
 					false,
 					TEXT("스노우 글로브"),
-					TEXT("WORD_SNOW_GLOBE"),
+					TEXT("WORD_01_013"),
 					TEXT("MSG_SISTER_SNOW_GLOBE")),
 				MakeArchivedMessage(TEXT("나"), TEXT("기억하고 있어. 걱정하지 마."), true),
 				MakeArchivedMessage(TEXT("여동생"), TEXT("약속이다!"), false),
@@ -1505,13 +1622,7 @@ namespace TabletDesigner
 			TEXT("형"),
 			0,
 			{
-				MakeArchivedMessage(
-					TEXT("형"),
-					TEXT("차 키 식탁 위에 뒀어."),
-					false,
-					TEXT("차 키"),
-					TEXT("WORD_CAR_KEY"),
-					TEXT("MSG_BROTHER_CAR_KEY")),
+				MakeArchivedMessage(TEXT("형"), TEXT("차 키 식탁 위에 뒀어."), false),
 				MakeArchivedMessage(TEXT("나"), TEXT("확인했어. 내일 가져다줄게."), true),
 				MakeArchivedMessage(TEXT("형"), TEXT("그래, 고맙다."), false),
 			}));
@@ -1539,6 +1650,11 @@ namespace TabletDesigner
 			{
 				return false;
 			}
+		}
+
+		if (!MigrateMessengerKeywordReferences(Catalog))
+		{
+			return false;
 		}
 
 		UE_LOG(
@@ -2389,38 +2505,7 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		++SeededRows;
 	}
 
-	// Keep DT_Words authoritative while preserving all existing messenger conversation assets.
-	auto EnsureSisterWord = [Words, &SeededRows, SisterCharacterID](
-		const FName WordID,
-		const TCHAR* Display,
-		const TCHAR* Description)
-	{
-		FWordDefinition* Word = Words->FindRow<FWordDefinition>(
-			WordID, TEXT("Messenger investigation upgrade"), false);
-		if (!Word)
-		{
-			FWordDefinition NewWord;
-			NewWord.WordID = WordID;
-			NewWord.DisplayWord = FText::FromString(Display);
-			NewWord.Description = FText::FromString(Description);
-			NewWord.RelatedCharacterIDs.Add(SisterCharacterID);
-			Words->AddRow(WordID, NewWord);
-			++SeededRows;
-			return;
-		}
-		if (Word->RelatedCharacterIDs.IsEmpty())
-		{
-			Word->RelatedCharacterIDs.Add(SisterCharacterID);
-			++SeededRows;
-		}
-	};
-
-	EnsureSisterWord(TEXT("WORD_PIG"), TEXT("돼지"), TEXT("거울 앞에 놓여 있던 작은 돼지 장식."));
-	EnsureSisterWord(TEXT("WORD_MIRROR"), TEXT("거울"), TEXT("불에 그을렸지만 반사면 일부가 남아 있다."));
-	EnsureSisterWord(TEXT("WORD_SNOW_GLOBE"), TEXT("스노우 글로브"), TEXT("가족이 생일 선물로 준비했던 장식품."));
-	EnsureSisterWord(TEXT("WORD_SISTER_BIRTHDAY"), TEXT("5월 13일"), TEXT("여동생의 생일."));
-	EnsureSisterWord(TEXT("WORD_DOOR_CODE"), TEXT("현관 비밀번호"), TEXT("가족이 바꾼 현관 비밀번호에 대한 단서."));
-	EnsureSisterWord(TEXT("WORD_CAR_KEY"), TEXT("차 키"), TEXT("식탁 위에 놓여 있던 형의 차 키."));
+	// DT_Words is planner-authored. Upgrade code must never invent missing keyword rows.
 	if (Characters->GetRowMap().Num() == 1)
 	{
 		const FName SoleCharacterID = Characters->GetRowMap().CreateConstIterator().Key();
@@ -2441,53 +2526,7 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 			nullptr, TabletDesigner::MessengerCatalogAssetPath);
 	if (MessengerCatalog)
 	{
-		const TMap<FString, FName> CanonicalWordIDs = {
-			{TEXT("Mother_DoorCode"), TEXT("WORD_DOOR_CODE")},
-			{TEXT("Sister_Birthday"), TEXT("WORD_SISTER_BIRTHDAY")},
-			{TEXT("Sister_SnowGlobe"), TEXT("WORD_SNOW_GLOBE")},
-			{TEXT("Brother_CarKey"), TEXT("WORD_CAR_KEY")}
-		};
-		const TMap<FName, FName> MessageIDs = {
-			{TEXT("WORD_DOOR_CODE"), TEXT("MSG_MOTHER_DOOR_CODE")},
-			{TEXT("WORD_SISTER_BIRTHDAY"), TEXT("MSG_SISTER_BIRTHDAY")},
-			{TEXT("WORD_SNOW_GLOBE"), TEXT("MSG_SISTER_SNOW_GLOBE")},
-			{TEXT("WORD_CAR_KEY"), TEXT("MSG_BROTHER_CAR_KEY")}
-		};
-
-		for (UBalhwajeomMessengerRoomDataAsset* Room : MessengerCatalog->Rooms)
-		{
-			if (!Room)
-			{
-				continue;
-			}
-			bool bRoomChanged = false;
-			for (FST_MessengerMessage& Message : Room->Messages)
-			{
-				if (const FName* CanonicalID = CanonicalWordIDs.Find(Message.WordID))
-				{
-					Message.WordID = CanonicalID->ToString();
-					bRoomChanged = true;
-				}
-				const FName WordID(*Message.WordID);
-				if (!Message.WordID.IsEmpty() && Message.MessageID.IsNone())
-				{
-					if (const FName* StableMessageID = MessageIDs.Find(WordID))
-					{
-						Message.MessageID = *StableMessageID;
-					}
-					else
-					{
-						Message.MessageID = FName(*FString::Printf(
-							TEXT("MSG_%s_%s"), *Room->RoomID.ToUpper(), *WordID.ToString()));
-					}
-					bRoomChanged = true;
-				}
-			}
-			if (bRoomChanged)
-			{
-				bMessengerDataSaved &= TabletDesigner::SaveDataAsset(Room);
-			}
-		}
+		bMessengerDataSaved = TabletDesigner::MigrateMessengerKeywordReferences(MessengerCatalog);
 	}
 
 	const auto SaveTable = [](UDataTable* Table)

@@ -83,5 +83,20 @@ private:
 	TObjectPtr<UButton> BTN_OpenAd;
 
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UBalhwajeomInternetKeywordWidget> WBP_Keyword_RelatedAgency;
+	TObjectPtr<UBalhwajeomInternetKeywordWidget> WBP_Keyword_Cloud;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UBalhwajeomInternetKeywordWidget> WBP_Keyword_Clear;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UBalhwajeomInternetKeywordWidget> WBP_Keyword_Ignition;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UBalhwajeomInternetKeywordWidget> WBP_Keyword_BurnedOut;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UBalhwajeomInternetKeywordWidget> WBP_Keyword_Light;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UBalhwajeomInternetKeywordWidget> WBP_Keyword_Fire;
 };
