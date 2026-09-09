@@ -21,6 +21,7 @@
 #include "Components/WidgetSwitcher.h"
 #include "Components/WrapBox.h"
 #include "Editor.h"
+#include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
 #include "Factories/DataAssetFactory.h"
 #include "Factories/DataTableFactory.h"
@@ -34,6 +35,10 @@
 #include "Tablet/BalhwajeomMessengerMessageWidget.h"
 #include "Tablet/BalhwajeomMessengerRoomWidget.h"
 #include "Tablet/BalhwajeomMessengerWidget.h"
+#include "Tablet/BalhwajeomInternetKeywordWidget.h"
+#include "Tablet/BalhwajeomInternetPageWidget.h"
+#include "Tablet/BalhwajeomInternetTabWidget.h"
+#include "Tablet/BalhwajeomInternetWidget.h"
 #include "Investigation/WordDefinitions.h"
 #include "Investigation/CharacterDefinitions.h"
 #include "Investigation/EvidenceDefinitions.h"
@@ -64,6 +69,11 @@ namespace TabletDesigner
 	const TCHAR* MessengerCatalogAssetName = TEXT("DA_MessengerCatalog");
 	const TCHAR* MessengerCatalogAssetPath =
 		TEXT("/Game/Balhwajeom/Data/Messenger/DA_MessengerCatalog.DA_MessengerCatalog");
+	const TCHAR* InternetAssetName = TEXT("WBP_Internet");
+	const TCHAR* InternetAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_Internet.WBP_Internet");
+	const TCHAR* InternetClassPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_Internet.WBP_Internet_C");
+	const TCHAR* InternetTabAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetTab.WBP_InternetTab");
+	const TCHAR* InternetKeywordAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetKeyword.WBP_InternetKeyword");
 
 	const TCHAR* TabletBodyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Tablet_Body.Tablet_Body");
 	const TCHAR* FamilyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Family.Family");
@@ -692,6 +702,293 @@ namespace TabletDesigner
 			Tree->RootWidget = Root;
 		}
 
+		static UVerticalBoxSlot* AddInternetBlock(
+			UVerticalBox* Column,
+			UWidget* Widget,
+			const FMargin& Padding = FMargin(0.0f),
+			const EHorizontalAlignment Alignment = HAlign_Fill)
+		{
+			UVerticalBoxSlot* Slot = Column->AddChildToVerticalBox(Widget);
+			Slot->SetPadding(Padding);
+			Slot->SetHorizontalAlignment(Alignment);
+			return Slot;
+		}
+
+		UButton* MakeInternetCard(
+			const FName ButtonName,
+			const FString& Title,
+			const FString& Subtitle,
+			const FLinearColor& ImageColor) const
+		{
+			UButton* Button = MakeTransparentButton(ButtonName);
+			USizeBox* Size = Make<USizeBox>(*FString::Printf(TEXT("Size_%s"), *ButtonName.ToString()));
+			Size->SetWidthOverride(505.0f);
+			Size->SetHeightOverride(255.0f);
+			Button->SetContent(Size);
+
+			UBorder* Card = MakeBorder(
+				*FString::Printf(TEXT("Card_%s"), *ButtonName.ToString()),
+				FLinearColor(0.94f, 0.95f, 0.97f, 1.0f),
+				FMargin(8.0f));
+			Size->SetContent(Card);
+			UCanvasPanel* Canvas = Make<UCanvasPanel>(*FString::Printf(TEXT("Canvas_%s"), *ButtonName.ToString()));
+			Card->SetContent(Canvas);
+			Place(
+				Canvas,
+				MakeColorImage(*FString::Printf(TEXT("IMG_%s"), *ButtonName.ToString()), ImageColor),
+				0, 0, 489, 145);
+			Place(
+				Canvas,
+				MakeText(*FString::Printf(TEXT("TXT_%sTitle"), *ButtonName.ToString()), Title, 28, FLinearColor(0.08f, 0.10f, 0.14f, 1.0f)),
+				14, 158, 460, 40, 2);
+			UTextBlock* SubtitleText = MakeText(
+				*FString::Printf(TEXT("TXT_%sSubtitle"), *ButtonName.ToString()),
+				Subtitle,
+				18,
+				FLinearColor(0.28f, 0.31f, 0.36f, 1.0f));
+			SubtitleText->SetAutoWrapText(true);
+			Place(Canvas, SubtitleText, 14, 202, 460, 40, 2);
+			return Button;
+		}
+
+		UVerticalBox* MakeInternetPageRoot(const FString& Header) const
+		{
+			UScrollBox* Root = Make<UScrollBox>(TEXT("SB_PageContent"), true);
+			Root->SetAnimateWheelScrolling(true);
+			Root->SetScrollBarVisibility(ESlateVisibility::Visible);
+			UVerticalBox* Column = Make<UVerticalBox>(TEXT("VB_PageColumn"));
+			Root->AddChild(Column);
+
+			UTextBlock* HeaderText = MakeText(
+				TEXT("TXT_PageHeader"), Header, 38, FLinearColor(0.08f, 0.10f, 0.14f, 1.0f));
+			AddInternetBlock(Column, HeaderText, FMargin(44, 38, 44, 24));
+			Tree->RootWidget = Root;
+			return Column;
+		}
+
+		void BuildInternetTab() const
+		{
+			USizeBox* Root = Make<USizeBox>(TEXT("Size_TabRoot"));
+			Root->SetWidthOverride(220.0f);
+			Root->SetHeightOverride(54.0f);
+			UCanvasPanel* Canvas = Make<UCanvasPanel>(TEXT("Canvas_Tab"));
+			Root->SetContent(Canvas);
+			FillCanvas(Canvas, MakeBorder(TEXT("BRD_TabBackground"), FLinearColor(0.78f, 0.81f, 0.86f, 1.0f)));
+			UBorder* Selected = MakeBorder(TEXT("BRD_Selected"), FLinearColor(0.96f, 0.97f, 0.99f, 1.0f), FMargin(0), true);
+			FillCanvas(Canvas, Selected, 1);
+			FillCanvas(Canvas, MakeTransparentButton(TEXT("BTN_Tab")), 2);
+			UTextBlock* Title = MakeText(
+				TEXT("TXT_TabTitle"), TEXT("메인"), 18, FLinearColor(0.08f, 0.10f, 0.14f, 1.0f), true);
+			Title->SetVisibility(ESlateVisibility::HitTestInvisible);
+			Place(Canvas, Title, 16, 10, 155, 34, 3);
+			Place(Canvas, MakeTextButton(TEXT("BTN_CloseTab"), TEXT("×"), 22), 177, 7, 34, 38, 4);
+			Tree->RootWidget = Root;
+		}
+
+		void BuildInternetKeyword() const
+		{
+			UButton* Root = MakeTransparentButton(TEXT("BTN_Keyword"));
+			UTextBlock* Label = MakeText(
+				TEXT("TXT_Keyword"), TEXT("관계기관"), 23, FLinearColor(0.10f, 0.42f, 0.92f, 1.0f), true);
+			FSlateFontInfo Font = Label->GetFont();
+			Font.TypefaceFontName = TEXT("Bold");
+			Label->SetFont(Font);
+			Root->SetContent(Label);
+			Tree->RootWidget = Root;
+		}
+
+		void BuildInternetMainPage() const
+		{
+			UVerticalBox* Column = MakeInternetPageRoot(TEXT("오늘의 주요 소식"));
+			UTextBlock* Intro = MakeText(
+				TEXT("TXT_MainIntro"), TEXT("원하는 항목을 누르면 새 탭으로 열립니다."), 21,
+				FLinearColor(0.30f, 0.34f, 0.40f, 1.0f));
+			AddInternetBlock(Column, Intro, FMargin(44, 0, 44, 24));
+
+			UHorizontalBox* FirstRow = Make<UHorizontalBox>(TEXT("HB_MainCardsTop"));
+			auto* WeatherSlot = FirstRow->AddChildToHorizontalBox(MakeInternetCard(
+				TEXT("BTN_OpenWeather"), TEXT("일기예보"), TEXT("오늘과 내일의 지역별 날씨"),
+				FLinearColor(0.42f, 0.70f, 0.94f, 1.0f)));
+			WeatherSlot->SetPadding(FMargin(0, 0, 14, 0));
+			FirstRow->AddChildToHorizontalBox(MakeInternetCard(
+				TEXT("BTN_OpenNews1"), TEXT("뉴스 1"), TEXT("실종자 수색 관련 속보"),
+				FLinearColor(0.72f, 0.76f, 0.82f, 1.0f)));
+			AddInternetBlock(Column, FirstRow, FMargin(44, 0, 44, 18));
+
+			UHorizontalBox* SecondRow = Make<UHorizontalBox>(TEXT("HB_MainCardsBottom"));
+			auto* News2Slot = SecondRow->AddChildToHorizontalBox(MakeInternetCard(
+				TEXT("BTN_OpenNews2"), TEXT("뉴스 2"), TEXT("현장 주변 통제 확대"),
+				FLinearColor(0.56f, 0.61f, 0.69f, 1.0f)));
+			News2Slot->SetPadding(FMargin(0, 0, 14, 0));
+			SecondRow->AddChildToHorizontalBox(MakeInternetCard(
+				TEXT("BTN_OpenAd"), TEXT("광고"), TEXT("이번 주 특별 기획전"),
+				FLinearColor(0.94f, 0.63f, 0.33f, 1.0f)));
+			AddInternetBlock(Column, SecondRow, FMargin(44, 0, 44, 38));
+		}
+
+		void BuildInternetWeatherPage() const
+		{
+			UVerticalBox* Column = MakeInternetPageRoot(TEXT("일기예보"));
+			USizeBox* ImageSize = Make<USizeBox>(TEXT("Size_WeatherImage"));
+			ImageSize->SetHeightOverride(300.0f);
+			ImageSize->SetContent(MakeColorImage(TEXT("IMG_WeatherHero"), FLinearColor(0.42f, 0.70f, 0.94f, 1.0f)));
+			AddInternetBlock(Column, ImageSize, FMargin(44, 0, 44, 28));
+			const TCHAR* Lines[] = {
+				TEXT("오늘  흐림 뒤 비  18℃ / 25℃"),
+				TEXT("내일  오전 비  17℃ / 23℃"),
+				TEXT("모레  대체로 맑음  16℃ / 26℃"),
+				TEXT("강수 확률은 오후부터 높아지며, 늦은 밤에는 강한 바람이 예상됩니다."),
+				TEXT("외출 시 우산을 준비하고 하천 주변 통행에 주의하십시오.")
+			};
+			for (int32 Index = 0; Index < UE_ARRAY_COUNT(Lines); ++Index)
+			{
+				UTextBlock* Line = MakeText(*FString::Printf(TEXT("TXT_WeatherLine%d"), Index), Lines[Index], Index < 3 ? 27 : 21,
+					FLinearColor(0.16f, 0.19f, 0.24f, 1.0f));
+				Line->SetAutoWrapText(true);
+				AddInternetBlock(Column, Line, FMargin(54, 8, 54, 18));
+			}
+		}
+
+		void BuildInternetNews1Page() const
+		{
+			UVerticalBox* Column = MakeInternetPageRoot(TEXT("실종자 수색, 디지털 기록 확보 요청"));
+			UTextBlock* Date = MakeText(TEXT("TXT_News1Date"), TEXT("사회 · 2026년 5월 26일"), 18,
+				FLinearColor(0.38f, 0.42f, 0.48f, 1.0f));
+			AddInternetBlock(Column, Date, FMargin(44, 0, 44, 22));
+			USizeBox* ImageSize = Make<USizeBox>(TEXT("Size_News1Image"));
+			ImageSize->SetHeightOverride(330.0f);
+			ImageSize->SetContent(MakeColorImage(TEXT("IMG_News1Hero"), FLinearColor(0.66f, 0.69f, 0.74f, 1.0f)));
+			AddInternetBlock(Column, ImageSize, FMargin(44, 0, 44, 28));
+
+			UHorizontalBox* KeywordLine = Make<UHorizontalBox>(TEXT("HB_News1KeywordLine"));
+			KeywordLine->AddChildToHorizontalBox(MakeText(
+				TEXT("TXT_News1Prefix"), TEXT("정부는 실종자들의 정확한 위치를 파악하기 위해 "), 23,
+				FLinearColor(0.16f, 0.19f, 0.24f, 1.0f)));
+			if (UClass* KeywordClass = LoadClass<UUserWidget>(
+				nullptr, TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetKeyword.WBP_InternetKeyword_C")))
+			{
+				KeywordLine->AddChildToHorizontalBox(MakeUserWidget(
+					KeywordClass, TEXT("WBP_Keyword_RelatedAgency"), true));
+			}
+			AddInternetBlock(Column, KeywordLine, FMargin(44, 4, 44, 4));
+
+			const TCHAR* Paragraphs[] = {
+				TEXT("과 국내외 정보기술 기업에 사고 당시 휴대전화 위치와 인터넷 연결 기록 제공도 요청했다."),
+				TEXT("수색 당국은 확보된 자료의 시간대를 대조해 마지막 이동 경로를 다시 구성할 계획이다."),
+				TEXT("현장 주변 도로와 시설의 영상 기록도 같은 기준으로 분석 중이다."),
+				TEXT("관계자는 확인되지 않은 정보의 확산을 자제해 달라고 당부했다."),
+				TEXT("추가로 확인되는 내용은 공식 브리핑을 통해 공개될 예정이다.")
+			};
+			for (int32 Index = 0; Index < UE_ARRAY_COUNT(Paragraphs); ++Index)
+			{
+				UTextBlock* Paragraph = MakeText(*FString::Printf(TEXT("TXT_News1Paragraph%d"), Index), Paragraphs[Index], 23,
+					FLinearColor(0.16f, 0.19f, 0.24f, 1.0f));
+				Paragraph->SetAutoWrapText(true);
+				AddInternetBlock(Column, Paragraph, FMargin(44, 8, 44, 18));
+			}
+		}
+
+		void BuildInternetNews2Page() const
+		{
+			UVerticalBox* Column = MakeInternetPageRoot(TEXT("현장 주변 통제 범위 확대"));
+			USizeBox* ImageSize = Make<USizeBox>(TEXT("Size_News2Image"));
+			ImageSize->SetHeightOverride(330.0f);
+			ImageSize->SetContent(MakeColorImage(TEXT("IMG_News2Hero"), FLinearColor(0.48f, 0.53f, 0.61f, 1.0f)));
+			AddInternetBlock(Column, ImageSize, FMargin(44, 0, 44, 28));
+			const TCHAR* Paragraphs[] = {
+				TEXT("사고 현장 주변의 출입 통제 범위가 오늘 오전부터 확대됐다."),
+				TEXT("통제 구간을 지나는 시민은 안내 표지와 현장 요원의 지시에 따라 우회해야 한다."),
+				TEXT("당국은 안전 점검이 끝나는 대로 구간별 통제를 순차적으로 해제할 예정이다."),
+				TEXT("인근 주민에게는 문자와 지역 방송을 통해 변경 사항이 안내된다."),
+				TEXT("현장 접근이 필요한 경우 공식 연락처를 통해 사전 확인이 필요하다.")
+			};
+			for (int32 Index = 0; Index < UE_ARRAY_COUNT(Paragraphs); ++Index)
+			{
+				UTextBlock* Paragraph = MakeText(*FString::Printf(TEXT("TXT_News2Paragraph%d"), Index), Paragraphs[Index], 23,
+					FLinearColor(0.16f, 0.19f, 0.24f, 1.0f));
+				Paragraph->SetAutoWrapText(true);
+				AddInternetBlock(Column, Paragraph, FMargin(44, 8, 44, 20));
+			}
+		}
+
+		void BuildInternetAdPage() const
+		{
+			UVerticalBox* Column = MakeInternetPageRoot(TEXT("이번 주 특별 기획전"));
+			USizeBox* ImageSize = Make<USizeBox>(TEXT("Size_AdImage"));
+			ImageSize->SetHeightOverride(430.0f);
+			ImageSize->SetContent(MakeColorImage(TEXT("IMG_AdHero"), FLinearColor(0.94f, 0.63f, 0.33f, 1.0f)));
+			AddInternetBlock(Column, ImageSize, FMargin(44, 0, 44, 28));
+			UTextBlock* Copy = MakeText(
+				TEXT("TXT_AdCopy"),
+				TEXT("기억에 남는 하루를 위한 작은 선물\n오프라인 매장에서 이번 주말까지 만나보세요."),
+				30,
+				FLinearColor(0.16f, 0.19f, 0.24f, 1.0f));
+			Copy->SetJustification(ETextJustify::Center);
+			AddInternetBlock(Column, Copy, FMargin(44, 16, 44, 50));
+		}
+
+		void BuildInternet() const
+		{
+			UCanvasPanel* Root = Make<UCanvasPanel>(TEXT("Canvas_InternetRoot"));
+			FillCanvas(Root, MakeColorImage(TEXT("IMG_InternetShade"), FLinearColor(0.03f, 0.04f, 0.06f, 0.28f)));
+
+			USizeBox* WindowSize = Make<USizeBox>(TEXT("SizeBox_BrowserWindow"), true);
+			WindowSize->SetWidthOverride(FBalhwajeomInternetSessionState::NormalWindowWidth);
+			WindowSize->SetHeightOverride(FBalhwajeomInternetSessionState::NormalWindowHeight);
+			Place(
+				Root,
+				WindowSize,
+				130,
+				115,
+				FBalhwajeomInternetSessionState::NormalWindowWidth,
+				FBalhwajeomInternetSessionState::NormalWindowHeight,
+				2);
+
+			UBorder* Frame = MakeBorder(TEXT("BRD_BrowserFrame"), FLinearColor(0.96f, 0.97f, 0.99f, 1.0f));
+			WindowSize->SetContent(Frame);
+			UCanvasPanel* Window = Make<UCanvasPanel>(TEXT("Canvas_BrowserWindow"));
+			Frame->SetContent(Window);
+			FillCanvas(Window, MakeColorImage(TEXT("IMG_BrowserBackground"), FLinearColor(0.98f, 0.985f, 0.995f, 1.0f)));
+
+			UBorder* TitleBar = MakeBorder(TEXT("BRD_TitleBar"), FLinearColor(0.84f, 0.87f, 0.92f, 1.0f), FMargin(20, 0), true);
+			TitleBar->SetContent(MakeText(TEXT("TXT_BrowserTitle"), TEXT("인터넷"), 23, FLinearColor(0.08f, 0.10f, 0.14f, 1.0f)));
+			UCanvasPanelSlot* TitleSlot = Window->AddChildToCanvas(TitleBar);
+			TitleSlot->SetAnchors(FAnchors(0, 0, 1, 0));
+			TitleSlot->SetOffsets(FMargin(0, 0, 0, 60));
+			TitleSlot->SetZOrder(2);
+
+			UBorder* TabBackground = MakeBorder(TEXT("BRD_TabBar"), FLinearColor(0.70f, 0.74f, 0.80f, 1.0f), FMargin(8, 0));
+			UHorizontalBox* Tabs = Make<UHorizontalBox>(TEXT("HB_TabBar"), true);
+			TabBackground->SetContent(Tabs);
+			UCanvasPanelSlot* TabSlot = Window->AddChildToCanvas(TabBackground);
+			TabSlot->SetAnchors(FAnchors(0, 0, 1, 0));
+			TabSlot->SetOffsets(FMargin(0, 60, 0, 54));
+			TabSlot->SetZOrder(2);
+
+			UWidgetSwitcher* PageContent = Make<UWidgetSwitcher>(TEXT("WS_PageContent"), true);
+			UCanvasPanelSlot* PageSlot = Window->AddChildToCanvas(PageContent);
+			PageSlot->SetAnchors(FAnchors(0, 0, 1, 1));
+			PageSlot->SetOffsets(FMargin(0, 114, 0, 0));
+			PageSlot->SetZOrder(1);
+
+			UButton* Maximize = MakeTransparentButton(TEXT("BTN_Maximize"));
+			UTextBlock* MaximizeText = MakeText(
+				TEXT("TXT_Maximize"), TEXT("□"), 26, WarmWhite, true, true);
+			MaximizeText->SetJustification(ETextJustify::Center);
+			Maximize->SetContent(MaximizeText);
+			UCanvasPanelSlot* MaximizeSlot = Window->AddChildToCanvas(Maximize);
+			MaximizeSlot->SetAnchors(FAnchors(1, 0));
+			MaximizeSlot->SetPosition(FVector2D(-112, 6));
+			MaximizeSlot->SetSize(FVector2D(50, 48));
+			MaximizeSlot->SetZOrder(5);
+			UCanvasPanelSlot* CloseSlot = Window->AddChildToCanvas(MakeTextButton(TEXT("BTN_Close"), TEXT("×"), 28));
+			CloseSlot->SetAnchors(FAnchors(1, 0));
+			CloseSlot->SetPosition(FVector2D(-56, 6));
+			CloseSlot->SetSize(FVector2D(50, 48));
+			CloseSlot->SetZOrder(5);
+			Tree->RootWidget = Root;
+		}
+
 		UOverlay* BuildStatusBar() const
 		{
 			UOverlay* Status = Make<UOverlay>(TEXT("StatusBar"));
@@ -771,9 +1068,17 @@ namespace TabletDesigner
 					TEXT("Page_Messenger"), TEXT("BTN_MessengerBack"), TEXT("메신저"),
 					TEXT("메신저 UI를 불러올 수 없습니다."), MessengerPath, TEXT("IMG_MessengerPage")));
 			}
-			Switcher->AddChild(BuildAppPage(
-				TEXT("Page_Internet"), TEXT("BTN_InternetBack"), TEXT("인터넷"),
-				TEXT("네트워크에 연결할 수 없습니다."), InternetPath, TEXT("IMG_InternetPage")));
+			if (UClass* InternetClass = LoadClass<UUserWidget>(nullptr, InternetClassPath))
+			{
+				Switcher->AddChild(MakeUserWidget(InternetClass, TEXT("WBP_Internet"), true));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("Tablet redesign could not load WBP_Internet."));
+				Switcher->AddChild(BuildAppPage(
+					TEXT("Page_Internet"), TEXT("BTN_InternetBack"), TEXT("인터넷"),
+					TEXT("인터넷 UI를 불러올 수 없습니다."), InternetPath, TEXT("IMG_InternetPage")));
+			}
 			Switcher->AddChild(BuildAppPage(
 				TEXT("Page_Memo"), TEXT("BTN_MemoBack"), TEXT("메모장"),
 				TEXT("읽기 전용입니다.\n현재는 메모를 입력할 수 없습니다."), MemoPath, TEXT("IMG_MemoPage")));
@@ -881,6 +1186,60 @@ namespace TabletDesigner
 		return true;
 	}
 
+	void DiscardWidgetSubtree(UWidgetBlueprint* Blueprint, UWidget* RootWidget)
+	{
+		if (!Blueprint || !Blueprint->WidgetTree || !RootWidget)
+		{
+			return;
+		}
+
+		TArray<UWidget*> Widgets;
+		Widgets.Add(RootWidget);
+		UWidgetTree::GetChildWidgets(RootWidget, Widgets);
+		for (int32 Index = Widgets.Num() - 1; Index >= 0; --Index)
+		{
+			UWidget* Widget = Widgets[Index];
+			if (!Widget)
+			{
+				continue;
+			}
+			Blueprint->OnVariableRemoved(Widget->GetFName());
+			Blueprint->WidgetTree->RemoveWidget(Widget);
+			if (Widget->GetOuter() == Blueprint->WidgetTree)
+			{
+				const FName DiscardedName = MakeUniqueObjectName(
+					GetTransientPackage(),
+					Widget->GetClass(),
+					*FString::Printf(TEXT("Discarded_%s"), *Widget->GetName()));
+				Widget->Rename(
+					*DiscardedName.ToString(),
+					GetTransientPackage(),
+					REN_DontCreateRedirectors | REN_NonTransactional | REN_DoNotDirty);
+			}
+		}
+	}
+
+	void RemoveLegacyInternetVariableRecords(UWidgetBlueprint* Blueprint)
+	{
+		if (!Blueprint)
+		{
+			return;
+		}
+		const FName LegacyNames[] = {
+			TEXT("Page_Internet"),
+			TEXT("IMG_Page_InternetBackground"),
+			TEXT("BTN_InternetBack"),
+			TEXT("TXT_InternetBack"),
+			TEXT("IMG_InternetPage"),
+			TEXT("TXT_InternetTitle"),
+			TEXT("TXT_InternetMessage")
+		};
+		for (const FName Name : LegacyNames)
+		{
+			Blueprint->OnVariableRemoved(Name);
+		}
+	}
+
 	bool BuildWidgetBlueprint(
 		const TCHAR* InAssetName,
 		const TCHAR* InAssetPath,
@@ -968,6 +1327,96 @@ namespace TabletDesigner
 				UBalhwajeomMessengerWidget::StaticClass(),
 				bRedesignExisting,
 				[](const FBuilder& Builder) { Builder.BuildMessenger(); });
+	}
+
+	bool EnsureInternetKeywordData()
+	{
+		UDataTable* Words = LoadObject<UDataTable>(
+			nullptr,
+			TEXT("/Game/Balhwajeom/Data/Investigation/DT_Words.DT_Words"));
+		if (!Words || Words->GetRowStruct() != FWordDefinition::StaticStruct())
+		{
+			UE_LOG(LogTemp, Error, TEXT("Internet setup requires DT_Words with FWordDefinition rows."));
+			return false;
+		}
+
+		const FName WordID(TEXT("WORD_RELATED_AGENCY"));
+		if (Words->FindRow<FWordDefinition>(WordID, TEXT("Internet setup"), false))
+		{
+			return true;
+		}
+
+		FWordDefinition Definition;
+		Definition.WordID = WordID;
+		Definition.DisplayWord = FText::FromString(TEXT("관계기관"));
+		Definition.Description = FText::FromString(TEXT("실종자 위치 정보 제공 요청을 받은 관계기관."));
+		Definition.RelatedCharacterIDs.Add(TEXT("SISTER"));
+		Words->AddRow(WordID, Definition);
+
+		UPackage* Package = Words->GetOutermost();
+		Package->MarkPackageDirty();
+		const FString Filename = FPackageName::LongPackageNameToFilename(
+			Package->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		SaveArgs.SaveFlags = SAVE_NoError;
+		SaveArgs.bSlowTask = false;
+		const bool bSaved = UPackage::SavePackage(Package, Words, *Filename, SaveArgs);
+		UE_LOG(LogTemp, Display, TEXT("INTERNET_WORD_SETUP Result=%s"), bSaved ? TEXT("Success") : TEXT("Failure"));
+		return bSaved;
+	}
+
+	bool BuildInternetWidgetBlueprints(const bool bRedesignExisting)
+	{
+		return EnsureInternetKeywordData()
+			&& BuildWidgetBlueprint(
+				TEXT("WBP_InternetTab"),
+				InternetTabAssetPath,
+				UBalhwajeomInternetTabWidget::StaticClass(),
+				bRedesignExisting,
+				[](const FBuilder& Builder) { Builder.BuildInternetTab(); })
+			&& BuildWidgetBlueprint(
+				TEXT("WBP_InternetKeyword"),
+				InternetKeywordAssetPath,
+				UBalhwajeomInternetKeywordWidget::StaticClass(),
+				bRedesignExisting,
+				[](const FBuilder& Builder) { Builder.BuildInternetKeyword(); })
+			&& BuildWidgetBlueprint(
+				TEXT("WBP_InternetPage_Main"),
+				TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetPage_Main.WBP_InternetPage_Main"),
+				UBalhwajeomInternetPageWidget::StaticClass(),
+				bRedesignExisting,
+				[](const FBuilder& Builder) { Builder.BuildInternetMainPage(); })
+			&& BuildWidgetBlueprint(
+				TEXT("WBP_InternetPage_Weather"),
+				TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetPage_Weather.WBP_InternetPage_Weather"),
+				UBalhwajeomInternetPageWidget::StaticClass(),
+				bRedesignExisting,
+				[](const FBuilder& Builder) { Builder.BuildInternetWeatherPage(); })
+			&& BuildWidgetBlueprint(
+				TEXT("WBP_InternetPage_News1"),
+				TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetPage_News1.WBP_InternetPage_News1"),
+				UBalhwajeomInternetPageWidget::StaticClass(),
+				bRedesignExisting,
+				[](const FBuilder& Builder) { Builder.BuildInternetNews1Page(); })
+			&& BuildWidgetBlueprint(
+				TEXT("WBP_InternetPage_News2"),
+				TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetPage_News2.WBP_InternetPage_News2"),
+				UBalhwajeomInternetPageWidget::StaticClass(),
+				bRedesignExisting,
+				[](const FBuilder& Builder) { Builder.BuildInternetNews2Page(); })
+			&& BuildWidgetBlueprint(
+				TEXT("WBP_InternetPage_Ad"),
+				TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetPage_Ad.WBP_InternetPage_Ad"),
+				UBalhwajeomInternetPageWidget::StaticClass(),
+				bRedesignExisting,
+				[](const FBuilder& Builder) { Builder.BuildInternetAdPage(); })
+			&& BuildWidgetBlueprint(
+				InternetAssetName,
+				InternetAssetPath,
+				UBalhwajeomInternetWidget::StaticClass(),
+				bRedesignExisting,
+				[](const FBuilder& Builder) { Builder.BuildInternet(); });
 	}
 
 	bool CreateMessengerDataAssetsInternal()
@@ -1112,6 +1561,58 @@ bool UTabletWidgetBlueprintLibrary::CreateMessengerDataAssets()
 	return TabletDesigner::CreateMessengerDataAssetsInternal();
 }
 
+bool UTabletWidgetBlueprintLibrary::CreateInternetWidgetBlueprints()
+{
+	return TabletDesigner::BuildInternetWidgetBlueprints(false);
+}
+
+bool UTabletWidgetBlueprintLibrary::InstallInternetBrowser()
+{
+	using namespace TabletDesigner;
+	if (!BuildInternetWidgetBlueprints(true))
+	{
+		return false;
+	}
+
+	UWidgetBlueprint* TabletBlueprint = LoadObject<UWidgetBlueprint>(nullptr, AssetPath);
+	UWidgetSwitcher* Switcher = TabletBlueprint && TabletBlueprint->WidgetTree
+		? Cast<UWidgetSwitcher>(TabletBlueprint->WidgetTree->FindWidget(TEXT("WidgetSwitcher_TabletPage")))
+		: nullptr;
+	UClass* InternetClass = LoadClass<UUserWidget>(nullptr, InternetClassPath);
+	if (!TabletBlueprint || !Switcher || !InternetClass || Switcher->GetChildrenCount() <= 3)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Internet install could not resolve WBP_Tablet page slot 3."));
+		return false;
+	}
+
+	if (UWidget* ExistingInternet = Switcher->GetChildAt(3))
+	{
+		if (ExistingInternet->IsA(InternetClass))
+		{
+			RemoveLegacyInternetVariableRecords(TabletBlueprint);
+			const bool bSaved = SaveAndCompile(TabletBlueprint);
+			UE_LOG(LogTemp, Display, TEXT("INTERNET_INSTALL Result=%s AlreadyEmbedded=true"), bSaved ? TEXT("Success") : TEXT("Failure"));
+			return bSaved;
+		}
+		DiscardWidgetSubtree(TabletBlueprint, ExistingInternet);
+	}
+
+	UUserWidget* Internet = FBuilder(TabletBlueprint).MakeUserWidget(
+		InternetClass,
+		TEXT("WBP_Internet"),
+		true);
+	if (!Internet || !Switcher->InsertChildAt(3, Internet))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Internet install could not insert WBP_Internet."));
+		return false;
+	}
+
+	RemoveLegacyInternetVariableRecords(TabletBlueprint);
+	const bool bSaved = SaveAndCompile(TabletBlueprint);
+	UE_LOG(LogTemp, Display, TEXT("INTERNET_INSTALL Result=%s AlreadyEmbedded=false"), bSaved ? TEXT("Success") : TEXT("Failure"));
+	return bSaved;
+}
+
 bool UTabletWidgetBlueprintLibrary::UpdateMessengerTimeline()
 {
 	using namespace TabletDesigner;
@@ -1254,7 +1755,9 @@ bool UTabletWidgetBlueprintLibrary::InspectTabletWidgetBlueprint()
 bool UTabletWidgetBlueprintLibrary::CreateTabletWidgetBlueprint()
 {
 	using namespace TabletDesigner;
-	if (!CreateMessengerDataAssetsInternal() || !BuildMessengerWidgetBlueprints(false))
+	if (!CreateMessengerDataAssetsInternal()
+		|| !BuildMessengerWidgetBlueprints(false)
+		|| !BuildInternetWidgetBlueprints(false))
 	{
 		return false;
 	}
@@ -1280,9 +1783,11 @@ bool UTabletWidgetBlueprintLibrary::CreateTabletWidgetBlueprint()
 bool UTabletWidgetBlueprintLibrary::RedesignTabletWidgetBlueprint()
 {
 	using namespace TabletDesigner;
-	if (!CreateMessengerDataAssetsInternal() || !BuildMessengerWidgetBlueprints(true))
+	if (!CreateMessengerDataAssetsInternal()
+		|| !BuildMessengerWidgetBlueprints(true)
+		|| !BuildInternetWidgetBlueprints(true))
 	{
-		UE_LOG(LogTemp, Error, TEXT("Messenger widget blueprints could not be generated."));
+		UE_LOG(LogTemp, Error, TEXT("Tablet child widget blueprints could not be generated."));
 		return false;
 	}
 	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, AssetPath);
@@ -1391,11 +1896,46 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 	bPassed &= Require(Tablet->GetCurrentPage() == ETabletPage::Home, TEXT("initial page is Home"));
 	bPassed &= Require(Click(TEXT("BTN_Internet")), TEXT("Internet button exists"));
 	bPassed &= Require(Tablet->GetCurrentPage() == ETabletPage::Internet, TEXT("Internet opens"));
+	UBalhwajeomInternetWidget* Internet = Tablet->GetInternetWidget();
+	bPassed &= Require(Internet != nullptr, TEXT("WBP_Internet is embedded in WBP_Tablet"));
+	if (Internet)
+	{
+		bPassed &= Require(Internet->GetOpenTabCount() == 1, TEXT("Internet starts with one pinned Main tab"));
+		bPassed &= Require(
+			Internet->GetActivePage() == EBalhwajeomInternetPage::Main,
+			TEXT("Internet starts on Main"));
+		bPassed &= Require(Internet->OpenPage(EBalhwajeomInternetPage::News1), TEXT("News1 opens"));
+		bPassed &= Require(Internet->OpenPage(EBalhwajeomInternetPage::News1), TEXT("News1 refocuses"));
+		bPassed &= Require(Internet->GetOpenTabCount() == 2, TEXT("News1 does not duplicate"));
+		Internet->SetNormalWindowPosition(FVector2D(80, 60));
+		Internet->ToggleMaximize();
+		bPassed &= Require(Internet->IsMaximized(), TEXT("Internet maximizes"));
+	}
 	Tablet->SetVisibility(ESlateVisibility::Collapsed);
 	Tablet->SetVisibility(ESlateVisibility::Visible);
 	bPassed &= Require(Tablet->GetCurrentPage() == ETabletPage::Internet, TEXT("page persists across close/reopen visibility"));
-	bPassed &= Require(Click(TEXT("BTN_InternetBack")), TEXT("Internet back exists"));
-	bPassed &= Require(Tablet->GetCurrentPage() == ETabletPage::Home, TEXT("Back returns Home"));
+	if (Internet)
+	{
+		bPassed &= Require(Internet->GetOpenTabCount() == 2, TEXT("tabs persist across tablet visibility"));
+		bPassed &= Require(Internet->IsMaximized(), TEXT("maximize state persists across tablet visibility"));
+		Internet->CloseInternetWindow();
+		bPassed &= Require(Tablet->GetCurrentPage() == ETabletPage::Home, TEXT("Internet X returns Home"));
+		bPassed &= Require(Internet->GetOpenTabCount() == 2, TEXT("Internet X preserves tabs"));
+		bPassed &= Require(!Internet->IsMaximized(), TEXT("Internet X restores normal mode"));
+		bPassed &= Require(
+			Internet->GetNormalWindowPosition().Equals(FVector2D(80, 60)),
+			TEXT("Internet X preserves normal position"));
+		bPassed &= Require(Click(TEXT("BTN_Internet")), TEXT("Internet reopens from desktop"));
+		bPassed &= Require(
+			Internet->GetActivePage() == EBalhwajeomInternetPage::News1,
+			TEXT("active tab persists after Internet X and reopen"));
+		bPassed &= Require(Internet->ClosePage(EBalhwajeomInternetPage::News1), TEXT("News1 tab closes"));
+		bPassed &= Require(
+			Internet->GetOpenTabCount() == 1
+			&& Internet->GetActivePage() == EBalhwajeomInternetPage::Main,
+			TEXT("Main remains pinned after News1 closes"));
+		Internet->CloseInternetWindow();
+	}
 	bPassed &= Require(Click(TEXT("BTN_Memo")), TEXT("Memo button exists"));
 	bPassed &= Require(Tablet->GetCurrentPage() == ETabletPage::Memo, TEXT("Memo opens"));
 	bPassed &= Require(Click(TEXT("BTN_PhysicalHome")), TEXT("physical Home exists"));

@@ -7,6 +7,7 @@
 #include "BalhwajeomTabletWidget.generated.h"
 
 class UBorder;
+class UBalhwajeomInternetWidget;
 class UBalhwajeomMessengerWidget;
 class UButton;
 class UOverlay;
@@ -109,6 +110,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
 	UBalhwajeomMessengerWidget* GetMessengerWidget() const { return WBP_Messenger; }
 
+	UFUNCTION(BlueprintPure, Category = "Tablet|Internet")
+	UBalhwajeomInternetWidget* GetInternetWidget() const { return WBP_Internet; }
+
 	UFUNCTION(BlueprintPure, Category = "Tablet|Navigation")
 	ETabletPage GetCurrentPage() const { return CurrentPage; }
 
@@ -178,6 +182,9 @@ private:
 	void HandleInternetClicked();
 
 	UFUNCTION()
+	void HandleInternetCloseRequested();
+
+	UFUNCTION()
 	void HandleMemoClicked();
 
 	UFUNCTION()
@@ -209,6 +216,9 @@ private:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UBalhwajeomMessengerWidget> WBP_Messenger;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UBalhwajeomInternetWidget> WBP_Internet;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UOverlay> PopupLayer;
