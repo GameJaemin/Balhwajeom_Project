@@ -9,8 +9,11 @@
 class UBorder;
 class UBalhwajeomMessengerWidget;
 class UButton;
+class UImage;
 class UOverlay;
+class USizeBox;
 class UTextBlock;
+class UTexture2D;
 class UWrapBox;
 class UWidgetSwitcher;
 class UWidgetAnimation;
@@ -26,25 +29,19 @@ enum class ETabletPage : uint8
 	Memo
 };
 
-UENUM(BlueprintType)
-enum class EFamilyMember : uint8
-{
-	Sister,
-	Brother,
-	Mother
-};
-
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPhotoSelected, FName, PhotoID);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletWordSelected, FName, WordID);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletFolderSelected, FName, CharacterID);
 
-/** Runtime-created photo entry shared by the folder and statement candidate lists. */
+/** Runtime-created photo entry shared by the folder grid, the statement tile, and the puzzle candidate lists. */
 UCLASS()
 class BALHWAJEOM_API UBalhwajeomTabletPhotoButton : public UButton
 {
 	GENERATED_BODY()
 
 public:
-	void Configure(FName InPhotoID, const FText& InLabel);
+	/** Thumbnail is optional: puzzle-candidate entries and the statement tile pass nullptr for a text-only tile. */
+	void Configure(FName InPhotoID, const FText& InLabel, UTexture2D* Thumbnail = nullptr);
 
 	UPROPERTY()
 	FOnTabletPhotoSelected OnPhotoSelected;
@@ -73,6 +70,25 @@ private:
 	void HandleClicked();
 
 	FName WordID = NAME_None;
+};
+
+/** Runtime-created home-page entry for one DT_Characters folder. */
+UCLASS()
+class BALHWAJEOM_API UBalhwajeomTabletFolderButton : public UButton
+{
+	GENERATED_BODY()
+
+public:
+	void Configure(FName InCharacterID, const FText& InLabel, UTexture2D* IconTexture);
+
+	UPROPERTY()
+	FOnTabletFolderSelected OnFolderSelected;
+
+private:
+	UFUNCTION()
+	void HandleClicked();
+
+	FName CharacterID = NAME_None;
 };
 
 /** Navigation/state logic for the designer-owned WBP_Tablet visual tree. */
@@ -112,8 +128,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Tablet|Navigation")
 	ETabletPage GetCurrentPage() const { return CurrentPage; }
 
+	/** DT_Characters CharacterID of the folder currently open (NAME_None while on another page). */
 	UFUNCTION(BlueprintPure, Category = "Tablet|Family")
-	EFamilyMember GetActiveFamilyMember() const { return ActiveFamilyMember; }
+	FName GetActiveCharacterID() const { return ActiveCharacterID; }
 
 #if WITH_EDITOR
 	/** Commandlet-created widgets have no local player, so UMG skips NativeOnInitialized. */
@@ -131,14 +148,18 @@ protected:
 	ETabletPage CurrentPage = ETabletPage::Home;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tablet|Family")
-	EFamilyMember ActiveFamilyMember = EFamilyMember::Sister;
+	FName ActiveCharacterID = NAME_None;
+
+	/** Shared icon shown on every home-page folder button. Assign in the WBP_Tablet class defaults. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Home")
+	TObjectPtr<UTexture2D> DefaultFolderIcon;
 
 private:
 	void SetTabletPage(ETabletPage NewPage, bool bAddToHistory = true);
 	void NavigateBack();
-	void ShowFolder(EFamilyMember FamilyMember);
+	void RefreshHomeFolders();
+	void ShowFolder(FName CharacterID);
 	void RefreshFolderContents();
-	FName GetActiveCharacterID() const;
 	UBalhwajeomInvestigationSubsystem* GetInvestigationSubsystem() const;
 	void OpenPhoto(FName PhotoID);
 	void PreparePuzzle(FName SentenceID);
@@ -147,9 +168,17 @@ private:
 	void SelectPuzzleWord(int32 Index);
 	void SelectPuzzlePhoto(FName PhotoID);
 	void ValidateActivePuzzle(bool bExplicitStatementSubmit);
-	void ShowPopup(const FText& Title, const FText& Body);
+	void ShowPopup(const FText& Title, const FText& Body, UTexture2D* PhotoTexture = nullptr);
 	void HidePopup();
 	void UpdateUnreadBadge();
+
+	/** Populates WB_PuzzleWords with the active folder's acquired keywords. Called whenever a photo or
+	 * statement popup opens, so keywords stay visible whether or not there's an active puzzle to solve;
+	 * PreparePuzzle/RefreshPuzzleControls overwrites this with the interactive candidate list when one applies. */
+	void RefreshAcquiredWordsDisplay();
+
+	/** Loads (and caches) the PNG a camera capture saved to disk for PhotoID, for folder thumbnails and the detail popup. */
+	UTexture2D* GetOrLoadCapturedPhotoTexture(FName PhotoID);
 
 	UPROPERTY(Transient, meta = (BindWidgetAnimOptional))
 	TObjectPtr<UWidgetAnimation> TabletUpAnim;
@@ -157,13 +186,7 @@ private:
 	bool bWaitingForCloseAnimation = false;
 
 	UFUNCTION()
-	void HandleSisterClicked();
-
-	UFUNCTION()
-	void HandleBrotherClicked();
-
-	UFUNCTION()
-	void HandleMotherClicked();
+	void HandleHomeFolderSelected(FName CharacterID);
 
 	UFUNCTION()
 	void HandleMessengerClicked();
@@ -195,8 +218,9 @@ private:
 	UFUNCTION()
 	void HandlePuzzleWordSelected(FName WordID);
 
+	/** Bound to the folder grid's statement tile (reuses UBalhwajeomTabletPhotoButton; the broadcast FName is a SentenceID here, not a PhotoID). */
 	UFUNCTION()
-	void HandleStatementClicked();
+	void HandleStatementTileSelected(FName SentenceID);
 
 	UFUNCTION()
 	void HandlePopupCloseClicked();
@@ -216,11 +240,19 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TXT_FolderTitle;
 
+	/** Small icon next to TXT_FolderTitle, styled like a Windows Explorer window's title-bar icon. Shares DefaultFolderIcon. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> IMG_FolderTitleIcon;
+
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TXT_PopupTitle;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TXT_PopupBody;
+
+	/** Shows the captured PNG for the photo currently open in the popup. Collapsed for non-photo popups (e.g. the statement). */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> IMG_PopupPhoto;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> BRD_MessengerBadge;
@@ -228,14 +260,9 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TXT_UnreadMessageCount;
 
+	/** Home page container populated at runtime with one folder button per DT_Characters row. */
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> BTN_Sister;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> BTN_Brother;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> BTN_Mother;
+	TObjectPtr<UWrapBox> WB_PersonFolders;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_Messenger;
@@ -246,8 +273,9 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_Memo;
 
+	/** Windows-Explorer-style "x" close button in the folder window's title bar (still just navigates back). */
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> BTN_FolderBack;
+	TObjectPtr<UButton> BTN_FolderClose;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_InternetBack;
@@ -261,11 +289,9 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWrapBox> WB_EvidencePhotos;
 
+	/** Single-slot container pinned at the bottom-center of the folder window, holding the statement tile. */
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UWrapBox> WB_AcquiredWords;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UButton> BTN_EvidenceStatement;
+	TObjectPtr<USizeBox> SB_StatementTile;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_PopupClose;
@@ -286,4 +312,8 @@ private:
 	TArray<FName> AvailablePuzzlePhotoIDs;
 	int32 NextWordSlotCursor = 0;
 	int32 NextPhotoSlotCursor = 0;
+
+	/** PhotoID -> decoded PNG, so reopening a folder/photo doesn't re-read the file from disk. */
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<UTexture2D>> CapturedPhotoTextureCache;
 };

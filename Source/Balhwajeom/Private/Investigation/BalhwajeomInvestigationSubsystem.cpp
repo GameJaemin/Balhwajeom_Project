@@ -1125,6 +1125,20 @@ void UBalhwajeomInvestigationSubsystem::GetCapturedPhotos(
 	});
 }
 
+bool UBalhwajeomInvestigationSubsystem::GetCapturedPhoto(
+	FName PhotoID,
+	FCapturedPhotoRecord& OutRecord) const
+{
+	OutRecord = FCapturedPhotoRecord{};
+	const FCapturedPhotoRecord* Record = CapturedPhotos.Find(PhotoID);
+	if (Record == nullptr)
+	{
+		return false;
+	}
+	OutRecord = *Record;
+	return true;
+}
+
 bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 	FName SentenceID,
 	const FSentenceSubmission& Submission,
@@ -1315,5 +1329,26 @@ void UBalhwajeomInvestigationSubsystem::GetPhotosForCharacter(
 	OutPhotos.Sort([](const FPhotoDefinition& A, const FPhotoDefinition& B)
 	{
 		return A.PhotoID.LexicalLess(B.PhotoID);
+	});
+}
+
+void UBalhwajeomInvestigationSubsystem::GetAllCharacterDefinitions(
+	TArray<FCharacterDefinition>& OutCharacters) const
+{
+	OutCharacters.Reset();
+	if (!IsValid(CharactersTable) || CharactersTable->GetRowStruct() != FCharacterDefinition::StaticStruct())
+	{
+		return;
+	}
+	for (const TPair<FName, uint8*>& Pair : CharactersTable->GetRowMap())
+	{
+		const FCharacterDefinition* Character = reinterpret_cast<const FCharacterDefinition*>(Pair.Value);
+		OutCharacters.Add(*Character);
+	}
+	OutCharacters.Sort([](const FCharacterDefinition& A, const FCharacterDefinition& B)
+	{
+		return A.FolderSortOrder == B.FolderSortOrder
+			? A.CharacterID.LexicalLess(B.CharacterID)
+			: A.FolderSortOrder < B.FolderSortOrder;
 	});
 }

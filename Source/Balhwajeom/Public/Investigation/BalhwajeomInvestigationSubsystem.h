@@ -108,6 +108,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Photos")
 	void GetCapturedPhotos(TArray<FCapturedPhotoRecord>& OutPhotos) const;
 
+	/** Single-record lookup, e.g. to resolve ImageRelativePath for a tablet thumbnail. */
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Photos")
+	bool GetCapturedPhoto(FName PhotoID, FCapturedPhotoRecord& OutRecord) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Sentences")
 	bool ValidateSentence(
 		FName SentenceID,
@@ -122,6 +126,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Folders")
 	void GetPhotosForCharacter(FName CharacterID, TArray<FPhotoDefinition>& OutPhotos) const;
+
+	/** Every DT_Characters row, ordered by FolderSortOrder (ties broken by CharacterID). Drives the tablet home page's dynamic folder layout. */
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Folders")
+	void GetAllCharacterDefinitions(TArray<FCharacterDefinition>& OutCharacters) const;
 
 	UPROPERTY(BlueprintAssignable, Category = "Investigation|Events")
 	FOnEvidenceStateChanged OnEvidenceStateChanged;

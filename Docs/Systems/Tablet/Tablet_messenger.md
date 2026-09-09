@@ -2,7 +2,7 @@
 
 > 기준 문서: [Project-Progress-and-Roadmap.md](../../Project-Progress-and-Roadmap.md) 2.3(메신저), 5장 P0-2
 > 담당 범위: 메신저 위젯 일체 (`UBalhwajeomMessengerWidget` 및 하위 위젯), `FST_MessengerRoom`/`FST_MessengerMessage` Data Asset
-> 같은 태블릿 폴더의 다른 문서: [태블릿_폴더.md](./태블릿_폴더.md), [태블릿_브라우져.md](./태블릿_브라우져.md)
+> 같은 태블릿 폴더의 다른 문서: [Tablet_Folder.md](./Tablet_Folder.md), [Tablet_Browser.md](./Tablet_Browser.md)
 
 핵심 파일:
 - [BalhwajeomTabletWidget.h](../../../Source/Balhwajeom/Public/Tablet/BalhwajeomTabletWidget.h) — 태블릿과 메신저를 연결하는 공용 위젯(`WBP_Messenger` 바인딩, 안읽음 배지)
@@ -14,7 +14,7 @@
 - [BalhwajeomMessengerTypes.h](../../../Source/Balhwajeom/Public/Tablet/BalhwajeomMessengerTypes.h) — `FST_MessengerRoom`/`FST_MessengerMessage`
 - [BalhwajeomMessengerDataAssets.h](../../../Source/Balhwajeom/Public/Tablet/BalhwajeomMessengerDataAssets.h)
 
-`UBalhwajeomTabletWidget`(`ETabletPage::Messenger`)은 다른 두 문서([태블릿_폴더.md](./태블릿_폴더.md), [태블릿_브라우져.md](./태블릿_브라우져.md))와 공유되는 헤더이므로, 태블릿 쪽 바인딩(`WBP_Messenger`, `HandleMessengerClicked`, `HandleMessengerUnreadChanged` 등)을 수정할 때는 두 담당자에게 미리 공지한다.
+`UBalhwajeomTabletWidget`(`ETabletPage::Messenger`)은 다른 두 문서([Tablet_Folder.md](./Tablet_Folder.md), [Tablet_Browser.md](./Tablet_Browser.md))와 공유되는 헤더이므로, 태블릿 쪽 바인딩(`WBP_Messenger`, `HandleMessengerClicked`, `HandleMessengerUnreadChanged` 등)을 수정할 때는 두 담당자에게 미리 공지한다.
 
 ## 1. 현재 상태
 
@@ -24,7 +24,7 @@
 
 - [ ] 예시 일시(`SentAt`, 현재 2026-05-12~13 임시 데이터)를 실제 본편 연표로 교체 — [DataTable-Handoff.md](../DataTable-Handoff.md)의 시나리오 확정 작업과 함께 진행.
 - [ ] 메시지 키워드(`KeywordText`/`WordID`) 지급이 중복 지급되지 않는지, 여러 방을 오갈 때 안읽음 카운트가 정확한지 확인.
-- [ ] 메신저 방/인물 구성이 태블릿 인물 폴더(`EFamilyMember`, [태블릿_폴더.md](./태블릿_폴더.md) 담당)와 일치하는지 확인.
+- [ ] 메신저 방/인물 구성이 태블릿 인물 폴더(`DT_Characters` 기반, [Tablet_Folder.md](./Tablet_Folder.md) 담당)와 일치하는지 확인.
 
 ## 3. 작업 체크리스트 (일정 연동)
 

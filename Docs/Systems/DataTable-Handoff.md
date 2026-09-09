@@ -131,7 +131,11 @@ CSV 헤더 = Row Struct의 `UPROPERTY` 이름이다. Row Name(CSV 첫 컬럼)은
 
 ## 3. 변경 필요 사항
 
-- [ ] 샘플 데이터(`CHAPTER_01`, `SISTER` 등 프로토타입용 예시)를 실제 시나리오 데이터로 교체하거나, 실 데이터와 분리한다.
+- [x] 샘플 데이터를 기획 전달 Chapter 1(여동생) 실 데이터로 교체 완료(2026-09-09). `Scripts/Investigation/*.csv` 8종 전부 교체, `Content/Python/import_chapter1_data.py`로 재임포트. 인물 ID 컨벤션이 `SISTER`→`CHARACTER_SISTER` 등으로 바뀌었다.
+  - 기획 CSV에 없던 `DT_Words.RelatedCharacterIDs`는 이번 챕터가 전부 `CHARACTER_SISTER` 소속이라 전 단어에 `(CHARACTER_SISTER)`로 채움 — 형제/타 인물 데이터가 추가되면 재검토 필요.
+  - 기획 CSV에 없던 `DT_Sentences.LieText`는 비워둠 — 진술서 팝업의 "거짓말" 문구가 비어 보인다. 기획팀에 확인 필요.
+  - 기획 CSV의 `DT_Photos.PhotoType`/`EvidenceSentenceID`, `DT_Sentences.ResultTextID`는 각각 미사용 필드로 드롭했거나(`PhotoType`) `ResultText`로 매핑함. `EvidenceSentenceID`(사진→진술서 증거 연결)는 현재 코드에 대응 로직이 없고, 기획 데이터의 `RequiredPhotoCount`/`PhotoSlots`도 전부 0/빈 값이라 진술서가 키워드만으로 풀리는 상태 — 사진을 증거로 요구하려면 추가 설계 필요.
+  - `Balhwajeom.Investigation` 자동화(11/11, `ConfiguredDataValidation` 포함) 통과 확인.
 - [ ] 본편에 필요한 인물·증거·상태·키워드·사진·문서·문장 ID를 마스터 시트로 먼저 확정한 뒤 CSV에 반영한다(다른 트랙이 이 ID를 참조하므로 선(先)확정 필수).
 - [ ] `DT_Photos`의 인물 폴더 소속(`CharacterID`), 지급 키워드(`GrantedWordIDs`), 월드 스토리 문장, 음성 참조 필드를 실제 콘텐츠 기준으로 검수한다.
 - [x] `DT_OutputTexts.uasset`은 최신 구조에서 참조되지 않아 제거함(2026-09-09).

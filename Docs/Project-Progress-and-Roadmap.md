@@ -285,7 +285,7 @@ Gameplay Tag 기반 `StoryStateSubsystem`과 자동 테스트가 존재한다. �
 | 데이터·저장 | 본편 데이터 입력(8개 DataTable), ⑦저장 시스템 구현 | [DataTable-Handoff.md](./Systems/DataTable-Handoff.md), [Subsystem-Handoff.md](./Systems/Subsystem-Handoff.md) | Investigation C++와 DataTable `.uasset` |
 | 상호작용 | ③상호작용 세부 시스템 수정, 본편 증거 Blueprint 이전 | [Interaction-Handoff.md](./Systems/Interaction-Handoff.md) | `.umap`, `BP_Evidence_*` |
 | 카메라 | ②카메라 세부 시스템 수정, 패키지 촬영 검증 | [Camera-Handoff.md](./Systems/Camera-Handoff.md) | 카메라 관련 `.uasset` |
-| 태블릿 | ①진술서·사진·브라우저·메신저 세부 기능 구현 | [태블릿_폴더.md](./Systems/Tablet/태블릿_폴더.md), [태블릿_브라우져.md](./Systems/Tablet/태블릿_브라우져.md), [태블릿_메신져.md](./Systems/Tablet/태블릿_메신져.md) | `WBP_Tablet`, 메신저 WBP |
+| 태블릿 | ①진술서·사진·브라우저·메신저 세부 기능 구현 | [Tablet_Folder.md](./Systems/Tablet/Tablet_Folder.md), [Tablet_Browser.md](./Systems/Tablet/Tablet_Browser.md), [Tablet_messenger.md](./Systems/Tablet/Tablet_messenger.md) | `WBP_Tablet`, 메신저 WBP |
 | 아트·이펙트·사운드 | ④아트워크 파일 통합, ⑤이펙트 연결, ⑥사운드 재생 처리 | 각 시스템 문서의 "변경 필요 사항" 항목 | 각 트랙의 비주얼·사운드 컴포넌트(사전 조율 필수) |
 | QA | ⑧전체 회귀·패키지 QA | 5개 담당 문서의 "완료 조건" 전체 | 없음(관찰·검증 전담, M1부터 상시 스모크 테스트 권장) |
 
@@ -333,7 +333,7 @@ Gameplay Tag 기반 `StoryStateSubsystem`과 자동 테스트가 존재한다. �
 - [Subsystem 담당 작업 문서](./Systems/Subsystem-Handoff.md) — InvestigationSubsystem·StoryStateSubsystem·전체 진행 SaveGame
 - [카메라 시스템 담당 작업 문서](./Systems/Camera-Handoff.md) — 카메라 세부 시스템 수정
 - [상호작용 담당 작업 문서](./Systems/Interaction-Handoff.md) — 상호작용 세부 시스템 수정
-- 태블릿 담당 작업 문서 — 진술서·사진·브라우저·메신저 세부 기능: [태블릿_폴더](./Systems/Tablet/태블릿_폴더.md)(사진·진술서) / [태블릿_브라우져](./Systems/Tablet/태블릿_브라우져.md) / [태블릿_메신져](./Systems/Tablet/태블릿_메신져.md)
+- 태블릿 담당 작업 문서 — 진술서·사진·브라우저·메신저 세부 기능: [Tablet_Folder](./Systems/Tablet/Tablet_Folder.md)(사진·진술서) / [Tablet_Browser](./Systems/Tablet/Tablet_Browser.md) / [Tablet_messenger](./Systems/Tablet/Tablet_messenger.md)
 
 
 ## 10. 진행 기록 갱신 규칙

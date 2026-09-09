@@ -2,13 +2,18 @@
 
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/Image.h"
 #include "Components/Overlay.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Components/WrapBox.h"
 #include "Components/WidgetSwitcher.h"
 #include "Blueprint/WidgetTree.h"
 #include "Animation/WidgetAnimation.h"
+#include "ImageUtils.h"
+#include "Misc/Paths.h"
 #include "Tablet/BalhwajeomMessengerWidget.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -18,20 +23,6 @@ namespace
 	int32 ToPageIndex(const ETabletPage Page)
 	{
 		return static_cast<int32>(Page);
-	}
-
-	FText GetFamilyMemberText(const EFamilyMember FamilyMember)
-	{
-		switch (FamilyMember)
-		{
-		case EFamilyMember::Brother:
-			return FText::FromString(TEXT("형"));
-		case EFamilyMember::Mother:
-			return FText::FromString(TEXT("어머니"));
-		case EFamilyMember::Sister:
-		default:
-			return FText::FromString(TEXT("여동생"));
-		}
 	}
 }
 
@@ -98,18 +89,6 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 
-	if (BTN_Sister)
-	{
-		BTN_Sister->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSisterClicked);
-	}
-	if (BTN_Brother)
-	{
-		BTN_Brother->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBrotherClicked);
-	}
-	if (BTN_Mother)
-	{
-		BTN_Mother->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleMotherClicked);
-	}
 	if (BTN_Messenger)
 	{
 		BTN_Messenger->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleMessengerClicked);
@@ -122,9 +101,13 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 	{
 		BTN_Memo->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleMemoClicked);
 	}
-	if (BTN_FolderBack)
+	if (BTN_FolderClose)
 	{
-		BTN_FolderBack->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBackClicked);
+		BTN_FolderClose->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBackClicked);
+	}
+	if (IMG_FolderTitleIcon && DefaultFolderIcon)
+	{
+		IMG_FolderTitleIcon->SetBrushFromTexture(DefaultFolderIcon, true);
 	}
 	if (BTN_InternetBack)
 	{
@@ -137,10 +120,6 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 	if (BTN_PhysicalHome)
 	{
 		BTN_PhysicalHome->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePhysicalHomeClicked);
-	}
-	if (BTN_EvidenceStatement)
-	{
-		BTN_EvidenceStatement->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleStatementClicked);
 	}
 	if (BTN_PopupClose)
 	{
@@ -167,6 +146,7 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 	}
 	HidePopup();
 	UpdateUnreadBadge();
+	RefreshHomeFolders();
 }
 
 void UBalhwajeomTabletWidget::ResetToDesktop()
@@ -215,29 +195,42 @@ void UBalhwajeomTabletWidget::NavigateBack()
 	SetTabletPage(PreviousPage, false);
 }
 
-void UBalhwajeomTabletWidget::ShowFolder(const EFamilyMember FamilyMember)
+void UBalhwajeomTabletWidget::RefreshHomeFolders()
 {
-	ActiveFamilyMember = FamilyMember;
-	if (TXT_FolderTitle)
+	if (!WB_PersonFolders || !WidgetTree)
 	{
-		TXT_FolderTitle->SetText(GetFamilyMemberText(FamilyMember));
+		return;
 	}
-	SetTabletPage(ETabletPage::PersonFolder);
-	RefreshFolderContents();
+
+	WB_PersonFolders->ClearChildren();
+
+	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	if (!Investigation)
+	{
+		return;
+	}
+
+	TArray<FCharacterDefinition> Characters;
+	Investigation->GetAllCharacterDefinitions(Characters);
+	for (const FCharacterDefinition& Character : Characters)
+	{
+		USizeBox* EntrySize = WidgetTree->ConstructWidget<USizeBox>();
+		EntrySize->SetWidthOverride(170.0f);
+		EntrySize->SetHeightOverride(170.0f);
+		UBalhwajeomTabletFolderButton* Entry =
+			WidgetTree->ConstructWidget<UBalhwajeomTabletFolderButton>();
+		Entry->Configure(Character.CharacterID, Character.FolderName, DefaultFolderIcon);
+		Entry->OnFolderSelected.AddUniqueDynamic(this, &ThisClass::HandleHomeFolderSelected);
+		EntrySize->AddChild(Entry);
+		WB_PersonFolders->AddChild(EntrySize);
+	}
 }
 
-FName UBalhwajeomTabletWidget::GetActiveCharacterID() const
+void UBalhwajeomTabletWidget::ShowFolder(const FName CharacterID)
 {
-	switch (ActiveFamilyMember)
-	{
-	case EFamilyMember::Brother:
-		return TEXT("BROTHER");
-	case EFamilyMember::Mother:
-		return TEXT("MOTHER");
-	case EFamilyMember::Sister:
-	default:
-		return TEXT("SISTER");
-	}
+	ActiveCharacterID = CharacterID;
+	SetTabletPage(ETabletPage::PersonFolder);
+	RefreshFolderContents();
 }
 
 UBalhwajeomInvestigationSubsystem* UBalhwajeomTabletWidget::GetInvestigationSubsystem() const
@@ -250,6 +243,7 @@ void UBalhwajeomTabletWidget::RefreshFolderContents()
 {
 	VisiblePhotoIDs.Reset();
 	VisibleStatementIDs.Reset();
+	FText FolderName;
 	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
 	if (Investigation)
 	{
@@ -269,12 +263,43 @@ void UBalhwajeomTabletWidget::RefreshFolderContents()
 		{
 			VisibleStatementIDs.Add(Statement.SentenceID);
 		}
+
 		FCharacterDefinition Character;
-		if (TXT_FolderTitle &&
-			Investigation->GetCharacterDefinition(GetActiveCharacterID(), Character) &&
+		if (Investigation->GetCharacterDefinition(GetActiveCharacterID(), Character) &&
 			!Character.FolderName.IsEmpty())
 		{
-			TXT_FolderTitle->SetText(Character.FolderName);
+			FolderName = Character.FolderName;
+			if (TXT_FolderTitle)
+			{
+				TXT_FolderTitle->SetText(FolderName);
+			}
+		}
+	}
+
+	// The statement is its own tile, separate from the scrolling photo grid, pinned at the
+	// bottom-center of the folder window (one statement per folder, for now).
+	if (SB_StatementTile && WidgetTree)
+	{
+		if (Investigation && VisibleStatementIDs.IsValidIndex(0))
+		{
+			const FName StatementID = VisibleStatementIDs[0];
+			const bool bComplete = Investigation->IsSentenceSolved(StatementID);
+			const FText Label = FText::Format(
+				NSLOCTEXT("Tablet", "DynamicStatementFileLabel", "{0}  {1} 진술서"),
+				bComplete ? FText::FromString(TEXT("✓")) : FText::FromString(TEXT("?")),
+				FolderName);
+
+			UBalhwajeomTabletPhotoButton* Entry =
+				WidgetTree->ConstructWidget<UBalhwajeomTabletPhotoButton>();
+			Entry->Configure(StatementID, Label);
+			Entry->OnPhotoSelected.AddUniqueDynamic(this, &ThisClass::HandleStatementTileSelected);
+			SB_StatementTile->SetContent(Entry);
+			SB_StatementTile->SetVisibility(ESlateVisibility::Visible);
+		}
+		else
+		{
+			SB_StatementTile->SetContent(nullptr);
+			SB_StatementTile->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
 
@@ -295,60 +320,16 @@ void UBalhwajeomTabletWidget::RefreshFolderContents()
 				bComplete ? FText::FromString(TEXT("✓")) : FText::FromString(TEXT("?")),
 				Photo.PhotoName);
 
+			// ~170x170 to roughly match a home-page folder icon's size.
 			USizeBox* EntrySize = WidgetTree->ConstructWidget<USizeBox>();
-			EntrySize->SetWidthOverride(200.0f);
-			EntrySize->SetHeightOverride(88.0f);
+			EntrySize->SetWidthOverride(170.0f);
+			EntrySize->SetHeightOverride(170.0f);
 			UBalhwajeomTabletPhotoButton* Entry =
 				WidgetTree->ConstructWidget<UBalhwajeomTabletPhotoButton>();
-			Entry->Configure(PhotoID, Label);
+			Entry->Configure(PhotoID, Label, GetOrLoadCapturedPhotoTexture(PhotoID));
 			Entry->OnPhotoSelected.AddUniqueDynamic(this, &ThisClass::HandleFolderPhotoSelected);
 			EntrySize->AddChild(Entry);
 			WB_EvidencePhotos->AddChild(EntrySize);
-		}
-	}
-
-	if (WB_AcquiredWords && WidgetTree)
-	{
-		WB_AcquiredWords->ClearChildren();
-		if (Investigation)
-		{
-			TArray<FAcquiredWordRecord> FolderWords;
-			Investigation->GetAcquiredWordsForCharacter(GetActiveCharacterID(), FolderWords);
-			for (const FAcquiredWordRecord& Record : FolderWords)
-			{
-				FWordDefinition Definition;
-				if (!Investigation->GetWordDefinition(Record.WordID, Definition))
-				{
-					continue;
-				}
-				UTextBlock* Entry = WidgetTree->ConstructWidget<UTextBlock>();
-				Entry->SetText(Definition.DisplayWord);
-				Entry->SetColorAndOpacity(FSlateColor(FLinearColor(0.91f, 0.60f, 0.18f, 1.0f)));
-				FSlateFontInfo Font = Entry->GetFont();
-				Font.Size = 20;
-				Entry->SetFont(Font);
-				WB_AcquiredWords->AddChild(Entry);
-			}
-		}
-	}
-
-	if (BTN_EvidenceStatement)
-	{
-		const FName StatementID = VisibleStatementIDs.IsValidIndex(0)
-			? VisibleStatementIDs[0] : NAME_None;
-		const bool bAvailable = Investigation && !StatementID.IsNone();
-		BTN_EvidenceStatement->SetVisibility(
-			bAvailable ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-		BTN_EvidenceStatement->SetIsEnabled(bAvailable);
-		if (bAvailable)
-		{
-			if (UTextBlock* Label = Cast<UTextBlock>(GetWidgetFromName(TEXT("TXT_EvidenceStatement"))))
-			{
-				Label->SetText(FText::Format(
-					NSLOCTEXT("Tablet", "StatementFileLabel", "{0}  진술서"),
-					Investigation->IsSentenceSolved(StatementID)
-						? FText::FromString(TEXT("✓")) : FText::FromString(TEXT("?"))));
-			}
 		}
 	}
 }
@@ -380,7 +361,7 @@ void UBalhwajeomTabletWidget::OpenPhoto(const FName PhotoID)
 	{
 		Body = FText::Join(FText::FromString(TEXT("\n")), Photo.WorldStoryLines);
 	}
-	ShowPopup(Photo.PhotoName, Body);
+	ShowPopup(Photo.PhotoName, Body, GetOrLoadCapturedPhotoTexture(PhotoID));
 	if (!Photo.PhotoSentenceID.IsNone() && !Investigation->IsSentenceSolved(Photo.PhotoSentenceID))
 	{
 		PreparePuzzle(Photo.PhotoSentenceID);
@@ -539,11 +520,12 @@ void UBalhwajeomTabletWidget::ValidateActivePuzzle(const bool bExplicitStatement
 	{
 		if (TXT_PopupBody) TXT_PopupBody->SetText(Result);
 		HidePuzzleControls();
+		RefreshAcquiredWordsDisplay();
 		RefreshFolderContents();
 	}
 }
 
-void UBalhwajeomTabletWidget::ShowPopup(const FText& Title, const FText& Body)
+void UBalhwajeomTabletWidget::ShowPopup(const FText& Title, const FText& Body, UTexture2D* PhotoTexture)
 {
 	ActiveSentenceID = NAME_None;
 	HidePuzzleControls();
@@ -555,10 +537,86 @@ void UBalhwajeomTabletWidget::ShowPopup(const FText& Title, const FText& Body)
 	{
 		TXT_PopupBody->SetText(Body);
 	}
+	if (IMG_PopupPhoto)
+	{
+		if (PhotoTexture)
+		{
+			IMG_PopupPhoto->SetBrushFromTexture(PhotoTexture, true);
+			IMG_PopupPhoto->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
+		else
+		{
+			IMG_PopupPhoto->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+	RefreshAcquiredWordsDisplay();
 	if (PopupLayer)
 	{
 		PopupLayer->SetVisibility(ESlateVisibility::Visible);
 	}
+}
+
+void UBalhwajeomTabletWidget::RefreshAcquiredWordsDisplay()
+{
+	if (!WB_PuzzleWords || !WidgetTree)
+	{
+		return;
+	}
+
+	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	if (!Investigation || ActiveCharacterID.IsNone())
+	{
+		return;
+	}
+
+	TArray<FAcquiredWordRecord> FolderWords;
+	Investigation->GetAcquiredWordsForCharacter(ActiveCharacterID, FolderWords);
+
+	WB_PuzzleWords->ClearChildren();
+	for (const FAcquiredWordRecord& Record : FolderWords)
+	{
+		FWordDefinition Word;
+		if (!Investigation->GetWordDefinition(Record.WordID, Word))
+		{
+			continue;
+		}
+		USizeBox* EntrySize = WidgetTree->ConstructWidget<USizeBox>();
+		EntrySize->SetWidthOverride(220.0f);
+		EntrySize->SetHeightOverride(50.0f);
+		UBalhwajeomTabletWordButton* Entry =
+			WidgetTree->ConstructWidget<UBalhwajeomTabletWordButton>();
+		Entry->Configure(Record.WordID, Word.DisplayWord);
+		Entry->OnWordSelected.AddUniqueDynamic(this, &ThisClass::HandlePuzzleWordSelected);
+		EntrySize->AddChild(Entry);
+		WB_PuzzleWords->AddChild(EntrySize);
+	}
+	WB_PuzzleWords->SetVisibility(
+		FolderWords.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+}
+
+UTexture2D* UBalhwajeomTabletWidget::GetOrLoadCapturedPhotoTexture(const FName PhotoID)
+{
+	if (PhotoID.IsNone())
+	{
+		return nullptr;
+	}
+	if (const TObjectPtr<UTexture2D>* Cached = CapturedPhotoTextureCache.Find(PhotoID))
+	{
+		return *Cached;
+	}
+
+	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	FCapturedPhotoRecord Record;
+	if (!Investigation || !Investigation->GetCapturedPhoto(PhotoID, Record))
+	{
+		return nullptr;
+	}
+
+	const FString AbsolutePath = FPaths::ConvertRelativePathToFull(
+		FPaths::Combine(FPaths::ProjectSavedDir(), Record.ImageRelativePath));
+	UTexture2D* Texture = FImageUtils::ImportFileAsTexture2D(AbsolutePath);
+	CapturedPhotoTextureCache.Add(PhotoID, Texture);
+	return Texture;
 }
 
 void UBalhwajeomTabletWidget::HidePopup()
@@ -582,19 +640,9 @@ void UBalhwajeomTabletWidget::UpdateUnreadBadge()
 	}
 }
 
-void UBalhwajeomTabletWidget::HandleSisterClicked()
+void UBalhwajeomTabletWidget::HandleHomeFolderSelected(const FName CharacterID)
 {
-	ShowFolder(EFamilyMember::Sister);
-}
-
-void UBalhwajeomTabletWidget::HandleBrotherClicked()
-{
-	ShowFolder(EFamilyMember::Brother);
-}
-
-void UBalhwajeomTabletWidget::HandleMotherClicked()
-{
-	ShowFolder(EFamilyMember::Mother);
+	ShowFolder(CharacterID);
 }
 
 void UBalhwajeomTabletWidget::HandleMessengerClicked()
@@ -636,19 +684,46 @@ void UBalhwajeomTabletWidget::HandlePhysicalHomeClicked()
 	ResetToDesktop();
 }
 
-void UBalhwajeomTabletPhotoButton::Configure(const FName InPhotoID, const FText& InLabel)
+void UBalhwajeomTabletPhotoButton::Configure(
+	const FName InPhotoID,
+	const FText& InLabel,
+	UTexture2D* Thumbnail)
 {
 	PhotoID = InPhotoID;
 	OnClicked.AddUniqueDynamic(this, &ThisClass::HandleClicked);
 
+	UVerticalBox* Layout = NewObject<UVerticalBox>(this);
+
+	if (Thumbnail)
+	{
+		// Sized to fit inside the ~170-wide folder tile (see RefreshFolderContents).
+		USizeBox* ThumbnailBox = NewObject<USizeBox>(this);
+		ThumbnailBox->SetWidthOverride(150.0f);
+		ThumbnailBox->SetHeightOverride(95.0f);
+
+		UImage* Image = NewObject<UImage>(this);
+		Image->SetBrushFromTexture(Thumbnail, true);
+		ThumbnailBox->AddChild(Image);
+
+		UVerticalBoxSlot* ThumbnailSlot = Layout->AddChildToVerticalBox(ThumbnailBox);
+		ThumbnailSlot->SetHorizontalAlignment(HAlign_Center);
+		ThumbnailSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+	}
+
 	UTextBlock* Label = NewObject<UTextBlock>(this);
 	Label->SetText(InLabel);
 	Label->SetJustification(ETextJustify::Center);
-	Label->SetAutoWrapText(true);
+	// Single line, truncated with "..." like a real folder's filename label, instead of
+	// wrapping and getting clipped by the tile's fixed height once a thumbnail is present.
+	Label->SetAutoWrapText(false);
+	Label->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
 	FSlateFontInfo Font = Label->GetFont();
 	Font.Size = 20;
 	Label->SetFont(Font);
-	SetContent(Label);
+	UVerticalBoxSlot* LabelSlot = Layout->AddChildToVerticalBox(Label);
+	LabelSlot->SetHorizontalAlignment(HAlign_Fill);
+
+	SetContent(Layout);
 }
 
 void UBalhwajeomTabletPhotoButton::HandleClicked()
@@ -682,6 +757,54 @@ void UBalhwajeomTabletWordButton::HandleClicked()
 	}
 }
 
+void UBalhwajeomTabletFolderButton::Configure(
+	const FName InCharacterID,
+	const FText& InLabel,
+	UTexture2D* IconTexture)
+{
+	CharacterID = InCharacterID;
+	OnClicked.AddUniqueDynamic(this, &ThisClass::HandleClicked);
+
+	UVerticalBox* Layout = NewObject<UVerticalBox>(this);
+
+	if (IconTexture)
+	{
+		USizeBox* IconBox = NewObject<USizeBox>(this);
+		IconBox->SetWidthOverride(140.0f);
+		IconBox->SetHeightOverride(112.0f);
+
+		UImage* Icon = NewObject<UImage>(this);
+		Icon->SetBrushFromTexture(IconTexture, true);
+		IconBox->AddChild(Icon);
+
+		UVerticalBoxSlot* IconSlot = Layout->AddChildToVerticalBox(IconBox);
+		IconSlot->SetHorizontalAlignment(HAlign_Center);
+		IconSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
+	}
+
+	UTextBlock* Label = NewObject<UTextBlock>(this);
+	Label->SetText(InLabel);
+	Label->SetJustification(ETextJustify::Center);
+	Label->SetAutoWrapText(false);
+	Label->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
+	Label->SetColorAndOpacity(FSlateColor(FLinearColor(0.96f, 0.91f, 0.82f, 1.0f)));
+	FSlateFontInfo Font = Label->GetFont();
+	Font.Size = 25;
+	Label->SetFont(Font);
+	UVerticalBoxSlot* LabelSlot = Layout->AddChildToVerticalBox(Label);
+	LabelSlot->SetHorizontalAlignment(HAlign_Fill);
+
+	SetContent(Layout);
+}
+
+void UBalhwajeomTabletFolderButton::HandleClicked()
+{
+	if (!CharacterID.IsNone())
+	{
+		OnFolderSelected.Broadcast(CharacterID);
+	}
+}
+
 void UBalhwajeomTabletWidget::HandleFolderPhotoSelected(const FName PhotoID)
 {
 	OpenPhoto(PhotoID);
@@ -701,15 +824,15 @@ void UBalhwajeomTabletWidget::HandlePuzzleWordSelected(const FName WordID)
 	}
 }
 
-void UBalhwajeomTabletWidget::HandleStatementClicked()
+void UBalhwajeomTabletWidget::HandleStatementTileSelected(const FName SentenceID)
 {
 	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
-	if (!Investigation || !VisibleStatementIDs.IsValidIndex(0))
+	if (!Investigation || SentenceID.IsNone())
 	{
 		return;
 	}
 	FSentenceDefinition Statement;
-	if (!Investigation->GetSentenceDefinition(VisibleStatementIDs[0], Statement))
+	if (!Investigation->GetSentenceDefinition(SentenceID, Statement))
 	{
 		return;
 	}

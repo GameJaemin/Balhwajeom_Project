@@ -2,11 +2,11 @@
 
 > 기준 문서: [Project-Progress-and-Roadmap.md](../../Project-Progress-and-Roadmap.md) 5장 백로그
 > 담당 범위: `UBalhwajeomTabletWidget`의 `Internet` 페이지
-> 같은 태블릿 폴더의 다른 문서: [태블릿_폴더.md](./태블릿_폴더.md), [태블릿_메신져.md](./태블릿_메신져.md)
+> 같은 태블릿 폴더의 다른 문서: [Tablet_Folder.md](./Tablet_Folder.md), [Tablet_messenger.md](./Tablet_messenger.md)
 
 핵심 파일: [BalhwajeomTabletWidget.h](../../../Source/Balhwajeom/Public/Tablet/BalhwajeomTabletWidget.h) / `.cpp`, `WBP_Tablet.uasset`(`Content/Balhwajeom/UI/Tablet`)
 
-`UBalhwajeomTabletWidget`은 태블릿의 5개 페이지(`ETabletPage`: `Home`, `PersonFolder`, `Messenger`, `Internet`, `Memo`)를 한 위젯에서 전환하는 공용 클래스다. 이 헤더는 [태블릿_폴더.md](./태블릿_폴더.md), [태블릿_메신져.md](./태블릿_메신져.md) 담당자와 공유되므로, `UBalhwajeomTabletWidget.h`를 직접 수정할 때는 다른 두 담당자에게 미리 공지한다.
+`UBalhwajeomTabletWidget`은 태블릿의 5개 페이지(`ETabletPage`: `Home`, `PersonFolder`, `Messenger`, `Internet`, `Memo`)를 한 위젯에서 전환하는 공용 클래스다. 이 헤더는 [Tablet_Folder.md](./Tablet_Folder.md), [Tablet_messenger.md](./Tablet_messenger.md) 담당자와 공유되므로, `UBalhwajeomTabletWidget.h`를 직접 수정할 때는 다른 두 담당자에게 미리 공지한다.
 
 ## 1. 현재 상태
 
