@@ -100,6 +100,7 @@ CSV 헤더 = Row Struct의 `UPROPERTY` 이름이다. Row Name(CSV 첫 컬럼)은
 | `DescriptionSource` | Enum(`None`/`NearLabel`/`InteractionText`/`Custom`) | 태블릿에 보여줄 사진 설명을 어디서 가져올지. `NearLabel`/`InteractionText`는 촬영된 증거 상태(`DT_EvidenceStates`)의 같은 이름 필드를 재사용하고, `Custom`이면 아래 필드를 직접 사용 |
 | `CustomDescription` | Text | `DescriptionSource=Custom`일 때 사용하는 설명 |
 | `PhotoSentenceID` | Name (참조: `DT_Sentences.SentenceID`, `SentenceType=PhotoAnalysis`) | 이 사진의 분석 퍼즐로 연결되는 문장 |
+| `EvidenceSentenceID` | Name (참조: `DT_Sentences.SentenceID`, `SentenceType=PhotoAnalysis`, 선택) | 이 사진을 **어느 진술서에서든 증거로 제출할 때** 추가로 풀어야 하는 빈칸 문제. 사진 고유 속성이라 어느 진술서·어느 슬롯에서 쓰이든 항상 같은 문장이 뜬다. 비어있으면 추가 문제 없이 기존처럼 판정 |
 | `CharacterID` | Name (참조: `DT_Characters.CharacterID`) | 이 사진이 표시될 태블릿 인물 폴더 |
 | `GrantedWordIDs` | Name 배열 (참조: `DT_Words.WordID`) | 촬영 성공 시 1회 지급되는 키워드들 |
 | `WorldStoryLines` | Text 배열 | 촬영 직후 및 태블릿에서 사진을 다시 열 때 순서대로 보여줄 월드 스토리 대사 |
@@ -115,7 +116,7 @@ CSV 헤더 = Row Struct의 `UPROPERTY` 이름이다. Row Name(CSV 첫 컬럼)은
 | `LieText` | Text | 진술서에서 반증 대상이 되는 인물의 거짓 진술 문구 |
 | `SentenceTemplate` | Text | 빈칸이 있는 문장 템플릿(퍼즐 UI 표시용) |
 | `WordSlots` | 구조체 배열(`SlotIndex` 0~4, `CorrectWordID`(참조: `DT_Words`), `OrderGroup`) | 빈칸별 정답 키워드. `OrderGroup=0`이면 그 슬롯 위치가 고정, 0이 아니면 같은 그룹끼리는 순서 상관없이 채워도 정답으로 인정(`ValidateSentence` 참고) |
-| `PhotoSlots` | 구조체 배열(`SlotIndex` 0~1, `CorrectPhotoID`(참조: `DT_Photos`)) | 진술서에 첨부해야 할 정답 사진. **분석이 이미 풀린 사진만** 후보로 인정된다 |
+| `PhotoSlots` | 구조체 배열(`SlotIndex` 0~1, `CorrectPhotoID`(참조: `DT_Photos`)) | 진술서에 첨부해야 할 정답 사진. **분석이 이미 풀린 사진만** 후보로 인정되고, 그 사진에 `EvidenceSentenceID`(`DT_Photos` 참고)가 있으면 그 문장도 풀려야 정답으로 인정된다 |
 | `RequiredPhotoCount` | Int (0~`PhotoSlots` 수) | 정답 인정에 필요한 최소 사진 매칭 수 |
 | `ResultText` | Text | 정답 제출 성공 시 보여줄 결과 문구. **비어 있으면 검증 자체가 실패로 처리**되므로 반드시 채운다 |
 | `DesignerNote` | Text | 기획자 메모(런타임에서 사용되지 않음) |
@@ -130,7 +131,11 @@ CSV 헤더 = Row Struct의 `UPROPERTY` 이름이다. Row Name(CSV 첫 컬럼)은
 
 ## 3. 변경 필요 사항
 
-- [ ] 샘플 데이터(`CHAPTER_01`, `SISTER` 등 프로토타입용 예시)를 실제 시나리오 데이터로 교체하거나, 실 데이터와 분리한다.
+- [x] 샘플 데이터를 기획 전달 Chapter 1(여동생) 실 데이터로 교체 완료(2026-09-09). `Scripts/Investigation/*.csv` 8종 전부 교체, `Content/Python/import_chapter1_data.py`로 재임포트. 인물 ID 컨벤션이 `SISTER`→`CHARACTER_SISTER` 등으로 바뀌었다.
+  - 기획 CSV에 없던 `DT_Words.RelatedCharacterIDs`는 이번 챕터가 전부 `CHARACTER_SISTER` 소속이라 전 단어에 `(CHARACTER_SISTER)`로 채움 — 형제/타 인물 데이터가 추가되면 재검토 필요.
+  - 기획 CSV에 없던 `DT_Sentences.LieText`는 비워둠 — 진술서 팝업의 "거짓말" 문구가 비어 보인다. 기획팀에 확인 필요.
+  - 기획 CSV의 `DT_Photos.PhotoType`/`EvidenceSentenceID`, `DT_Sentences.ResultTextID`는 각각 미사용 필드로 드롭했거나(`PhotoType`) `ResultText`로 매핑함. `EvidenceSentenceID`(사진→진술서 증거 연결)는 현재 코드에 대응 로직이 없고, 기획 데이터의 `RequiredPhotoCount`/`PhotoSlots`도 전부 0/빈 값이라 진술서가 키워드만으로 풀리는 상태 — 사진을 증거로 요구하려면 추가 설계 필요.
+  - `Balhwajeom.Investigation` 자동화(11/11, `ConfiguredDataValidation` 포함) 통과 확인.
 - [ ] 본편에 필요한 인물·증거·상태·키워드·사진·문서·문장 ID를 마스터 시트로 먼저 확정한 뒤 CSV에 반영한다(다른 트랙이 이 ID를 참조하므로 선(先)확정 필수).
 - [ ] `DT_Photos`의 인물 폴더 소속(`CharacterID`), 지급 키워드(`GrantedWordIDs`), 월드 스토리 문장, 음성 참조 필드를 실제 콘텐츠 기준으로 검수한다.
 - [x] `DT_OutputTexts.uasset`은 최신 구조에서 참조되지 않아 제거함(2026-09-09).

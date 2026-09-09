@@ -1,6 +1,6 @@
 # Investigation prototype data
 
-이 폴더의 CSV는 `Content/Balhwajeom/Data/Investigation` DataTable 7종의 재임포트 원본 예시다.
+이 폴더의 CSV는 `Content/Balhwajeom/Data/Investigation` DataTable 8종(DT_Characters, DT_EvidenceDefinitions, DT_EvidenceStates, DT_KeywordChoices, DT_KeywordDocuments, DT_Photos, DT_Sentences, DT_Words)의 재임포트 원본이다.
 
 - Row Name과 내부 ID는 항상 동일하게 유지한다.
 - `DT_Photos.GrantedWordIDs`는 단순 `FName` 배열이므로 `(WORD_A,WORD_B)` 형식을 쓴다.
