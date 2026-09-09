@@ -15,6 +15,7 @@
 #include "ImageUtils.h"
 #include "Misc/Paths.h"
 #include "Tablet/BalhwajeomMessengerWidget.h"
+#include "Tablet/BalhwajeomInternetWidget.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Engine/GameInstance.h"
 
@@ -33,6 +34,10 @@ void UBalhwajeomTabletWidget::InitializeForAutomatedTest()
 	if (WBP_Messenger)
 	{
 		WBP_Messenger->InitializeForAutomatedTest();
+	}
+	if (WBP_Internet)
+	{
+		WBP_Internet->InitializeForAutomatedTest();
 	}
 }
 #endif
@@ -136,6 +141,13 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 			&ThisClass::HandleMessengerUnreadChanged);
 		WBP_Messenger->InitializeMessenger();
 		SetUnreadMessageCount(WBP_Messenger->GetTotalUnreadCount());
+	}
+	if (WBP_Internet)
+	{
+		WBP_Internet->OnCloseRequested.AddUniqueDynamic(
+			this,
+			&ThisClass::HandleInternetCloseRequested);
+		WBP_Internet->InitializeInternet();
 	}
 
 	CurrentPage = ETabletPage::Home;
@@ -666,7 +678,16 @@ void UBalhwajeomTabletWidget::HandleMessengerUnreadChanged(const int32 TotalUnre
 
 void UBalhwajeomTabletWidget::HandleInternetClicked()
 {
+	if (WBP_Internet)
+	{
+		WBP_Internet->PrepareForDesktopOpen();
+	}
 	SetTabletPage(ETabletPage::Internet);
+}
+
+void UBalhwajeomTabletWidget::HandleInternetCloseRequested()
+{
+	ResetToDesktop();
 }
 
 void UBalhwajeomTabletWidget::HandleMemoClicked()
