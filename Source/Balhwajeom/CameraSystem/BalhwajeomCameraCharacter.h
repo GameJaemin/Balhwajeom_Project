@@ -35,6 +35,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Camera")
 	bool IsInCameraMode() const;
 
+	/** Restores the correct exploration view after an external interaction camera ends. */
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	void RestoreExplorationView(float BlendTime = 0.35f);
+
 	UFUNCTION(BlueprintPure, Category = "Evidence", meta = (DeprecatedFunction, DeprecationMessage = "A captured-photo list API will be supplied by BalhwajeomInvestigationSubsystem."))
 	TArray<FBalhwajeomEvidenceData> GetCollectedEvidence() const;
 
