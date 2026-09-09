@@ -123,6 +123,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Folders")
 	void GetPhotosForCharacter(FName CharacterID, TArray<FPhotoDefinition>& OutPhotos) const;
 
+	/** Every DT_Characters row, ordered by FolderSortOrder (ties broken by CharacterID). Drives the tablet home page's dynamic folder layout. */
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Folders")
+	void GetAllCharacterDefinitions(TArray<FCharacterDefinition>& OutCharacters) const;
+
 	UPROPERTY(BlueprintAssignable, Category = "Investigation|Events")
 	FOnEvidenceStateChanged OnEvidenceStateChanged;
 

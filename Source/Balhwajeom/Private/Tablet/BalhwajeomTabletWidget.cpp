@@ -2,9 +2,12 @@
 
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/Image.h"
 #include "Components/Overlay.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Components/WrapBox.h"
 #include "Components/WidgetSwitcher.h"
 #include "Blueprint/WidgetTree.h"
@@ -18,20 +21,6 @@ namespace
 	int32 ToPageIndex(const ETabletPage Page)
 	{
 		return static_cast<int32>(Page);
-	}
-
-	FText GetFamilyMemberText(const EFamilyMember FamilyMember)
-	{
-		switch (FamilyMember)
-		{
-		case EFamilyMember::Brother:
-			return FText::FromString(TEXT("형"));
-		case EFamilyMember::Mother:
-			return FText::FromString(TEXT("어머니"));
-		case EFamilyMember::Sister:
-		default:
-			return FText::FromString(TEXT("여동생"));
-		}
 	}
 }
 
@@ -98,18 +87,6 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 
-	if (BTN_Sister)
-	{
-		BTN_Sister->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSisterClicked);
-	}
-	if (BTN_Brother)
-	{
-		BTN_Brother->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBrotherClicked);
-	}
-	if (BTN_Mother)
-	{
-		BTN_Mother->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleMotherClicked);
-	}
 	if (BTN_Messenger)
 	{
 		BTN_Messenger->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleMessengerClicked);
@@ -167,6 +144,7 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 	}
 	HidePopup();
 	UpdateUnreadBadge();
+	RefreshHomeFolders();
 }
 
 void UBalhwajeomTabletWidget::ResetToDesktop()
@@ -215,29 +193,42 @@ void UBalhwajeomTabletWidget::NavigateBack()
 	SetTabletPage(PreviousPage, false);
 }
 
-void UBalhwajeomTabletWidget::ShowFolder(const EFamilyMember FamilyMember)
+void UBalhwajeomTabletWidget::RefreshHomeFolders()
 {
-	ActiveFamilyMember = FamilyMember;
-	if (TXT_FolderTitle)
+	if (!WB_PersonFolders || !WidgetTree)
 	{
-		TXT_FolderTitle->SetText(GetFamilyMemberText(FamilyMember));
+		return;
 	}
-	SetTabletPage(ETabletPage::PersonFolder);
-	RefreshFolderContents();
+
+	WB_PersonFolders->ClearChildren();
+
+	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	if (!Investigation)
+	{
+		return;
+	}
+
+	TArray<FCharacterDefinition> Characters;
+	Investigation->GetAllCharacterDefinitions(Characters);
+	for (const FCharacterDefinition& Character : Characters)
+	{
+		USizeBox* EntrySize = WidgetTree->ConstructWidget<USizeBox>();
+		EntrySize->SetWidthOverride(170.0f);
+		EntrySize->SetHeightOverride(170.0f);
+		UBalhwajeomTabletFolderButton* Entry =
+			WidgetTree->ConstructWidget<UBalhwajeomTabletFolderButton>();
+		Entry->Configure(Character.CharacterID, Character.FolderName, DefaultFolderIcon);
+		Entry->OnFolderSelected.AddUniqueDynamic(this, &ThisClass::HandleHomeFolderSelected);
+		EntrySize->AddChild(Entry);
+		WB_PersonFolders->AddChild(EntrySize);
+	}
 }
 
-FName UBalhwajeomTabletWidget::GetActiveCharacterID() const
+void UBalhwajeomTabletWidget::ShowFolder(const FName CharacterID)
 {
-	switch (ActiveFamilyMember)
-	{
-	case EFamilyMember::Brother:
-		return TEXT("BROTHER");
-	case EFamilyMember::Mother:
-		return TEXT("MOTHER");
-	case EFamilyMember::Sister:
-	default:
-		return TEXT("SISTER");
-	}
+	ActiveCharacterID = CharacterID;
+	SetTabletPage(ETabletPage::PersonFolder);
+	RefreshFolderContents();
 }
 
 UBalhwajeomInvestigationSubsystem* UBalhwajeomTabletWidget::GetInvestigationSubsystem() const
@@ -582,19 +573,9 @@ void UBalhwajeomTabletWidget::UpdateUnreadBadge()
 	}
 }
 
-void UBalhwajeomTabletWidget::HandleSisterClicked()
+void UBalhwajeomTabletWidget::HandleHomeFolderSelected(const FName CharacterID)
 {
-	ShowFolder(EFamilyMember::Sister);
-}
-
-void UBalhwajeomTabletWidget::HandleBrotherClicked()
-{
-	ShowFolder(EFamilyMember::Brother);
-}
-
-void UBalhwajeomTabletWidget::HandleMotherClicked()
-{
-	ShowFolder(EFamilyMember::Mother);
+	ShowFolder(CharacterID);
 }
 
 void UBalhwajeomTabletWidget::HandleMessengerClicked()
@@ -679,6 +660,53 @@ void UBalhwajeomTabletWordButton::HandleClicked()
 	if (!WordID.IsNone())
 	{
 		OnWordSelected.Broadcast(WordID);
+	}
+}
+
+void UBalhwajeomTabletFolderButton::Configure(
+	const FName InCharacterID,
+	const FText& InLabel,
+	UTexture2D* IconTexture)
+{
+	CharacterID = InCharacterID;
+	OnClicked.AddUniqueDynamic(this, &ThisClass::HandleClicked);
+
+	UVerticalBox* Layout = NewObject<UVerticalBox>(this);
+
+	if (IconTexture)
+	{
+		USizeBox* IconBox = NewObject<USizeBox>(this);
+		IconBox->SetWidthOverride(140.0f);
+		IconBox->SetHeightOverride(112.0f);
+
+		UImage* Icon = NewObject<UImage>(this);
+		Icon->SetBrushFromTexture(IconTexture, true);
+		IconBox->AddChild(Icon);
+
+		UVerticalBoxSlot* IconSlot = Layout->AddChildToVerticalBox(IconBox);
+		IconSlot->SetHorizontalAlignment(HAlign_Center);
+		IconSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
+	}
+
+	UTextBlock* Label = NewObject<UTextBlock>(this);
+	Label->SetText(InLabel);
+	Label->SetJustification(ETextJustify::Center);
+	Label->SetAutoWrapText(true);
+	Label->SetColorAndOpacity(FSlateColor(FLinearColor(0.96f, 0.91f, 0.82f, 1.0f)));
+	FSlateFontInfo Font = Label->GetFont();
+	Font.Size = 25;
+	Label->SetFont(Font);
+	UVerticalBoxSlot* LabelSlot = Layout->AddChildToVerticalBox(Label);
+	LabelSlot->SetHorizontalAlignment(HAlign_Fill);
+
+	SetContent(Layout);
+}
+
+void UBalhwajeomTabletFolderButton::HandleClicked()
+{
+	if (!CharacterID.IsNone())
+	{
+		OnFolderSelected.Broadcast(CharacterID);
 	}
 }
 

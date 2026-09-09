@@ -67,9 +67,6 @@ namespace TabletDesigner
 
 	const TCHAR* TabletBodyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Tablet_Body.Tablet_Body");
 	const TCHAR* FamilyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Family.Family");
-	const TCHAR* SisterPath = TEXT("/Game/Balhwajeom/UI/Tablet/Folder_sister.Folder_sister");
-	const TCHAR* BrotherPath = TEXT("/Game/Balhwajeom/UI/Tablet/Folder_Bro.Folder_Bro");
-	const TCHAR* MotherPath = TEXT("/Game/Balhwajeom/UI/Tablet/Folder_Mother.Folder_Mother");
 	const TCHAR* MessengerPath = TEXT("/Game/Balhwajeom/UI/Tablet/App_Messanger.App_Messanger");
 	const TCHAR* InternetPath = TEXT("/Game/Balhwajeom/UI/Tablet/App_Internet.App_Internet");
 	const TCHAR* MemoPath = TEXT("/Game/Balhwajeom/UI/Tablet/App_Note.App_Note");
@@ -367,24 +364,11 @@ namespace TabletDesigner
 		{
 			UCanvasPanel* Page = Make<UCanvasPanel>(TEXT("Page_Home"));
 
-			Place(
-				Page,
-				MakeIconButton(
-					TEXT("BTN_Sister"), TEXT("IMG_Sister"), SisterPath, TEXT("여동생"),
-					FVector2D(15, 2), FVector2D(140, 112), 124),
-				72, 108, 170, 170);
-			Place(
-				Page,
-				MakeIconButton(
-					TEXT("BTN_Brother"), TEXT("IMG_Brother"), BrotherPath, TEXT("형"),
-					FVector2D(15, 2), FVector2D(140, 112), 124),
-				262, 108, 170, 170);
-			Place(
-				Page,
-				MakeIconButton(
-					TEXT("BTN_Mother"), TEXT("IMG_Mother"), MotherPath, TEXT("어머니"),
-					FVector2D(15, 2), FVector2D(140, 112), 124),
-				452, 108, 170, 170);
+			// Populated at runtime by UBalhwajeomTabletWidget::RefreshHomeFolders() from DT_Characters
+			// (FolderName label, ordered by FolderSortOrder), instead of one fixed button per family member.
+			UWrapBox* PersonFolders = Make<UWrapBox>(TEXT("WB_PersonFolders"), true);
+			PersonFolders->SetInnerSlotPadding(FVector2D(20.0f, 20.0f));
+			Place(Page, PersonFolders, 72, 108, 720, 170);
 
 			UOverlay* Sticky = Make<UOverlay>(TEXT("Overlay_StickyNote"));
 			Sticky->SetClipping(EWidgetClipping::ClipToBounds);
@@ -1550,9 +1534,24 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 		}
 	}
 
-	bPassed &= Require(Click(TEXT("BTN_Sister")), TEXT("Sister folder button exists"));
+	UWrapBox* PersonFolders = Cast<UWrapBox>(FindWidget(TEXT("WB_PersonFolders")));
+	bPassed &= Require(PersonFolders != nullptr, TEXT("dynamic person-folder list exists"));
+	UButton* FirstFolderButton = nullptr;
+	if (PersonFolders && PersonFolders->GetChildrenCount() > 0)
+	{
+		if (USizeBox* FirstEntry = Cast<USizeBox>(PersonFolders->GetChildAt(0)))
+		{
+			FirstFolderButton = Cast<UButton>(FirstEntry->GetContent());
+		}
+	}
+	bPassed &= Require(FirstFolderButton != nullptr, TEXT("home page has at least one DT_Characters folder button"));
+	if (FirstFolderButton)
+	{
+		FirstFolderButton->OnClicked.Broadcast();
+	}
 	bPassed &= Require(Tablet->GetCurrentPage() == ETabletPage::PersonFolder, TEXT("folder page opens"));
-	bPassed &= Require(Tablet->GetActiveFamilyMember() == EFamilyMember::Sister, TEXT("active member is Sister"));
+	bPassed &= Require(Tablet->GetActiveCharacterID() == TEXT("SISTER"),
+		TEXT("active character is the first DT_Characters row by FolderSortOrder (Sister)"));
 	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_EvidencePhotos"))) != nullptr,
 		TEXT("dynamic evidence photo list exists"));
 	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_AcquiredWords"))) != nullptr,

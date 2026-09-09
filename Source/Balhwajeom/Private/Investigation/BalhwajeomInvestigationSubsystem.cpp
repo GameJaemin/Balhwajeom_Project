@@ -1317,3 +1317,24 @@ void UBalhwajeomInvestigationSubsystem::GetPhotosForCharacter(
 		return A.PhotoID.LexicalLess(B.PhotoID);
 	});
 }
+
+void UBalhwajeomInvestigationSubsystem::GetAllCharacterDefinitions(
+	TArray<FCharacterDefinition>& OutCharacters) const
+{
+	OutCharacters.Reset();
+	if (!IsValid(CharactersTable) || CharactersTable->GetRowStruct() != FCharacterDefinition::StaticStruct())
+	{
+		return;
+	}
+	for (const TPair<FName, uint8*>& Pair : CharactersTable->GetRowMap())
+	{
+		const FCharacterDefinition* Character = reinterpret_cast<const FCharacterDefinition*>(Pair.Value);
+		OutCharacters.Add(*Character);
+	}
+	OutCharacters.Sort([](const FCharacterDefinition& A, const FCharacterDefinition& B)
+	{
+		return A.FolderSortOrder == B.FolderSortOrder
+			? A.CharacterID.LexicalLess(B.CharacterID)
+			: A.FolderSortOrder < B.FolderSortOrder;
+	});
+}
