@@ -258,7 +258,7 @@ bool ABedMemoryActor::BeginRest(APawn* InteractingPawn)
 		return false;
 	}
 
-	State = EBedMemoryState::AligningPlayer;
+	State = EBedMemoryState::Approaching;
 	RestingCharacter = Character;
 	RestingPlayerController = PlayerController;
 	SavedPlayerTransform = Character->GetActorTransform();
@@ -269,7 +269,6 @@ bool ABedMemoryActor::BeginRest(APawn* InteractingPawn)
 		SavedMovementMode = static_cast<uint8>(Movement->MovementMode);
 		SavedCustomMovementMode = Movement->CustomMovementMode;
 		Movement->StopMovementImmediately();
-		Movement->DisableMovement();
 	}
 
 	PlayerController->SetIgnoreMoveInput(true);
@@ -284,17 +283,6 @@ bool ABedMemoryActor::BeginRest(APawn* InteractingPawn)
 	}
 	RestInputComponent->bBlockInput = true;
 
-	if (PlayerAnchor)
-	{
-		FHitResult IgnoredHit;
-		Character->SetActorLocationAndRotation(
-			PlayerAnchor->GetComponentLocation(),
-			PlayerAnchor->GetComponentRotation(),
-			false,
-			&IgnoredHit,
-			ETeleportType::TeleportPhysics);
-	}
-
 	if (AHUD* HUD = PlayerController->GetHUD())
 	{
 		bSavedHUDVisible = HUD->bShowHUD;
@@ -304,6 +292,90 @@ bool ABedMemoryActor::BeginRest(APawn* InteractingPawn)
 	SetWorldEvidenceLabelsSuppressed(true);
 
 	PlayerController->SetViewTargetWithBlend(this, CameraBlendInDuration, VTBlend_Cubic);
+	BeginApproach();
+	return State != EBedMemoryState::Idle;
+}
+
+void ABedMemoryActor::BeginApproach()
+{
+	if (State != EBedMemoryState::Approaching || !RestingCharacter || !PlayerAnchor)
+	{
+		CancelApproach();
+		return;
+	}
+
+	ApproachStartedAtSeconds = GetWorld()->GetTimeSeconds();
+	GetWorldTimerManager().SetTimer(
+		ApproachTimer, this, &ABedMemoryActor::UpdateApproach, 0.02f, true);
+	UpdateApproach();
+}
+
+void ABedMemoryActor::UpdateApproach()
+{
+	if (State != EBedMemoryState::Approaching || !RestingCharacter || !PlayerAnchor)
+	{
+		GetWorldTimerManager().ClearTimer(ApproachTimer);
+		return;
+	}
+
+	const FVector CharacterLocation = RestingCharacter->GetActorLocation();
+	const FVector AnchorLocation = PlayerAnchor->GetComponentLocation();
+	const FVector HorizontalDelta(
+		AnchorLocation.X - CharacterLocation.X,
+		AnchorLocation.Y - CharacterLocation.Y,
+		0.0f);
+	const float HorizontalDistance = HorizontalDelta.Size();
+	if (HorizontalDistance <= ApproachAcceptanceRadius)
+	{
+		FinishApproach();
+		return;
+	}
+
+	if (GetWorld()->GetTimeSeconds() - ApproachStartedAtSeconds >= ApproachTimeout)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("%s timed out while walking to PlayerAnchor."), *GetName());
+		CancelApproach();
+		return;
+	}
+
+	const FVector MoveDirection = HorizontalDelta / HorizontalDistance;
+	const FRotator DesiredRotation(0.0f, MoveDirection.Rotation().Yaw, 0.0f);
+	const FRotator NewRotation = FMath::RInterpConstantTo(
+		RestingCharacter->GetActorRotation(), DesiredRotation, 0.02f, ApproachRotationRate);
+	RestingCharacter->SetActorRotation(NewRotation);
+	if (UCharacterMovementComponent* Movement = RestingCharacter->GetCharacterMovement())
+	{
+		Movement->RequestDirectMove(MoveDirection * Movement->GetMaxSpeed(), false);
+	}
+}
+
+void ABedMemoryActor::FinishApproach()
+{
+	if (State != EBedMemoryState::Approaching || !RestingCharacter || !PlayerAnchor)
+	{
+		return;
+	}
+
+	GetWorldTimerManager().ClearTimer(ApproachTimer);
+	State = EBedMemoryState::AligningPlayer;
+	if (RestingPlayerController)
+	{
+		RestingPlayerController->StopMovement();
+	}
+	if (UCharacterMovementComponent* Movement = RestingCharacter->GetCharacterMovement())
+	{
+		Movement->StopMovementImmediately();
+		Movement->DisableMovement();
+	}
+
+	FHitResult IgnoredHit;
+	RestingCharacter->SetActorLocationAndRotation(
+		PlayerAnchor->GetComponentLocation(),
+		PlayerAnchor->GetComponentRotation(),
+		false,
+		&IgnoredHit,
+		ETeleportType::TeleportPhysics);
 
 	if (BedSoundMix)
 	{
@@ -317,7 +389,9 @@ bool ABedMemoryActor::BeginRest(APawn* InteractingPawn)
 	}
 
 	State = EBedMemoryState::Entering;
-	const float EnterDuration = EnterMontage ? Character->PlayAnimMontage(EnterMontage) : 0.0f;
+	const float EnterDuration = EnterMontage
+		? RestingCharacter->PlayAnimMontage(EnterMontage)
+		: 0.0f;
 	if (EnterDuration > 0.0f)
 	{
 		GetWorldTimerManager().SetTimer(
@@ -327,7 +401,30 @@ bool ABedMemoryActor::BeginRest(APawn* InteractingPawn)
 	{
 		FinishEntering();
 	}
-	return true;
+}
+
+void ABedMemoryActor::CancelApproach()
+{
+	GetWorldTimerManager().ClearTimer(ApproachTimer);
+	if (RestingPlayerController && RestingCharacter)
+	{
+		RestingPlayerController->StopMovement();
+		if (ABalhwajeomCameraCharacter* CameraCharacter =
+			Cast<ABalhwajeomCameraCharacter>(RestingCharacter))
+		{
+			CameraCharacter->RestoreExplorationView(CameraBlendOutDuration);
+		}
+		else
+		{
+			RestingPlayerController->SetViewTargetWithBlend(
+				RestingCharacter, CameraBlendOutDuration, VTBlend_Cubic);
+		}
+	}
+
+	State = EBedMemoryState::Restoring;
+	RestorePlayerState();
+	State = EBedMemoryState::Idle;
+	ApplyInspectionDistanceState(LastInspectionDistanceState);
 }
 
 void ABedMemoryActor::FinishEntering()
@@ -598,8 +695,14 @@ void ABedMemoryActor::EndRest()
 	{
 		return;
 	}
+	if (State == EBedMemoryState::Approaching)
+	{
+		CancelApproach();
+		return;
+	}
 
 	State = EBedMemoryState::Exiting;
+	GetWorldTimerManager().ClearTimer(ApproachTimer);
 	GetWorldTimerManager().ClearTimer(TransitionTimer);
 	GetWorldTimerManager().ClearTimer(VoiceTimer);
 	if (VoiceLoadHandle.IsValid())

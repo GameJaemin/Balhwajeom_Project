@@ -8,10 +8,11 @@
 ```text
 침대 근처에서 [F] 앉기
 → 플레이어 입력 잠금
-→ 플레이어를 침대의 PlayerAnchor로 이동/회전
+→ 침대의 SeatedCamera로 전환 시작
+→ 전환되는 화면에서 플레이어가 PlayerAnchor까지 자동으로 걸어감
+→ 도착 직전에 PlayerAnchor 위치/회전으로 미세 보정
 → 지정된 착석 애니메이션이 있으면 재생
 → 애니메이션이 없으면 해당 위치에 서 있는 상태 유지
-→ 침대의 SeatedCamera로 전환
 → 침대 전용 BGM 페이드인
 → 1~2초 정적
 → 가족 음성을 방 안의 서로 다른 위치에서 한 개씩 재생
@@ -126,6 +127,7 @@ FocusedInspection의 Owner 확인
 enum class EBedMemoryState : uint8
 {
     Idle,
+    Approaching,
     AligningPlayer,
     Entering,
     PreparingAudio,
@@ -138,6 +140,7 @@ enum class EBedMemoryState : uint8
 | 상태 | 역할 |
 |---|---|
 | Idle | 콜라이더 안에서 `[F] 앉기` 가능 |
+| Approaching | 침대 카메라로 전환하면서 PlayerAnchor까지 자동 보행 |
 | AligningPlayer | 입력을 막고 PlayerAnchor로 이동/회전 |
 | Entering | 선택적 착석 Montage 및 카메라 진입 |
 | PreparingAudio | 수집 사진 조회 및 필요한 StoryVoice 비동기 로드 |
@@ -151,13 +154,14 @@ enum class EBedMemoryState : uint8
 
 ### 진입 순서
 
-1. Character Movement를 비활성화한다.
-2. 현재 이동 입력을 지운다.
-3. 플레이어 Collision을 잠시 Query Only 또는 No Collision로 낮춘다.
-4. 플레이어를 `PlayerAnchor`의 위치와 Yaw에 맞춘다.
-5. 바닥 관통 방지를 위해 Capsule 기준 높이 보정을 적용할지 Blueprint 옵션으로 둔다.
-6. 위치 정렬 후 Collision을 필요한 상태로 되돌린다.
-7. 카메라 및 애니메이션 진입을 시작한다.
+1. 사용자의 이동·시점 입력만 잠그고 Character Movement는 유지한다.
+2. 침대 카메라 블렌드를 즉시 시작한다.
+3. 캐릭터의 기존 Movement Component에 `PlayerAnchor` 방향 이동 입력을 주어 자동 보행한다.
+4. 도착 허용 반경에 들어오면 이동을 멈추고 Character Movement를 비활성화한다.
+5. 플레이어를 `PlayerAnchor`의 정확한 위치와 회전에 미세 보정한다.
+6. 착석 애니메이션과 오디오 진입을 시작한다.
+
+접근 이동은 침대 주변의 짧은 동선을 전제로 직접 이동하며 기존 걷기 속도, 충돌, AnimBP를 그대로 사용한다. 장애물에 막혀 `ApproachTimeout` 안에 도착하지 못하면 카메라와 입력을 복원하고 상호작용을 취소한다. 접근 중 F를 다시 눌러도 같은 취소 복구가 실행된다.
 
 기본 이동은 즉시 `SetActorLocationAndRotation`한다. 화면에서 순간이동이 보이지 않도록 카메라 블렌드를 동시에 시작하거나 0.1~0.2초의 짧은 Fade 옵션을 제공할 수 있다.
 
