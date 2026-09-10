@@ -6,6 +6,11 @@
 #include "GameFramework/HUD.h"
 #include "BalhwajeomEvidenceCameraHUD.generated.h"
 
+class UImage;
+class UTexture2D;
+class UTextBlock;
+class UUserWidget;
+
 /** Minimal functional camera overlay for the MVP. */
 UCLASS()
 class BALHWAJEOM_API ABalhwajeomEvidenceCameraHUD : public AHUD
@@ -13,7 +18,10 @@ class BALHWAJEOM_API ABalhwajeomEvidenceCameraHUD : public AHUD
 	GENERATED_BODY()
 
 public:
+	ABalhwajeomEvidenceCameraHUD();
+
 	virtual void DrawHUD() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	UFUNCTION(BlueprintCallable, Category = "Camera")
 	void TriggerPhotoFlash();
@@ -35,6 +43,32 @@ protected:
 
 private:
 	void DrawEvidenceSavedAnimation();
+	bool EnsureFocusGuideWidget();
+	void HideFocusGuideWidget();
+	void UpdateFocusGuideWidget(
+		const FVector2D& GuidePosition,
+		float GuideOpacity,
+		bool bShowStatusIcon,
+		bool bAlreadyCaptured,
+		const FText& LabelText);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Camera|Guide")
+	TSubclassOf<UUserWidget> FocusGuideWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Camera|Guide")
+	TObjectPtr<UTexture2D> PhotoRequiredIcon;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Camera|Guide")
+	TObjectPtr<UTexture2D> PhotoCapturedIcon;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUserWidget> FocusGuideWidget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> FocusGuideStatusImage;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> FocusGuideLabelText;
 
 	float PhotoFlashEndTime = -1.0f;
 	float EvidenceSavedAnimationStartTime = -1.0f;
