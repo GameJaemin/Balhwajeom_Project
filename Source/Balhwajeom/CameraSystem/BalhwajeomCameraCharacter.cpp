@@ -14,10 +14,11 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "Engine/Engine.h"
+#include "Animation/AnimationAsset.h"
 
 ABalhwajeomCameraCharacter::ABalhwajeomCameraCharacter()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 
 	GetCapsuleComponent()->InitCapsuleSize(42.0f, 96.0f);
 
@@ -91,6 +92,28 @@ ABalhwajeomCameraCharacter::ABalhwajeomCameraCharacter()
 	}
 }
 
+void ABalhwajeomCameraCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	// This path is opt-in so legacy children that use an Animation Blueprint are untouched.
+	if (!IdleAnimation || !WalkAnimation || !GetMesh())
+	{
+		return;
+	}
+
+	const float HorizontalSpeed = GetVelocity().Size2D();
+	UAnimationAsset* DesiredAnimation = HorizontalSpeed >= WalkAnimationThreshold
+		? WalkAnimation.Get()
+		: IdleAnimation.Get();
+
+	if (DesiredAnimation != ActiveLocomotionAnimation)
+	{
+		GetMesh()->PlayAnimation(DesiredAnimation, true);
+		ActiveLocomotionAnimation = DesiredAnimation;
+	}
+}
+
 void ABalhwajeomCameraCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -120,6 +143,13 @@ void ABalhwajeomCameraCharacter::BeginPlay()
 		// camera when walking backward.)
 		bUseControllerRotationYaw = true;
 		GetCharacterMovement()->bOrientRotationToMovement = false;
+
+		if (AController* CharacterController = GetController())
+		{
+			FRotator InitialControlRotation = CharacterController->GetControlRotation();
+			InitialControlRotation.Pitch = InitialOrbitPitch;
+			CharacterController->SetControlRotation(InitialControlRotation);
+		}
 	}
 }
 
@@ -205,6 +235,20 @@ void ABalhwajeomCameraCharacter::StopSprinting()
 bool ABalhwajeomCameraCharacter::IsInCameraMode() const
 {
 	return PhotoCameraComponent && PhotoCameraComponent->IsInCameraMode();
+}
+
+void ABalhwajeomCameraCharacter::RestoreExplorationView(float BlendTime)
+{
+	if (ActiveCameraZone)
+	{
+		ActiveCameraZone->ActivateCamera(this);
+		return;
+	}
+
+	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
+	{
+		PlayerController->SetViewTargetWithBlend(this, BlendTime, VTBlend_Cubic);
+	}
 }
 
 TArray<FBalhwajeomEvidenceData> ABalhwajeomCameraCharacter::GetCollectedEvidence() const

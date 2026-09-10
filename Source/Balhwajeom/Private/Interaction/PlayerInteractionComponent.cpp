@@ -10,6 +10,7 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "Interaction/InspectionComponent.h"
+#include "Interaction/WorldInteractable.h"
 #include "CameraSystem/BalhwajeomEvidenceActor.h"
 
 
@@ -359,6 +360,22 @@ bool UPlayerInteractionComponent::TryInspect(
 
 bool UPlayerInteractionComponent::RequestInspect()
 {
+	if (IsValid(FocusedInspection))
+	{
+		AActor* FocusedActor = FocusedInspection->GetOwner();
+		APawn* InteractingPawn = Cast<APawn>(GetOwner());
+		if (IsValid(FocusedActor) && IsValid(InteractingPawn) &&
+			FocusedActor->Implements<UWorldInteractable>())
+		{
+			if (!IWorldInteractable::Execute_CanInteract(FocusedActor, InteractingPawn))
+			{
+				return false;
+			}
+			return IWorldInteractable::Execute_RequestInteraction(
+				FocusedActor, InteractingPawn);
+		}
+	}
+
 	FText InspectionText;
 
 	if (!TryInspect(InspectionText))

@@ -475,6 +475,17 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 			}
 		}
 
+		if (!Photo->EvidenceSentenceID.IsNone())
+		{
+			const FSentenceDefinition* EvidenceSentence = SentencesTable->FindRow<FSentenceDefinition>(
+				Photo->EvidenceSentenceID, Context, false);
+			if (EvidenceSentence == nullptr || EvidenceSentence->SentenceType != ESentenceType::PhotoAnalysis)
+			{
+				ReportInvalidReference(
+					TEXT("PhotoDefinition"), Photo->PhotoID, TEXT("EvidenceSentenceID"), Photo->EvidenceSentenceID);
+			}
+		}
+
 		if (!HasCharacter(Photo->CharacterID))
 		{
 			ReportInvalidReference(
@@ -1114,6 +1125,20 @@ void UBalhwajeomInvestigationSubsystem::GetCapturedPhotos(
 	});
 }
 
+bool UBalhwajeomInvestigationSubsystem::GetCapturedPhoto(
+	FName PhotoID,
+	FCapturedPhotoRecord& OutRecord) const
+{
+	OutRecord = FCapturedPhotoRecord{};
+	const FCapturedPhotoRecord* Record = CapturedPhotos.Find(PhotoID);
+	if (Record == nullptr)
+	{
+		return false;
+	}
+	OutRecord = *Record;
+	return true;
+}
+
 bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 	FName SentenceID,
 	const FSentenceSubmission& Submission,
@@ -1215,10 +1240,24 @@ bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 		const FSentenceRuntimeProgress* AnalysisProgress =
 			SubmittedPhoto != nullptr ? SentenceProgress.Find(SubmittedPhoto->PhotoSentenceID) : nullptr;
 
-		if (AnalysisProgress != nullptr && AnalysisProgress->bSolved)
+		if (AnalysisProgress == nullptr || !AnalysisProgress->bSolved)
 		{
-			++CorrectPhotoCount;
+			continue;
 		}
+
+		// If this photo requires an extra evidence-specific sentence (e.g. "why does this photo
+		// disprove the statement"), that must be solved too before the photo counts as evidence here.
+		if (SubmittedPhoto != nullptr && !SubmittedPhoto->EvidenceSentenceID.IsNone())
+		{
+			const FSentenceRuntimeProgress* EvidenceProgress =
+				SentenceProgress.Find(SubmittedPhoto->EvidenceSentenceID);
+			if (EvidenceProgress == nullptr || !EvidenceProgress->bSolved)
+			{
+				continue;
+			}
+		}
+
+		++CorrectPhotoCount;
 	}
 
 	if (CorrectPhotoCount < Sentence->RequiredPhotoCount)
@@ -1290,5 +1329,26 @@ void UBalhwajeomInvestigationSubsystem::GetPhotosForCharacter(
 	OutPhotos.Sort([](const FPhotoDefinition& A, const FPhotoDefinition& B)
 	{
 		return A.PhotoID.LexicalLess(B.PhotoID);
+	});
+}
+
+void UBalhwajeomInvestigationSubsystem::GetAllCharacterDefinitions(
+	TArray<FCharacterDefinition>& OutCharacters) const
+{
+	OutCharacters.Reset();
+	if (!IsValid(CharactersTable) || CharactersTable->GetRowStruct() != FCharacterDefinition::StaticStruct())
+	{
+		return;
+	}
+	for (const TPair<FName, uint8*>& Pair : CharactersTable->GetRowMap())
+	{
+		const FCharacterDefinition* Character = reinterpret_cast<const FCharacterDefinition*>(Pair.Value);
+		OutCharacters.Add(*Character);
+	}
+	OutCharacters.Sort([](const FCharacterDefinition& A, const FCharacterDefinition& B)
+	{
+		return A.FolderSortOrder == B.FolderSortOrder
+			? A.CharacterID.LexicalLess(B.CharacterID)
+			: A.FolderSortOrder < B.FolderSortOrder;
 	});
 }

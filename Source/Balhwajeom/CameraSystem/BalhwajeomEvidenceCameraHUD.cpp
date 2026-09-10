@@ -5,11 +5,40 @@
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
+#include "Engine/Texture2D.h"
 #include "BalhwajeomPhotoCameraComponent.h"
 #include "BalhwajeomEvidenceActor.h"
+#include "Blueprint/UserWidget.h"
+#include "Components/Image.h"
+#include "Components/TextBlock.h"
 #include "Interaction/InspectionComponent.h"
 #include "GameFramework/Pawn.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
+#include "UObject/ConstructorHelpers.h"
+
+ABalhwajeomEvidenceCameraHUD::ABalhwajeomEvidenceCameraHUD()
+{
+	static ConstructorHelpers::FClassFinder<UUserWidget> FocusGuideWidgetAsset(
+		TEXT("/Game/Balhwajeom/UI/Camera/WBP_EvidenceFocusGuide"));
+	if (FocusGuideWidgetAsset.Succeeded())
+	{
+		FocusGuideWidgetClass = FocusGuideWidgetAsset.Class;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UTexture2D> PhotoRequiredIconAsset(
+		TEXT("/Game/Balhwajeom/UI/Icons/T_EvidencePhotoRequired.T_EvidencePhotoRequired"));
+	if (PhotoRequiredIconAsset.Succeeded())
+	{
+		PhotoRequiredIcon = PhotoRequiredIconAsset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UTexture2D> PhotoCapturedIconAsset(
+		TEXT("/Game/Balhwajeom/UI/Icons/T_EvidencePhotoCaptured.T_EvidencePhotoCaptured"));
+	if (PhotoCapturedIconAsset.Succeeded())
+	{
+		PhotoCapturedIcon = PhotoCapturedIconAsset.Object;
+	}
+}
 
 void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 {
@@ -20,6 +49,7 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 		OwningPawn ? OwningPawn->FindComponentByClass<UBalhwajeomPhotoCameraComponent>() : nullptr;
 	if (!Canvas || !PhotoCamera || !PhotoCamera->IsInCameraMode())
 	{
+		HideFocusGuideWidget();
 		return;
 	}
 
@@ -116,25 +146,19 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 			StateDefinition.bCanCapture &&
 			!StateDefinition.PhotoID.IsNone();
 		const bool bShowLegacyCaptureSymbol = !bUsesInvestigationData;
-		if (bShowInvestigationCaptureSymbol || bShowLegacyCaptureSymbol)
+		const bool bShowStatusIcon =
+			bShowInvestigationCaptureSymbol || bShowLegacyCaptureSymbol;
+		bool bAlreadyCaptured = false;
+		if (bShowStatusIcon)
 		{
-			const bool bAlreadyCaptured = bShowInvestigationCaptureSymbol
+			bAlreadyCaptured = bShowInvestigationCaptureSymbol
 				? InvestigationSubsystem->HasCapturedPhoto(StateDefinition.PhotoID)
 				: DisplayedEvidence && DisplayedEvidence->GetEvidenceData().bAlreadyCollected;
-			const FString GuideSymbol = bAlreadyCaptured ? TEXT("✓") : TEXT("?");
-			DrawText(
-				GuideSymbol,
-				GuideColor,
-				DisplayedGuidePosition.X - 6.0f,
-				DisplayedGuidePosition.Y - 12.0f,
-				GEngine->GetMediumFont(),
-				1.0f,
-				false);
 		}
 
+		FText NearLabelText;
 		if (bShowCenteredText)
 		{
-			FText NearLabelText;
 			if (bResolvedInvestigationDefinitions)
 			{
 				NearLabelText = StateDefinition.NearLabel;
@@ -145,18 +169,6 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 					? DisplayedEvidence->GetInspectionComponent()
 					: nullptr;
 				NearLabelText = Inspection ? Inspection->NearLabel : FText::GetEmpty();
-			}
-
-			if (!NearLabelText.IsEmptyOrWhitespace())
-			{
-				DrawText(
-					NearLabelText.ToString(),
-					GuideColor,
-					DisplayedGuidePosition.X + 15.0f,
-					DisplayedGuidePosition.Y - 9.0f,
-					GEngine->GetSmallFont(),
-					1.0f,
-					false);
 			}
 
 			float TextY = 95.0f;
@@ -190,11 +202,19 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 				}
 			}
 		}
+
+		UpdateFocusGuideWidget(
+			DisplayedGuidePosition,
+			GuideOpacity,
+			bShowStatusIcon,
+			bAlreadyCaptured,
+			NearLabelText);
 	}
 	else
 	{
 		bHasDisplayedGuide = false;
 		GuideTransitionElapsed = 0.0f;
+		HideFocusGuideWidget();
 	}
 
 	DrawEvidenceSavedAnimation();
@@ -208,6 +228,96 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 			DrawRect(FLinearColor(1.0f, 1.0f, 1.0f, Alpha), 0.0f, 0.0f, Canvas->ClipX, Canvas->ClipY);
 		}
 	}
+}
+
+void ABalhwajeomEvidenceCameraHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (FocusGuideWidget)
+	{
+		FocusGuideWidget->RemoveFromParent();
+	}
+	FocusGuideWidget = nullptr;
+	FocusGuideStatusImage = nullptr;
+	FocusGuideLabelText = nullptr;
+
+	Super::EndPlay(EndPlayReason);
+}
+
+bool ABalhwajeomEvidenceCameraHUD::EnsureFocusGuideWidget()
+{
+	if (FocusGuideWidget)
+	{
+		return true;
+	}
+	if (!PlayerOwner || !FocusGuideWidgetClass)
+	{
+		return false;
+	}
+
+	FocusGuideWidget = CreateWidget<UUserWidget>(PlayerOwner, FocusGuideWidgetClass);
+	if (!FocusGuideWidget)
+	{
+		return false;
+	}
+
+	FocusGuideStatusImage = Cast<UImage>(
+		FocusGuideWidget->GetWidgetFromName(TEXT("UseCamera")));
+	FocusGuideLabelText = Cast<UTextBlock>(
+		FocusGuideWidget->GetWidgetFromName(TEXT("LabelText")));
+	FocusGuideWidget->AddToViewport(100);
+	FocusGuideWidget->SetVisibility(ESlateVisibility::Collapsed);
+	return true;
+}
+
+void ABalhwajeomEvidenceCameraHUD::HideFocusGuideWidget()
+{
+	if (FocusGuideWidget)
+	{
+		FocusGuideWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void ABalhwajeomEvidenceCameraHUD::UpdateFocusGuideWidget(
+	const FVector2D& GuidePosition,
+	const float GuideOpacity,
+	const bool bShowStatusIcon,
+	const bool bAlreadyCaptured,
+	const FText& LabelText)
+{
+	const bool bShowLabel = !LabelText.IsEmptyOrWhitespace();
+	if ((!bShowStatusIcon && !bShowLabel) || !EnsureFocusGuideWidget())
+	{
+		HideFocusGuideWidget();
+		return;
+	}
+
+	if (FocusGuideStatusImage)
+	{
+		UTexture2D* StatusTexture = bAlreadyCaptured
+			? PhotoCapturedIcon.Get()
+			: PhotoRequiredIcon.Get();
+		FocusGuideStatusImage->SetBrushFromTexture(StatusTexture, true);
+		FocusGuideStatusImage->SetVisibility(
+			bShowStatusIcon && StatusTexture
+				? ESlateVisibility::HitTestInvisible
+				: ESlateVisibility::Collapsed);
+	}
+	if (FocusGuideLabelText)
+	{
+		FocusGuideLabelText->SetText(LabelText);
+		FocusGuideLabelText->SetVisibility(
+			bShowLabel
+				? ESlateVisibility::HitTestInvisible
+				: ESlateVisibility::Collapsed);
+	}
+
+	// UseCamera is a 50x50 image at the left edge of the widget. Offset it so
+	// the icon remains centered on the guide point while LabelText extends right.
+	FocusGuideWidget->SetPositionInViewport(
+		GuidePosition + FVector2D(-25.0f, -25.0f),
+		true);
+	FocusGuideWidget->SetRenderOpacity(FMath::Clamp(GuideOpacity, 0.0f, 1.0f));
+	FocusGuideWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 }
 
 void ABalhwajeomEvidenceCameraHUD::TriggerPhotoFlash()

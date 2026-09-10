@@ -21,6 +21,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool CreateMessengerDataAssets();
 
+	/** Creates the offline browser and its page Widget Blueprints without overwriting existing Designer edits. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool CreateInternetWidgetBlueprints();
+
+	/** Rebuilds the Internet children and replaces only WBP_Tablet's Internet page slot. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool InstallInternetBrowser();
+
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool InspectTabletWidgetBlueprint();
 

@@ -18,6 +18,8 @@
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Investigation/EvidenceDefinitions.h"
 #include "Investigation/InvestigationRuntimeTypes.h"
+#include "Investigation/PhotoDefinitions.h"
+#include "Kismet/GameplayStatics.h"
 #include "Misc/Paths.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
@@ -1588,6 +1590,23 @@ void UBalhwajeomPhotoCameraComponent::CompleteImageSave(
 		IFileManager::Get().Delete(*CompletedCapture.AbsolutePath, false, true);
 		ShowPhotoFeedback(TEXT("현재 상태가 바뀌어 사진을 등록하지 못했다."), FColor::Yellow);
 		return;
+	}
+
+	FPhotoDefinition PhotoDefinition;
+	if (InvestigationSubsystem->GetPhotoDefinition(Record.PhotoID, PhotoDefinition))
+	{
+		if (const APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this)))
+		{
+			if (ABalhwajeomEvidenceCameraHUD* CameraHUD = Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD()))
+			{
+				CameraHUD->TriggerEvidenceSavedAnimation(PhotoDefinition.PhotoName);
+			}
+		}
+
+		if (USoundBase* Voice = PhotoDefinition.StoryVoice.LoadSynchronous())
+		{
+			UGameplayStatics::PlaySound2D(this, Voice);
+		}
 	}
 
 	ShowPhotoFeedback(TEXT("사진을 기록했다."), FColor::Green);
