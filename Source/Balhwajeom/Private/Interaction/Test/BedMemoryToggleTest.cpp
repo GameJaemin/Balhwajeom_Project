@@ -9,7 +9,6 @@
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Interaction/BedMemoryActor.h"
 
@@ -44,14 +43,52 @@ struct FBedMemoryTestAccessor
 		Bed->HandleToggleInput();
 	}
 
-	static FVector GetPlayerAnchorLocation(const ABedMemoryActor* Bed)
+	static FTransform GetPlayerAnchorTransform(const ABedMemoryActor* Bed)
 	{
-		return Bed->PlayerAnchor->GetComponentLocation();
+		return Bed->PlayerAnchor->GetComponentTransform();
 	}
 
-	static void EvaluateApproach(ABedMemoryActor* Bed)
+	static void SetTurnProgress(ABedMemoryActor* Bed, float NormalizedProgress)
 	{
-		Bed->UpdateApproach();
+		Bed->PlayerTurnStartedAtSeconds = Bed->GetWorld()->GetTimeSeconds() -
+			Bed->PlayerRotationDuration * NormalizedProgress;
+		Bed->UpdatePlayerTurn();
+	}
+
+	static TArray<FName> BuildShuffleCycle(ABedMemoryActor* Bed, int32 VoiceCount)
+	{
+		Bed->VoiceCandidates.Reset();
+		Bed->ShuffleBag.Reset();
+		Bed->LastPlayedPhotoID = NAME_None;
+		for (int32 Index = 0; Index < VoiceCount; ++Index)
+		{
+			FBedMemoryVoiceCandidate Candidate;
+			Candidate.PhotoID = FName(*FString::Printf(TEXT("Photo_%d"), Index));
+			Bed->VoiceCandidates.Add(Candidate);
+		}
+		Bed->RefillShuffleBag();
+
+		TArray<FName> PlaybackOrder;
+		while (!Bed->ShuffleBag.IsEmpty())
+		{
+			PlaybackOrder.Add(
+				Bed->VoiceCandidates[Bed->ShuffleBag.Pop(EAllowShrinking::No)].PhotoID);
+		}
+		return PlaybackOrder;
+	}
+
+	static FName GetFirstOfNextShuffleCycle(ABedMemoryActor* Bed, FName LastPlayed)
+	{
+		Bed->LastPlayedPhotoID = LastPlayed;
+		Bed->RefillShuffleBag();
+		return Bed->VoiceCandidates[Bed->ShuffleBag.Pop(EAllowShrinking::No)].PhotoID;
+	}
+
+	static void ResetVoiceTestData(ABedMemoryActor* Bed)
+	{
+		Bed->VoiceCandidates.Reset();
+		Bed->ShuffleBag.Reset();
+		Bed->LastPlayedPhotoID = NAME_None;
 	}
 };
 
@@ -92,15 +129,30 @@ bool FBedMemoryColliderToggleTest::RunTest(const FString& Parameters)
 
 	Controller->SetPlayer(LocalPlayer);
 	Controller->Possess(Character);
+	Controller->SpawnPlayerCameraManager();
 	TestTrue(TEXT("Test controller is local"), Controller->IsLocalController());
+	const TArray<FName> ShuffleCycle =
+		FBedMemoryTestAccessor::BuildShuffleCycle(Bed, 8);
+	TSet<FName> UniqueVoices;
+	for (const FName PhotoID : ShuffleCycle)
+	{
+		UniqueVoices.Add(PhotoID);
+	}
+	TestEqual(TEXT("An eight-voice shuffle cycle contains eight entries"), ShuffleCycle.Num(), 8);
+	TestEqual(
+		TEXT("Every voice appears exactly once in a shuffle cycle"),
+		UniqueVoices.Num(),
+		8);
+	TestNotEqual(
+		TEXT("A new shuffle cycle does not repeat the previous cycle's final voice first"),
+		FBedMemoryTestAccessor::GetFirstOfNextShuffleCycle(Bed, ShuffleCycle.Last()),
+		ShuffleCycle.Last());
+	FBedMemoryTestAccessor::ResetVoiceTestData(Bed);
 	if (!World->HasBegunPlay())
 	{
 		World->BeginPlay();
 	}
 	World->Tick(LEVELTICK_All, 0.1f);
-	// The standalone test world has no floor. Force the normal runtime movement
-	// mode so RequestDirectMove follows its grounded walking path.
-	Character->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 	TestFalse(
 		TEXT("Sit label is hidden before collider overlap"),
 		FBedMemoryTestAccessor::IsInteractionLabelVisible(Bed));
@@ -120,27 +172,64 @@ bool FBedMemoryColliderToggleTest::RunTest(const FString& Parameters)
 		TEXT("Sit label hides on collider EndOverlap"),
 		FBedMemoryTestAccessor::IsInteractionLabelVisible(Bed));
 	FBedMemoryTestAccessor::SimulateColliderBeginOverlap(Bed, Character);
-	const FVector AnchorLocation =
-		FBedMemoryTestAccessor::GetPlayerAnchorLocation(Bed);
+	const FTransform AnchorTransform =
+		FBedMemoryTestAccessor::GetPlayerAnchorTransform(Bed);
+	const FRotator OriginalControlRotation(12.0f, 73.0f, 0.0f);
+	Controller->SetControlRotation(OriginalControlRotation);
 	FBedMemoryTestAccessor::PressToggleInput(Bed);
 	TestEqual(
-		TEXT("First collider-owned F begins walking to PlayerAnchor"),
+		TEXT("First F enters camera-blended player alignment"),
 		Bed->GetBedMemoryState(),
-		EBedMemoryState::Approaching);
+		EBedMemoryState::AligningPlayer);
 	TestTrue(
-		TEXT("Approach does not teleport a distant character immediately"),
-		FVector::Dist2D(
-			Character->GetActorLocation(),
-			AnchorLocation) > 10.0f);
+		TEXT("Interaction places the character at PlayerAnchor immediately"),
+		Character->GetActorLocation().Equals(AnchorTransform.GetLocation(), 0.1f));
+	const float AnchorYaw = AnchorTransform.Rotator().Yaw;
 	TestTrue(
-		TEXT("Automatic approach sends a direct movement request toward PlayerAnchor"),
-		Character->GetCharacterMovement()->RequestedVelocity.Size2D() > 0.0f);
-	Character->SetActorLocation(AnchorLocation);
-	FBedMemoryTestAccessor::EvaluateApproach(Bed);
+		TEXT("Character initially faces the PlayerAnchor direction toward the bed"),
+		FMath::IsNearlyZero(
+			FMath::FindDeltaAngleDegrees(AnchorYaw, Character->GetActorRotation().Yaw),
+			0.1f));
+	TestTrue(
+		TEXT("Controller yaw is fixed to PlayerAnchor regardless of interaction direction"),
+		FMath::IsNearlyZero(
+			FMath::FindDeltaAngleDegrees(
+				AnchorYaw, Controller->GetControlRotation().Yaw),
+			0.1f));
+	FBedMemoryTestAccessor::SetTurnProgress(Bed, 0.5f);
+	TestTrue(
+		TEXT("Character rotates 90 degrees halfway through its configured rotation time"),
+		FMath::IsNearlyEqual(
+			FMath::Abs(FMath::FindDeltaAngleDegrees(
+				AnchorYaw, Character->GetActorRotation().Yaw)),
+			90.0f,
+			1.0f));
+	TestTrue(
+		TEXT("Controller follows the character during the turn"),
+		FMath::IsNearlyZero(FMath::FindDeltaAngleDegrees(
+			Character->GetActorRotation().Yaw,
+			Controller->GetControlRotation().Yaw), 0.1f));
+	FBedMemoryTestAccessor::SetTurnProgress(Bed, 1.0f);
+	World->Tick(LEVELTICK_All, 1.0f);
 	TestEqual(
-		TEXT("Reaching PlayerAnchor continues to Listening without animation or audio"),
+		TEXT("Camera blend finishes on the bed actor"),
+		Controller->GetViewTarget(),
+		static_cast<AActor*>(Bed));
+	TestEqual(
+		TEXT("Without captured photos, sitting continues to silent listening"),
 		Bed->GetBedMemoryState(),
 		EBedMemoryState::Listening);
+	TestTrue(
+		TEXT("Character finishes facing 180 degrees away from the bed"),
+		FMath::IsNearlyEqual(
+			FMath::Abs(FMath::FindDeltaAngleDegrees(
+				AnchorYaw, Character->GetActorRotation().Yaw)),
+			180.0f,
+			0.1f));
+	TestEqual(
+		TEXT("Animation and audio preparation have not started"),
+		Bed->GetAvailableVoiceCount(),
+		0);
 	TestFalse(
 		TEXT("Sit label is hidden while resting"),
 		FBedMemoryTestAccessor::IsInteractionLabelVisible(Bed));
@@ -149,6 +238,9 @@ bool FBedMemoryColliderToggleTest::RunTest(const FString& Parameters)
 		TEXT("Second collider-owned F restores Idle"),
 		Bed->GetBedMemoryState(),
 		EBedMemoryState::Idle);
+	TestTrue(
+		TEXT("Leaving restores the original controller rotation"),
+		Controller->GetControlRotation().Equals(OriginalControlRotation, 0.1f));
 
 	GameInstance->Shutdown();
 	return true;
