@@ -37,7 +37,7 @@
 
 사진을 클릭하면 `OpenPhoto`가 `Photo.PhotoSentenceID` 존재 여부로 화면을 분기한다(둘 다 팝업 이미지(`IMG_PopupPhoto`)에 같은 캐시된 텍스처를 표시):
 - **분석 문장 있음**(`SentenceType=PhotoAnalysis`): 문장 빈칸(`SentenceTemplate`/해결 시 `ResultText`)과 함께 `PreparePuzzle`이 아래 3절의 드래그 앤 드롭 퍼즐을 띄운다.
-- **분석 문장 없음**(자연어만) 또는 이미 해결된 문장: `CustomDescription`/`WorldStoryLines`/`ResultText`를 그대로 보여주고, 퍼즐 컨트롤은 띄우지 않는다.
+- **분석 문장 없음**(자연어만) 또는 이미 해결된 문장: `CustomDescription`/`WorldStoryCues.Text`/`ResultText`를 그대로 보여주고, 퍼즐 컨트롤은 띄우지 않는다. `WorldStoryCues`가 비어 있는 기존 데이터만 `WorldStoryLines`를 대체 사용한다.
 
 `ShowPopup(Title, Body, PhotoTexture = nullptr)`가 팝업의 단일 진입점이다. `PhotoTexture`가 없으면(예: 진술서 팝업) `IMG_PopupPhoto`를 `Collapsed` 처리한다.
 

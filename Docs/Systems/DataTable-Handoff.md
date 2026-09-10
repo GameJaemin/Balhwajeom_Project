@@ -103,8 +103,19 @@ CSV 헤더 = Row Struct의 `UPROPERTY` 이름이다. Row Name(CSV 첫 컬럼)은
 | `EvidenceSentenceID` | Name (참조: `DT_Sentences.SentenceID`, `SentenceType=PhotoAnalysis`, 선택) | 이 사진을 **어느 진술서에서든 증거로 제출할 때** 추가로 풀어야 하는 빈칸 문제. 사진 고유 속성이라 어느 진술서·어느 슬롯에서 쓰이든 항상 같은 문장이 뜬다. 비어있으면 추가 문제 없이 기존처럼 판정 |
 | `CharacterID` | Name (참조: `DT_Characters.CharacterID`) | 이 사진이 표시될 태블릿 인물 폴더 |
 | `GrantedWordIDs` | Name 배열 (참조: `DT_Words.WordID`) | 촬영 성공 시 1회 지급되는 키워드들 |
-| `WorldStoryLines` | Text 배열 | 촬영 직후 및 태블릿에서 사진을 다시 열 때 순서대로 보여줄 월드 스토리 대사 |
-| `StoryVoice` | Sound 참조 | `WorldStoryLines`와 함께 재생할 내레이션 음성 |
+| `WorldStoryCues` | `FPhotoStoryCue` 배열 | 촬영 직후 월드에 보여줄 대사와 음성 시작 기준 전환 시각. 각 항목은 `Text`, `StartTimeSeconds`를 가지며 첫 항목은 반드시 0초, 이후 항목은 시간 오름차순이어야 한다. 자동 줄바꿈은 하지 않으며 한 화면 안의 개행은 `Text` 내부에 직접 입력한다 |
+| `WorldStoryLines` | Text 배열 | 기존 DataTable 호환용 무시간 대사. 신규 데이터는 사용하지 않으며 `WorldStoryCues` 이관 완료 후 제거 예정 |
+| `StoryVoice` | Sound 참조 | 선택 사항. 지정하면 `WorldStoryCues`와 함께 가족 음성을 한 번 재생하고, 비워두면 텍스트 Cue만 시작 시각에 맞춰 재생한다 |
+
+`WorldStoryCues`의 배열 항목 하나는 화면 하나를 뜻한다. Cue가 세 개여도 월드 액터와 TextBlock은 하나이며, 같은 TextBlock의 내용이 각 시작 시각에 교체된다. `Text`가 비어 있거나 공백만 있어도 Cue를 제거하지 않으므로, 특정 시각부터 문구를 의도적으로 비우는 용도로 사용할 수 있다. 음성이 있으면 마지막 Cue는 음성이 끝날 때까지 유지된다. 음성이 없으면 마지막 Cue를 기본 2.5초 동안 유지한 뒤 페이드아웃한다. 태블릿에서 사진을 다시 열 때는 Cue의 시간값을 무시하고 모든 `Text`를 순서대로 이어서 보여주며 음성은 다시 재생하지 않는다.
+
+CSV 예시:
+
+```csv
+"((Text=""첫 문구"",StartTimeSeconds=0.0),(Text=""두 번째 문구"",StartTimeSeconds=1.2),(Text=""세 번째 문구"",StartTimeSeconds=3.8))"
+```
+
+예를 들어 `.`을 4초, 이후 세 문장을 각각 2초씩 표시하려면 시작 시각을 `0.0`, `4.0`, `6.0`, `8.0`으로 입력한다. 음성이 10초보다 길고 마지막 문구도 정확히 10초에 지워야 한다면 `(Text="" "",StartTimeSeconds=10.0)` 공백 Cue를 마지막에 추가한다.
 
 ### DT_Sentences — 사진 분석 문장과 진술서 반증 조건
 

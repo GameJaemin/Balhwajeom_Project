@@ -40,5 +40,22 @@
 
 ## 5. 주의 사항
 
+### 촬영 후 월드 스토리 연출
+
+촬영 파일 저장과 사진 등록이 모두 성공하면 `UBalhwajeomPhotoCameraComponent`가 `DT_Photos`의 `WorldStoryCues`와 `StoryVoice`를 읽어 `APhotoWorldStoryActor`를 생성한다.
+
+- 셔터 요청 시 화면 가로 50%, 세로 72% 지점을 월드로 Deproject하고 카메라 앞 200cm 위치의 Transform을 `FBalhwajeomPendingPhotoCapture`에 보관한다. 파일 저장은 비동기이므로 완료 시점의 카메라 Transform을 다시 사용하지 않는다.
+- `APhotoWorldStoryActor`는 플레이어와 카메라에 Attach하지 않는다. `UWidgetComponent`와 비공간화 `UAudioComponent`만 자신의 Root에 Attach하므로 생성 위치에 그대로 남는다.
+- Cue 전환은 `StoryVoice` 시작 시각 기준으로 진행한다. 음성이 끝나면 마지막 문구가 페이드아웃하고 액터가 스스로 제거된다.
+- 새 사진 스토리가 시작될 때 이전 스토리가 아직 재생 중이면 이전 음성과 Cue를 중단하고 페이드아웃한다.
+- 기본 연출 액터는 `/Game/Balhwajeom/UI/PhotoStory/WBP_PhotoWorldStory`를 사용한다. Designer의 `StoryText` TextBlock에서 폰트, 색상, 그림자, 정렬을 직접 관리한다. 자동 줄바꿈은 런타임에서 비활성화되며 `DT_Photos.WorldStoryCues.Text`에 직접 입력한 개행만 표시된다.
+- 사진 모드에서 3인칭으로 복귀하면 월드 위치와 Widget Component Scale은 유지한 채 `StoryText`의 실제 Font Size를 부드럽게 키운다. 확대 비율은 Class Defaults의 `Third Person Font Size Multiplier`(기본 1.8), 전환 시간은 `Third Person Font Size Transition Duration`(기본 0.25초)에서 조절한다. 렌더 타깃을 확대하지 않으므로 글자 해상도가 유지된다.
+
+관련 코드:
+
+- `CameraSystem/PhotoWorldStoryActor.h/.cpp`
+- `CameraSystem/PhotoWorldStoryWidget.h/.cpp`
+- `CameraSystem/BalhwajeomPhotoCameraComponent.h/.cpp`
+
 - `.uasset`(카메라 Blueprint)과 `.umap` 수정은 상호작용/월드 트랙과 겹칠 수 있으므로 동시 편집 전 확인한다.
 - 사진 등록·저장 관련 상태는 이 트랙에서 별도로 들고 있지 않고 항상 [Subsystem-Handoff.md](./Subsystem-Handoff.md)의 InvestigationSubsystem을 통해서만 다룬다.

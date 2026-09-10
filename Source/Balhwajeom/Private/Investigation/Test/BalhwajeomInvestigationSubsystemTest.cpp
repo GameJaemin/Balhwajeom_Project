@@ -319,6 +319,19 @@ bool FInvestigationConfiguredDataValidationTest::RunTest(const FString& Paramete
 		Settings->CharactersTable.LoadSynchronous());
 	TestTrue(TEXT("Configured prototype DataTables should pass all cross-reference checks"),
 		FInvestigationSubsystemTestAccessor::Validate(Subsystem));
+	FPhotoDefinition StoryPhoto;
+	TestTrue(TEXT("Configured pillow photo should resolve"),
+		Subsystem->GetPhotoDefinition(FName(TEXT("PHOTO_01_013")), StoryPhoto));
+	TestEqual(TEXT("Configured pillow photo should contain two timed story cues"),
+		StoryPhoto.WorldStoryCues.Num(), 2);
+	if (StoryPhoto.WorldStoryCues.Num() == 2)
+	{
+		TestTrue(TEXT("First story cue should start at zero"),
+			FMath::IsNearlyZero(StoryPhoto.WorldStoryCues[0].StartTimeSeconds));
+		TestTrue(TEXT("Second story cue should follow the first"),
+			StoryPhoto.WorldStoryCues[1].StartTimeSeconds >
+			StoryPhoto.WorldStoryCues[0].StartTimeSeconds);
+	}
 	return true;
 }
 

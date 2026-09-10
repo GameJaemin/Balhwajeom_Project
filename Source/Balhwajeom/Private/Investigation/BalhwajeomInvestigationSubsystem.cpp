@@ -491,6 +491,28 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 			ReportInvalidReference(
 				TEXT("PhotoDefinition"), Photo->PhotoID, TEXT("CharacterID"), Photo->CharacterID);
 		}
+
+		if (!Photo->WorldStoryCues.IsEmpty())
+		{
+			float PreviousStartTime = -1.0f;
+			for (int32 CueIndex = 0; CueIndex < Photo->WorldStoryCues.Num(); ++CueIndex)
+			{
+				const FPhotoStoryCue& Cue = Photo->WorldStoryCues[CueIndex];
+				const bool bInvalidFirstTime = CueIndex == 0 && !FMath::IsNearlyZero(Cue.StartTimeSeconds);
+				const bool bInvalidOrder = Cue.StartTimeSeconds < PreviousStartTime;
+				if (Cue.StartTimeSeconds < 0.0f || bInvalidFirstTime || bInvalidOrder)
+				{
+					UE_LOG(
+						LogBalhwajeomInvestigation,
+						Error,
+						TEXT("PhotoDefinition '%s' has invalid WorldStoryCues[%d]. The first cue must start at 0, and times must be ascending. Empty or whitespace text is allowed."),
+						*Photo->PhotoID.ToString(),
+						CueIndex);
+					bIsValid = false;
+				}
+				PreviousStartTime = Cue.StartTimeSeconds;
+			}
+		}
 	}
 
 	TMap<FName, TSet<int32>> SortOrdersByDocument;

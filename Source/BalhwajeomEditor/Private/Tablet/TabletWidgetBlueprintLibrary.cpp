@@ -24,6 +24,7 @@
 #include "Editor.h"
 #include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
+#include "Engine/Font.h"
 #include "Factories/DataAssetFactory.h"
 #include "Factories/DataTableFactory.h"
 #include "IAssetTools.h"
@@ -46,6 +47,7 @@
 #include "Investigation/PhotoDefinitions.h"
 #include "Investigation/SentenceDefinitions.h"
 #include "Tablet/BalhwajeomTabletWidget.h"
+#include "CameraSystem/PhotoWorldStoryWidget.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "WidgetBlueprint.h"
@@ -2482,6 +2484,51 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 	return bPassed;
 }
 
+bool UTabletWidgetBlueprintLibrary::RedesignPhotoWorldStoryWidget()
+{
+	using namespace TabletDesigner;
+	const TCHAR* PhotoStoryAssetPath =
+		TEXT("/Game/Balhwajeom/UI/PhotoStory/WBP_PhotoWorldStory.WBP_PhotoWorldStory");
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, PhotoStoryAssetPath);
+	if (!Blueprint || !Blueprint->ParentClass ||
+		!Blueprint->ParentClass->IsChildOf(UPhotoWorldStoryWidget::StaticClass()) ||
+		!ClearWidgetTree(Blueprint))
+	{
+		UE_LOG(LogTemp, Error, TEXT("PHOTO_STORY_WIDGET_REDESIGN could not prepare %s."),
+			PhotoStoryAssetPath);
+		return false;
+	}
+
+	FBuilder Builder(Blueprint);
+	UTextBlock* StoryText = Builder.MakeText(
+		TEXT("StoryText"),
+		TEXT("사진 스토리 텍스트"),
+		32,
+		FLinearColor::White,
+		true);
+	StoryText->SetJustification(ETextJustify::Center);
+	StoryText->SetAutoWrapText(false);
+	StoryText->SetWrapTextAt(0.0f);
+	StoryText->SetShadowOffset(FVector2D(2.0f, 2.0f));
+	StoryText->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f));
+	if (UFont* KoreanFont = LoadObject<UFont>(nullptr,
+		TEXT("/Game/Balhwajeom/UI/JE/Freesentation-4Regular_Font.Freesentation-4Regular_Font")))
+	{
+		FSlateFontInfo Font = StoryText->GetFont();
+		Font.FontObject = KoreanFont;
+		Font.Size = 32;
+		Font.OutlineSettings.OutlineSize = 2;
+		Font.OutlineSettings.OutlineColor = FLinearColor::Black;
+		StoryText->SetFont(Font);
+	}
+	Blueprint->WidgetTree->RootWidget = StoryText;
+
+	const bool bSaved = SaveAndCompile(Blueprint);
+	UE_LOG(LogTemp, Display, TEXT("PHOTO_STORY_WIDGET_REDESIGN Result=%s Asset=%s"),
+		bSaved ? TEXT("Success") : TEXT("Failure"), PhotoStoryAssetPath);
+	return bSaved;
+}
+
 bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 {
 	const TCHAR* DocumentPath =
@@ -2666,7 +2713,8 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		MirrorPhoto.PhotoSentenceID = Analysis.SentenceID;
 		MirrorPhoto.CharacterID = SisterCharacterID;
 		MirrorPhoto.GrantedWordIDs.Add(TEXT("WORD_PIG"));
-		MirrorPhoto.WorldStoryLines.Add(FText::FromString(TEXT("불탄 거울 속에 돼지 장식의 실루엣이 남아 있다.")));
+		MirrorPhoto.WorldStoryCues.Add({
+			FText::FromString(TEXT("불탄 거울 속에 돼지 장식의 실루엣이 남아 있다.")), 0.0f});
 		Photos->AddRow(MirrorPhoto.PhotoID, MirrorPhoto);
 		++SeededRows;
 
@@ -2677,7 +2725,8 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		StoryPhoto.CustomDescription = FText::FromString(TEXT("그을린 유리 안에서 작은 눈송이가 흔들린다."));
 		StoryPhoto.CharacterID = SisterCharacterID;
 		StoryPhoto.GrantedWordIDs.Add(TEXT("WORD_SNOW_GLOBE"));
-		StoryPhoto.WorldStoryLines.Add(FText::FromString(TEXT("가족의 대화가 잠시 귓가에 되살아난다.")));
+		StoryPhoto.WorldStoryCues.Add({
+			FText::FromString(TEXT("가족의 대화가 잠시 귓가에 되살아난다.")), 0.0f});
 		Photos->AddRow(StoryPhoto.PhotoID, StoryPhoto);
 		++SeededRows;
 
