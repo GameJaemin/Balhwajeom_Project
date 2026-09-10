@@ -1595,6 +1595,14 @@ void UBalhwajeomPhotoCameraComponent::CompleteImageSave(
 	FPhotoDefinition PhotoDefinition;
 	if (InvestigationSubsystem->GetPhotoDefinition(Record.PhotoID, PhotoDefinition))
 	{
+		if (const APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this)))
+		{
+			if (ABalhwajeomEvidenceCameraHUD* CameraHUD = Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD()))
+			{
+				CameraHUD->TriggerEvidenceSavedAnimation(PhotoDefinition.PhotoName);
+			}
+		}
+
 		if (USoundBase* Voice = PhotoDefinition.StoryVoice.LoadSynchronous())
 		{
 			UGameplayStatics::PlaySound2D(this, Voice);
