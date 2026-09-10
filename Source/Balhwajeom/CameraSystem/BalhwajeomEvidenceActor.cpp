@@ -166,6 +166,14 @@ bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplay
 	return Investigation->CompleteEvidenceInteraction(EvidenceInstanceID, ViewData.StateID);
 }
 
+bool ABalhwajeomEvidenceActor::CanRequestInvestigationInteraction() const
+{
+	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	FEvidenceInteractionViewData ViewData;
+	return Investigation &&
+		Investigation->BeginEvidenceInteraction(EvidenceInstanceID, ViewData);
+}
+
 UBalhwajeomInvestigationSubsystem* ABalhwajeomEvidenceActor::GetInvestigationSubsystem() const
 {
 	const UWorld* World = GetWorld();

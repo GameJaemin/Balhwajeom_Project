@@ -47,6 +47,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Evidence|Investigation")
 	bool RequestInvestigationInteraction(FText& OutDisplayText);
 
+	/** Read-only availability check used by the player's interaction prompt. */
+	UFUNCTION(BlueprintPure, Category = "Evidence|Investigation")
+	bool CanRequestInvestigationInteraction() const;
+
 	/** Hides the normal distance label while the dedicated photo camera HUD is active. */
 	void SetInspectionLabelSuppressed(bool bSuppressed);
 
