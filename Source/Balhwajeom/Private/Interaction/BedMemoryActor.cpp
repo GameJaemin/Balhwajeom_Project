@@ -1,6 +1,8 @@
 #include "Interaction/BedMemoryActor.h"
 
+#include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Animation/AnimSequenceBase.h"
 #include "Blueprint/UserWidget.h"
 #include "Camera/CameraComponent.h"
 #include "CameraSystem/BalhwajeomCameraCharacter.h"
@@ -9,6 +11,7 @@
 #include "Components/AudioComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/AssetManager.h"
@@ -33,6 +36,8 @@
 namespace BedMemory
 {
 constexpr double ExitInputGuardSeconds = 0.25;
+constexpr float SitPoseHoldLeadSeconds = 0.02f;
+constexpr float SitPoseEndOffsetSeconds = 0.001f;
 
 float RandomInRange(const FVector2D& Range)
 {
@@ -81,7 +86,7 @@ ABedMemoryActor::ABedMemoryActor()
 	InteractionWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	static ConstructorHelpers::FClassFinder<UUserWidget> LabelWidgetClass(
-		TEXT("/Game/Balhwajeom/Blueprints/UI/WBP_ObjectLabel"));
+		TEXT("/Game/Balhwajeom/UI/Inspection/WBP_ObjectLabel"));
 	if (LabelWidgetClass.Succeeded())
 	{
 		InteractionWidget->SetWidgetClass(LabelWidgetClass.Class);
@@ -258,10 +263,12 @@ bool ABedMemoryActor::BeginRest(APawn* InteractingPawn)
 		return false;
 	}
 
-	State = EBedMemoryState::Approaching;
+	State = EBedMemoryState::AligningPlayer;
 	RestingCharacter = Character;
 	RestingPlayerController = PlayerController;
 	SavedPlayerTransform = Character->GetActorTransform();
+	SavedControlRotation = PlayerController->GetControlRotation();
+	bHasSavedControlRotation = true;
 
 	UCharacterMovementComponent* Movement = Character->GetCharacterMovement();
 	if (Movement)
@@ -269,6 +276,7 @@ bool ABedMemoryActor::BeginRest(APawn* InteractingPawn)
 		SavedMovementMode = static_cast<uint8>(Movement->MovementMode);
 		SavedCustomMovementMode = Movement->CustomMovementMode;
 		Movement->StopMovementImmediately();
+		Movement->DisableMovement();
 	}
 
 	PlayerController->SetIgnoreMoveInput(true);
@@ -283,6 +291,30 @@ bool ABedMemoryActor::BeginRest(APawn* InteractingPawn)
 	}
 	RestInputComponent->bBlockInput = true;
 
+	// Keep the outgoing exploration view fixed while the character is teleported.
+	// Otherwise the source camera follows the relocated character during the blend,
+	// which makes the transition appear to jump or stutter.
+	PlayerController->SetViewTargetWithBlend(
+		this,
+		CameraBlendInDuration,
+		VTBlend_Cubic,
+		0.0f,
+		true);
+
+	if (PlayerAnchor)
+	{
+		const FRotator AnchorFacingRotation(
+			0.0f, PlayerAnchor->GetComponentRotation().Yaw, 0.0f);
+		FHitResult IgnoredHit;
+		Character->SetActorLocationAndRotation(
+			PlayerAnchor->GetComponentLocation(),
+			AnchorFacingRotation,
+			false,
+			&IgnoredHit,
+			ETeleportType::TeleportPhysics);
+		PlayerController->SetControlRotation(AnchorFacingRotation);
+	}
+
 	if (AHUD* HUD = PlayerController->GetHUD())
 	{
 		bSavedHUDVisible = HUD->bShowHUD;
@@ -291,140 +323,125 @@ bool ABedMemoryActor::BeginRest(APawn* InteractingPawn)
 	SetInspectionLabelSuppressed(true);
 	SetWorldEvidenceLabelsSuppressed(true);
 
-	PlayerController->SetViewTargetWithBlend(this, CameraBlendInDuration, VTBlend_Cubic);
-	BeginApproach();
+	// Rotate during the camera transition. Sitting animation, BGM, and memory
+	// voices remain disconnected until their implementation step.
+	BeginPlayerTurn();
 	return State != EBedMemoryState::Idle;
 }
 
-void ABedMemoryActor::BeginApproach()
+void ABedMemoryActor::BeginPlayerTurn()
 {
-	if (State != EBedMemoryState::Approaching || !RestingCharacter || !PlayerAnchor)
+	if (State != EBedMemoryState::AligningPlayer || !RestingCharacter || !PlayerAnchor)
 	{
-		CancelApproach();
+		RestorePlayerState();
+		State = EBedMemoryState::Idle;
 		return;
 	}
 
-	ApproachStartedAtSeconds = GetWorld()->GetTimeSeconds();
+	PlayerTurnStartRotation = RestingCharacter->GetActorRotation();
+	PlayerTurnTargetRotation = PlayerTurnStartRotation;
+	PlayerTurnTargetRotation.Yaw += 180.0f;
+	PlayerTurnStartedAtSeconds = GetWorld()->GetTimeSeconds();
+	if (PlayerRotationDuration <= UE_KINDA_SMALL_NUMBER)
+	{
+		FinishPlayerTurn();
+		return;
+	}
+
 	GetWorldTimerManager().SetTimer(
-		ApproachTimer, this, &ABedMemoryActor::UpdateApproach, 0.02f, true);
-	UpdateApproach();
+		PlayerTurnTimer, this, &ABedMemoryActor::UpdatePlayerTurn, 0.02f, true);
+	UpdatePlayerTurn();
 }
 
-void ABedMemoryActor::UpdateApproach()
+void ABedMemoryActor::UpdatePlayerTurn()
 {
-	if (State != EBedMemoryState::Approaching || !RestingCharacter || !PlayerAnchor)
+	if (State != EBedMemoryState::AligningPlayer || !RestingCharacter)
 	{
-		GetWorldTimerManager().ClearTimer(ApproachTimer);
+		GetWorldTimerManager().ClearTimer(PlayerTurnTimer);
 		return;
 	}
 
-	const FVector CharacterLocation = RestingCharacter->GetActorLocation();
-	const FVector AnchorLocation = PlayerAnchor->GetComponentLocation();
-	const FVector HorizontalDelta(
-		AnchorLocation.X - CharacterLocation.X,
-		AnchorLocation.Y - CharacterLocation.Y,
-		0.0f);
-	const float HorizontalDistance = HorizontalDelta.Size();
-	if (HorizontalDistance <= ApproachAcceptanceRadius)
-	{
-		FinishApproach();
-		return;
-	}
-
-	if (GetWorld()->GetTimeSeconds() - ApproachStartedAtSeconds >= ApproachTimeout)
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("%s timed out while walking to PlayerAnchor."), *GetName());
-		CancelApproach();
-		return;
-	}
-
-	const FVector MoveDirection = HorizontalDelta / HorizontalDistance;
-	const FRotator DesiredRotation(0.0f, MoveDirection.Rotation().Yaw, 0.0f);
-	const FRotator NewRotation = FMath::RInterpConstantTo(
-		RestingCharacter->GetActorRotation(), DesiredRotation, 0.02f, ApproachRotationRate);
+	const float Alpha = FMath::Clamp(
+		static_cast<float>(GetWorld()->GetTimeSeconds() - PlayerTurnStartedAtSeconds) /
+			PlayerRotationDuration,
+		0.0f,
+		1.0f);
+	const float EasedAlpha = FMath::InterpEaseInOut(0.0f, 1.0f, Alpha, 2.0f);
+	FRotator NewRotation = PlayerTurnStartRotation;
+	NewRotation.Yaw = PlayerTurnStartRotation.Yaw + 180.0f * EasedAlpha;
 	RestingCharacter->SetActorRotation(NewRotation);
-	if (UCharacterMovementComponent* Movement = RestingCharacter->GetCharacterMovement())
-	{
-		Movement->RequestDirectMove(MoveDirection * Movement->GetMaxSpeed(), false);
-	}
-}
-
-void ABedMemoryActor::FinishApproach()
-{
-	if (State != EBedMemoryState::Approaching || !RestingCharacter || !PlayerAnchor)
-	{
-		return;
-	}
-
-	GetWorldTimerManager().ClearTimer(ApproachTimer);
-	State = EBedMemoryState::AligningPlayer;
 	if (RestingPlayerController)
 	{
-		RestingPlayerController->StopMovement();
+		RestingPlayerController->SetControlRotation(NewRotation);
 	}
-	if (UCharacterMovementComponent* Movement = RestingCharacter->GetCharacterMovement())
+	if (Alpha >= 1.0f)
 	{
-		Movement->StopMovementImmediately();
-		Movement->DisableMovement();
+		FinishPlayerTurn();
+	}
+}
+
+void ABedMemoryActor::FinishPlayerTurn()
+{
+	if (State != EBedMemoryState::AligningPlayer || !RestingCharacter)
+	{
+		return;
 	}
 
-	FHitResult IgnoredHit;
-	RestingCharacter->SetActorLocationAndRotation(
-		PlayerAnchor->GetComponentLocation(),
-		PlayerAnchor->GetComponentRotation(),
-		false,
-		&IgnoredHit,
-		ETeleportType::TeleportPhysics);
-
-	if (BedSoundMix)
+	GetWorldTimerManager().ClearTimer(PlayerTurnTimer);
+	RestingCharacter->SetActorRotation(PlayerTurnTargetRotation);
+	if (RestingPlayerController)
 	{
-		UGameplayStatics::PushSoundMixModifier(this, BedSoundMix);
-		bSoundMixApplied = true;
+		RestingPlayerController->SetControlRotation(PlayerTurnTargetRotation);
 	}
-	if (BGMPlayer && BedBGM)
+	BeginEntering();
+}
+
+void ABedMemoryActor::BeginEntering()
+{
+	if (State != EBedMemoryState::AligningPlayer || !RestingCharacter)
 	{
-		BGMPlayer->SetSound(BedBGM);
-		BGMPlayer->FadeIn(BGMFadeInDuration, BGMVolume);
+		return;
 	}
 
 	State = EBedMemoryState::Entering;
-	const float EnterDuration = EnterMontage
-		? RestingCharacter->PlayAnimMontage(EnterMontage)
-		: 0.0f;
+	float EnterDuration = 0.0f;
+	ActiveSitMontage = nullptr;
+	if (SitAnimation)
+	{
+		if (UAnimMontage* AssignedMontage = Cast<UAnimMontage>(SitAnimation))
+		{
+			ActiveSitMontage = AssignedMontage;
+			EnterDuration = RestingCharacter->PlayAnimMontage(AssignedMontage);
+		}
+		else if (UAnimInstance* AnimInstance = RestingCharacter->GetMesh()
+			? RestingCharacter->GetMesh()->GetAnimInstance()
+			: nullptr)
+		{
+			ActiveSitMontage = AnimInstance->PlaySlotAnimationAsDynamicMontage(
+				SitAnimation,
+				SitAnimationSlotName,
+				0.1f,
+				0.1f,
+				1.0f,
+				1,
+				-1.0f,
+				0.0f);
+			EnterDuration = ActiveSitMontage ? ActiveSitMontage->GetPlayLength() : 0.0f;
+		}
+	}
 	if (EnterDuration > 0.0f)
 	{
 		GetWorldTimerManager().SetTimer(
-			TransitionTimer, this, &ABedMemoryActor::FinishEntering, EnterDuration, false);
+			TransitionTimer,
+			this,
+			&ABedMemoryActor::FinishEntering,
+			FMath::Max(EnterDuration - BedMemory::SitPoseHoldLeadSeconds, 0.001f),
+			false);
 	}
 	else
 	{
 		FinishEntering();
 	}
-}
-
-void ABedMemoryActor::CancelApproach()
-{
-	GetWorldTimerManager().ClearTimer(ApproachTimer);
-	if (RestingPlayerController && RestingCharacter)
-	{
-		RestingPlayerController->StopMovement();
-		if (ABalhwajeomCameraCharacter* CameraCharacter =
-			Cast<ABalhwajeomCameraCharacter>(RestingCharacter))
-		{
-			CameraCharacter->RestoreExplorationView(CameraBlendOutDuration);
-		}
-		else
-		{
-			RestingPlayerController->SetViewTargetWithBlend(
-				RestingCharacter, CameraBlendOutDuration, VTBlend_Cubic);
-		}
-	}
-
-	State = EBedMemoryState::Restoring;
-	RestorePlayerState();
-	State = EBedMemoryState::Idle;
-	ApplyInspectionDistanceState(LastInspectionDistanceState);
 }
 
 void ABedMemoryActor::FinishEntering()
@@ -434,6 +451,25 @@ void ABedMemoryActor::FinishEntering()
 		return;
 	}
 
+	if (ActiveSitMontage)
+	{
+		if (UAnimInstance* AnimInstance = RestingCharacter->GetMesh()
+			? RestingCharacter->GetMesh()->GetAnimInstance()
+			: nullptr)
+		{
+			if (AnimInstance->Montage_IsActive(ActiveSitMontage))
+			{
+				AnimInstance->Montage_SetPosition(
+					ActiveSitMontage,
+					FMath::Max(
+						ActiveSitMontage->GetPlayLength() - BedMemory::SitPoseEndOffsetSeconds,
+						0.0f));
+				AnimInstance->Montage_Pause(ActiveSitMontage);
+			}
+		}
+	}
+
+	State = EBedMemoryState::Seated;
 	if (SeatedIdleMontage)
 	{
 		RestingCharacter->PlayAnimMontage(SeatedIdleMontage);
@@ -566,8 +602,16 @@ void ABedMemoryActor::ScheduleNextVoice(bool bInitialDelay)
 		Delay = BedMemory::RandomInRange(NormalGapRange);
 	}
 
-	GetWorldTimerManager().SetTimer(
-		VoiceTimer, this, &ABedMemoryActor::PlayNextVoice, Delay, false);
+	if (Delay <= UE_KINDA_SMALL_NUMBER)
+	{
+		GetWorldTimerManager().SetTimerForNextTick(
+			this, &ABedMemoryActor::PlayNextVoice);
+	}
+	else
+	{
+		GetWorldTimerManager().SetTimer(
+			VoiceTimer, this, &ABedMemoryActor::PlayNextVoice, Delay, false);
+	}
 }
 
 void ABedMemoryActor::RefillShuffleBag()
@@ -695,14 +739,28 @@ void ABedMemoryActor::EndRest()
 	{
 		return;
 	}
-	if (State == EBedMemoryState::Approaching)
+	if (State == EBedMemoryState::AligningPlayer)
 	{
-		CancelApproach();
+		GetWorldTimerManager().ClearTimer(PlayerTurnTimer);
+		State = EBedMemoryState::Restoring;
+		if (ABalhwajeomCameraCharacter* CameraCharacter =
+			Cast<ABalhwajeomCameraCharacter>(RestingCharacter))
+		{
+			CameraCharacter->RestoreExplorationView(CameraBlendInDuration);
+		}
+		else if (RestingPlayerController && RestingCharacter)
+		{
+			RestingPlayerController->SetViewTargetWithBlend(
+				RestingCharacter, CameraBlendInDuration, VTBlend_Cubic);
+		}
+		RestorePlayerState();
+		State = EBedMemoryState::Idle;
+		ApplyInspectionDistanceState(LastInspectionDistanceState);
 		return;
 	}
 
 	State = EBedMemoryState::Exiting;
-	GetWorldTimerManager().ClearTimer(ApproachTimer);
+	GetWorldTimerManager().ClearTimer(PlayerTurnTimer);
 	GetWorldTimerManager().ClearTimer(TransitionTimer);
 	GetWorldTimerManager().ClearTimer(VoiceTimer);
 	if (VoiceLoadHandle.IsValid())
@@ -731,9 +789,31 @@ void ABedMemoryActor::EndRest()
 		{
 			RestingCharacter->StopAnimMontage(SeatedIdleMontage);
 		}
-		if (ExitMontage)
+		if (ActiveSitMontage)
 		{
-			ExitDuration = RestingCharacter->PlayAnimMontage(ExitMontage);
+			if (UAnimInstance* AnimInstance = RestingCharacter->GetMesh()
+				? RestingCharacter->GetMesh()->GetAnimInstance()
+				: nullptr)
+			{
+				float ReverseStartPosition = ActiveSitMontage->GetPlayLength();
+				if (AnimInstance->Montage_IsActive(ActiveSitMontage))
+				{
+					ReverseStartPosition = AnimInstance->Montage_GetPosition(ActiveSitMontage);
+				}
+				const float PlayedDuration = AnimInstance->Montage_Play(
+					ActiveSitMontage,
+					-1.0f,
+					EMontagePlayReturnType::Duration,
+					ReverseStartPosition);
+				if (!FMath::IsNearlyZero(PlayedDuration))
+				{
+					const float FullDuration = FMath::Abs(PlayedDuration);
+					const float MontageLength = ActiveSitMontage->GetPlayLength();
+					ExitDuration = MontageLength > UE_KINDA_SMALL_NUMBER
+						? FullDuration * (ReverseStartPosition / MontageLength)
+						: 0.0f;
+				}
+			}
 		}
 	}
 	if (ExitDuration > 0.0f)
@@ -768,12 +848,12 @@ void ABedMemoryActor::FinishExiting()
 
 	if (ABalhwajeomCameraCharacter* CameraCharacter = Cast<ABalhwajeomCameraCharacter>(RestingCharacter))
 	{
-		CameraCharacter->RestoreExplorationView(CameraBlendOutDuration);
+		CameraCharacter->RestoreExplorationView(CameraBlendInDuration);
 	}
 	else if (RestingPlayerController && RestingCharacter)
 	{
 		RestingPlayerController->SetViewTargetWithBlend(
-			RestingCharacter, CameraBlendOutDuration, VTBlend_Cubic);
+			RestingCharacter, CameraBlendInDuration, VTBlend_Cubic);
 	}
 
 	RestorePlayerState();
@@ -787,6 +867,10 @@ void ABedMemoryActor::RestorePlayerState()
 	{
 		RestingPlayerController->SetIgnoreMoveInput(false);
 		RestingPlayerController->SetIgnoreLookInput(false);
+		if (bHasSavedControlRotation)
+		{
+			RestingPlayerController->SetControlRotation(SavedControlRotation);
+		}
 		if (AHUD* HUD = RestingPlayerController->GetHUD())
 		{
 			HUD->bShowHUD = bSavedHUDVisible;
@@ -818,8 +902,10 @@ void ABedMemoryActor::RestorePlayerState()
 	}
 	VoiceCandidates.Reset();
 	ShuffleBag.Reset();
+	ActiveSitMontage = nullptr;
 	RestingCharacter = nullptr;
 	RestingPlayerController = nullptr;
+	bHasSavedControlRotation = false;
 }
 
 bool ABedMemoryActor::SetupRestInput(APlayerController* PlayerController)

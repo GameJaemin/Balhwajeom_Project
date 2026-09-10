@@ -10,6 +10,7 @@
 class ACharacter;
 class APlayerController;
 class UAnimMontage;
+class UAnimSequenceBase;
 class UAudioComponent;
 class UBoxComponent;
 class UCameraComponent;
@@ -27,9 +28,9 @@ UENUM(BlueprintType)
 enum class EBedMemoryState : uint8
 {
 	Idle,
-	Approaching,
 	AligningPlayer,
 	Entering,
+	Seated,
 	PreparingAudio,
 	Listening,
 	Exiting,
@@ -118,7 +119,7 @@ protected:
 	void FinishEntering();
 
 	UFUNCTION()
-	void UpdateApproach();
+	void UpdatePlayerTurn();
 
 	UFUNCTION()
 	void FinishExiting();
@@ -127,9 +128,9 @@ protected:
 	void HandleVoiceFinished();
 
 	void BuildVoiceCandidates();
-	void BeginApproach();
-	void FinishApproach();
-	void CancelApproach();
+	void BeginPlayerTurn();
+	void FinishPlayerTurn();
+	void BeginEntering();
 	void BeginPreparingAudio();
 	void HandleVoiceAssetsLoaded();
 	void BeginListening();
@@ -194,14 +195,18 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bed Memory|Components")
 	TObjectPtr<UAudioComponent> VoicePlayer;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Animation")
-	TObjectPtr<UAnimMontage> EnterMontage;
+	/** Animation Sequence or Montage played forward to sit and backward to stand. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Animation",
+		meta = (DisplayName = "Sit Animation"))
+	TObjectPtr<UAnimSequenceBase> SitAnimation;
 
+	/** Slot used when Sit Animation is an Animation Sequence. Must exist in the AnimBP. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Animation")
+	FName SitAnimationSlotName = TEXT("DefaultSlot");
+
+	/** Optional looping seated idle. Leave empty to hold the final Sit Montage pose. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Animation")
 	TObjectPtr<UAnimMontage> SeatedIdleMontage;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Animation")
-	TObjectPtr<UAnimMontage> ExitMontage;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Audio")
 	TObjectPtr<USoundBase> BedBGM;
@@ -218,34 +223,35 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Audio", meta = (ClampMin = "0.0"))
 	float BGMVolume = 0.7f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Timing")
+	/** Random delay before the first acquired-photo voice is played. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Voice Timing",
+		meta = (DisplayName = "Initial Voice Delay Range", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
 	FVector2D InitialDelayRange = FVector2D(1.0f, 2.0f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Timing")
+	/** Random silence between ordinary voice clips. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Voice Timing",
+		meta = (DisplayName = "Voice Interval Range", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
 	FVector2D NormalGapRange = FVector2D(1.0f, 4.0f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Timing")
+	/** Random silence used when a long pause is selected. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Voice Timing",
+		meta = (DisplayName = "Long Silence Range", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
 	FVector2D LongGapRange = FVector2D(4.0f, 7.0f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Timing", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Voice Timing",
+		meta = (DisplayName = "Long Silence Chance", ClampMin = "0.0", ClampMax = "1.0",
+			UIMin = "0.0", UIMax = "1.0"))
 	float LongGapChance = 0.2f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Camera", meta = (ClampMin = "0.0"))
+	/** Seconds used to blend from the exploration camera to SeatedCamera. Zero cuts immediately. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Camera",
+		meta = (DisplayName = "Camera Transition Duration", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
 	float CameraBlendInDuration = 0.6f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Camera", meta = (ClampMin = "0.0"))
-	float CameraBlendOutDuration = 0.4f;
-
-	/** Horizontal distance at which the walk finishes and the character is aligned exactly to PlayerAnchor. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Approach", meta = (ClampMin = "1.0"))
-	float ApproachAcceptanceRadius = 10.0f;
-
-	/** Cancels the interaction if collision prevents the character from reaching PlayerAnchor. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Approach", meta = (ClampMin = "0.5"))
-	float ApproachTimeout = 8.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Approach", meta = (ClampMin = "1.0"))
-	float ApproachRotationRate = 540.0f;
+	/** Seconds used to rotate the player 180 degrees away from the bed. Zero rotates immediately. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Animation",
+		meta = (DisplayName = "Player Rotation Duration", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	float PlayerRotationDuration = 0.6f;
 
 	/** Per-room spatial direction. Unmapped photos use VoiceOrigin. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Voice")
@@ -283,18 +289,25 @@ private:
 	UPROPERTY(Transient)
 	TArray<int32> ShuffleBag;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimMontage> ActiveSitMontage;
+
 	TSharedPtr<FStreamableHandle> VoiceLoadHandle;
 	FTimerHandle TransitionTimer;
-	FTimerHandle ApproachTimer;
+	FTimerHandle PlayerTurnTimer;
 	FTimerHandle VoiceTimer;
 	FTransform SavedPlayerTransform;
+	FRotator SavedControlRotation = FRotator::ZeroRotator;
+	FRotator PlayerTurnStartRotation = FRotator::ZeroRotator;
+	FRotator PlayerTurnTargetRotation = FRotator::ZeroRotator;
 	FName LastPlayedPhotoID = NAME_None;
 	double EarliestExitTimeSeconds = 0.0;
-	double ApproachStartedAtSeconds = 0.0;
+	double PlayerTurnStartedAtSeconds = 0.0;
 	uint8 SavedMovementMode = 0;
 	uint8 SavedCustomMovementMode = 0;
 	EPlayerInspectionDistanceState LastInspectionDistanceState = EPlayerInspectionDistanceState::OutOfRange;
 	bool bInspectionLabelSuppressed = false;
 	bool bSoundMixApplied = false;
 	bool bSavedHUDVisible = true;
+	bool bHasSavedControlRotation = false;
 };
