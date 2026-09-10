@@ -2,8 +2,71 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "GameplayTagContainer.h"
 #include "Interaction/PlayerInteractionTypes.h"
 #include "InspectionComponent.generated.h"
+
+
+USTRUCT(BlueprintType)
+struct BALHWAJEOM_API FInspectionData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadWrite,
+		Category = "Inspection",
+		meta = (MultiLine = "true")
+	)
+	FText FarLabel;
+
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadWrite,
+		Category = "Inspection",
+		meta = (MultiLine = "true")
+	)
+	FText MidLabel;
+
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadWrite,
+		Category = "Inspection",
+		meta = (MultiLine = "true")
+	)
+	FText NearLabel;
+
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadWrite,
+		Category = "Inspection",
+		meta = (MultiLine = "true")
+	)
+	FText InspectionText;
+};
+
+
+USTRUCT(BlueprintType)
+struct BALHWAJEOM_API FConditionalInspectionData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadWrite,
+		Category = "Inspection",
+		meta = (DisplayName = "Condition Query")
+	)
+	FGameplayTagQuery Condition;
+
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadWrite,
+		Category = "Inspection",
+		meta = (DisplayName = "Inspection Data")
+	)
+	FInspectionData Data;
+};
 
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
@@ -61,6 +124,29 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inspection|Text")
 	FText InspectionText;
+
+	/**
+	 * Ordered condition overrides. The first non-empty query matching the
+	 * supplied story state wins. Existing text fields remain the default data.
+	 */
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadWrite,
+		Category = "Inspection|Data",
+		meta = (DisplayName = "Conditional Inspection Data")
+	)
+	TArray<FConditionalInspectionData> ConditionalData;
+
+	UFUNCTION(BlueprintPure, Category = "Inspection|Data")
+	FInspectionData GetDefaultInspectionData() const;
+
+	UFUNCTION(BlueprintPure, Category = "Inspection|Data")
+	FInspectionData ResolveInspectionDataForState(
+		const FGameplayTagContainer& StateTags
+	) const;
+
+	UFUNCTION(BlueprintPure, Category = "Inspection|Data")
+	FInspectionData GetCurrentInspectionData() const;
 
 
 	/**

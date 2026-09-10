@@ -25,6 +25,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
 	const FString& GetWordID() const { return WordID; }
 
+	UFUNCTION(BlueprintCallable, Category = "Tablet|Messenger")
+	void SetAcquired(bool bInAcquired);
+
+	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
+	bool IsAcquired() const { return bAcquired; }
+
 	UPROPERTY(BlueprintAssignable, Category = "Tablet|Messenger")
 	FMessengerKeywordClickedSignature OnKeywordClicked;
 
@@ -44,6 +50,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tablet|Messenger", meta = (AllowPrivateAccess = "true"))
 	FString WordID;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tablet|Messenger", meta = (AllowPrivateAccess = "true"))
+	bool bAcquired = false;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_Keyword;

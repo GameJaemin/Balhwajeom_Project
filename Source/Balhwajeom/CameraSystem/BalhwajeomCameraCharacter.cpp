@@ -10,10 +10,15 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Tablet/BalhwajeomTabletComponent.h"
+#include "Interaction/PlayerInteractionComponent.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
+#include "Engine/Engine.h"
+#include "Animation/AnimationAsset.h"
 
 ABalhwajeomCameraCharacter::ABalhwajeomCameraCharacter()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 
 	GetCapsuleComponent()->InitCapsuleSize(42.0f, 96.0f);
 
@@ -54,6 +59,13 @@ ABalhwajeomCameraCharacter::ABalhwajeomCameraCharacter()
 	PhotoCameraComponent->SetPhotoCamera(FirstPersonCamera);
 
 	TabletComponent = CreateDefaultSubobject<UBalhwajeomTabletComponent>(TEXT("TabletComponent"));
+	PlayerInteractionComponent = CreateDefaultSubobject<UPlayerInteractionComponent>(TEXT("PlayerInteractionComponent"));
+	static ConstructorHelpers::FObjectFinder<UInputMappingContext> InteractionMapping(
+		TEXT("/Game/Balhwajeom/Input/IMC_Interaction.IMC_Interaction"));
+	static ConstructorHelpers::FObjectFinder<UInputAction> InteractionAction(
+		TEXT("/Game/Balhwajeom/Input/IA_Interact.IA_Interact"));
+	if (InteractionMapping.Succeeded()) PlayerInteractionComponent->InteractionMappingContext = InteractionMapping.Object;
+	if (InteractionAction.Succeeded()) PlayerInteractionComponent->InteractAction = InteractionAction.Object;
 	PhotoCameraComponent->OnCameraModeExited.AddLambda([this]()
 	{
 		// Camera mode grabbed the view target away from the active zone; hand it back now that we're done.
@@ -80,6 +92,28 @@ ABalhwajeomCameraCharacter::ABalhwajeomCameraCharacter()
 	}
 }
 
+void ABalhwajeomCameraCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	// This path is opt-in so legacy children that use an Animation Blueprint are untouched.
+	if (!IdleAnimation || !WalkAnimation || !GetMesh())
+	{
+		return;
+	}
+
+	const float HorizontalSpeed = GetVelocity().Size2D();
+	UAnimationAsset* DesiredAnimation = HorizontalSpeed >= WalkAnimationThreshold
+		? WalkAnimation.Get()
+		: IdleAnimation.Get();
+
+	if (DesiredAnimation != ActiveLocomotionAnimation)
+	{
+		GetMesh()->PlayAnimation(DesiredAnimation, true);
+		ActiveLocomotionAnimation = DesiredAnimation;
+	}
+}
+
 void ABalhwajeomCameraCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -87,6 +121,11 @@ void ABalhwajeomCameraCharacter::BeginPlay()
 	// Apply the Blueprint default so designers can tune WalkSpeed without
 	// changing or recompiling this C++ class.
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+	if (PlayerInteractionComponent)
+	{
+		PlayerInteractionComponent->OnInspectionSucceeded.AddUniqueDynamic(
+			this, &ABalhwajeomCameraCharacter::HandleInspectionSucceeded);
+	}
 
 	if (bAllowCameraOrbit)
 	{
@@ -104,6 +143,22 @@ void ABalhwajeomCameraCharacter::BeginPlay()
 		// camera when walking backward.)
 		bUseControllerRotationYaw = true;
 		GetCharacterMovement()->bOrientRotationToMovement = false;
+
+		if (AController* CharacterController = GetController())
+		{
+			FRotator InitialControlRotation = CharacterController->GetControlRotation();
+			InitialControlRotation.Pitch = InitialOrbitPitch;
+			CharacterController->SetControlRotation(InitialControlRotation);
+		}
+	}
+}
+
+void ABalhwajeomCameraCharacter::HandleInspectionSucceeded(FText InspectionText)
+{
+	if (GEngine && !InspectionText.IsEmpty())
+	{
+		GEngine->AddOnScreenDebugMessage(
+			-1, 4.0f, FColor(255, 220, 140), InspectionText.ToString(), true, FVector2D(1.25f));
 	}
 }
 
@@ -180,6 +235,20 @@ void ABalhwajeomCameraCharacter::StopSprinting()
 bool ABalhwajeomCameraCharacter::IsInCameraMode() const
 {
 	return PhotoCameraComponent && PhotoCameraComponent->IsInCameraMode();
+}
+
+void ABalhwajeomCameraCharacter::RestoreExplorationView(float BlendTime)
+{
+	if (ActiveCameraZone)
+	{
+		ActiveCameraZone->ActivateCamera(this);
+		return;
+	}
+
+	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
+	{
+		PlayerController->SetViewTargetWithBlend(this, BlendTime, VTBlend_Cubic);
+	}
 }
 
 TArray<FBalhwajeomEvidenceData> ABalhwajeomCameraCharacter::GetCollectedEvidence() const

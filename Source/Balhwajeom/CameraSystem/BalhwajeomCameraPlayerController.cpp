@@ -3,6 +3,7 @@
 #include "BalhwajeomCameraPlayerController.h"
 
 #include "BalhwajeomCameraCharacter.h"
+#include "Blueprint/UserWidget.h"
 
 ABalhwajeomCameraPlayerController::ABalhwajeomCameraPlayerController()
 {
@@ -17,6 +18,22 @@ void ABalhwajeomCameraPlayerController::BeginPlay()
 	FInputModeGameOnly InputMode;
 	InputMode.SetConsumeCaptureMouseDown(false);
 	SetInputMode(InputMode);
+
+	EnsurePlayerHUD();
+}
+
+void ABalhwajeomCameraPlayerController::EnsurePlayerHUD()
+{
+	if (!IsLocalController() || IsValid(PlayerHUDWidget) || !PlayerHUDWidgetClass)
+	{
+		return;
+	}
+
+	PlayerHUDWidget = CreateWidget<UUserWidget>(this, PlayerHUDWidgetClass);
+	if (PlayerHUDWidget)
+	{
+		PlayerHUDWidget->AddToViewport(0);
+	}
 }
 
 void ABalhwajeomCameraPlayerController::SetupInputComponent()

@@ -17,7 +17,10 @@ public class BalhwajeomEditor : ModuleRules
 		{
 			"AssetRegistry",
 			"AssetTools",
+			"AnimGraph",
 			"Balhwajeom",
+			"BlueprintGraph",
+			"ImageCore",
 			"SlateCore",
 			"UMG",
 			"UMGEditor",

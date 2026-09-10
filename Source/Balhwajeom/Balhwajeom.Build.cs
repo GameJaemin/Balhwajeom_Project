@@ -14,12 +14,14 @@ public class Balhwajeom : ModuleRules
 			"Engine",
 			"InputCore",
 			"EnhancedInput",
+			"GameplayTags",
 			"AIModule",
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"UMG",
 			"Slate",
-			"SlateCore"
+			"SlateCore",
+			"DeveloperSettings"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

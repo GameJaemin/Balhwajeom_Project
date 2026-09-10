@@ -4,8 +4,12 @@
 #include "Components/ScrollBox.h"
 #include "Components/TextBlock.h"
 #include "Tablet/BalhwajeomMessengerDataAssets.h"
+#include "Tablet/BalhwajeomMessengerDateSeparator.h"
 #include "Tablet/BalhwajeomMessengerMessageWidget.h"
 #include "Tablet/BalhwajeomMessengerRoomWidget.h"
+#include "Engine/GameInstance.h"
+#include "Investigation/BalhwajeomInvestigationSubsystem.h"
+#include "Investigation/WordDefinitions.h"
 
 namespace
 {
@@ -20,6 +24,8 @@ namespace
 UBalhwajeomMessengerWidget::UBalhwajeomMessengerWidget(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
+	DateSeparatorClass = TSoftClassPtr<UBalhwajeomMessengerDateSeparator>(FSoftObjectPath(
+		TEXT("/Game/Balhwajeom/UI/Tablet/WBP_MessengerDateSeparator.WBP_MessengerDateSeparator_C")));
 	MessengerData = TSoftObjectPtr<UBalhwajeomMessengerCatalogDataAsset>(
 		FSoftObjectPath(MessengerCatalogPath));
 }
@@ -32,7 +38,20 @@ void UBalhwajeomMessengerWidget::NativeOnInitialized()
 	{
 		BTN_Back->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBackClicked);
 	}
+	if (UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem())
+	{
+		Investigation->OnWordAcquired.AddUniqueDynamic(this, &ThisClass::HandleWordAcquired);
+	}
 	InitializeMessenger();
+}
+
+void UBalhwajeomMessengerWidget::NativeDestruct()
+{
+	if (UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem())
+	{
+		Investigation->OnWordAcquired.RemoveDynamic(this, &ThisClass::HandleWordAcquired);
+	}
+	Super::NativeDestruct();
 }
 
 void UBalhwajeomMessengerWidget::InitializeMessenger()
@@ -172,7 +191,15 @@ int32 UBalhwajeomMessengerWidget::GetDisplayedRoomCount() const
 
 int32 UBalhwajeomMessengerWidget::GetDisplayedMessageCount() const
 {
-	return SB_MessageList ? SB_MessageList->GetChildrenCount() : 0;
+	int32 Count = 0;
+	if (SB_MessageList)
+	{
+		for (UWidget* Child : SB_MessageList->GetAllChildren())
+		{
+			Count += Cast<UBalhwajeomMessengerMessageWidget>(Child) != nullptr ? 1 : 0;
+		}
+	}
+	return Count;
 }
 
 UBalhwajeomMessengerRoomWidget* UBalhwajeomMessengerWidget::GetDisplayedRoomWidget(
@@ -188,12 +215,21 @@ UBalhwajeomMessengerRoomWidget* UBalhwajeomMessengerWidget::GetDisplayedRoomWidg
 UBalhwajeomMessengerMessageWidget* UBalhwajeomMessengerWidget::GetDisplayedMessageWidget(
 	const int32 Index) const
 {
-	return SB_MessageList
-		&& Index >= 0
-		&& Index < SB_MessageList->GetChildrenCount()
-		&& SB_MessageList->GetChildAt(Index)
-		? Cast<UBalhwajeomMessengerMessageWidget>(SB_MessageList->GetChildAt(Index))
-		: nullptr;
+	int32 MessageIndex = 0;
+	if (SB_MessageList && Index >= 0)
+	{
+		for (UWidget* Child : SB_MessageList->GetAllChildren())
+		{
+			if (auto* Message = Cast<UBalhwajeomMessengerMessageWidget>(Child))
+			{
+				if (MessageIndex++ == Index)
+				{
+					return Message;
+				}
+			}
+		}
+	}
+	return nullptr;
 }
 
 bool UBalhwajeomMessengerWidget::HasValidRoomData() const
@@ -291,8 +327,26 @@ void UBalhwajeomMessengerWidget::LoadMessages(const UBalhwajeomMessengerRoomData
 		return;
 	}
 
+	const auto SeparatorClass = DateSeparatorClass.LoadSynchronous();
+	FDateTime PreviousDate;
+	bool bFirstMessage = true;
 	for (const FST_MessengerMessage& Message : Room.Messages)
 	{
+		const FDateTime Date = Message.SentAt.GetDate();
+		if (bFirstMessage || Date != PreviousDate)
+		{
+			if (SeparatorClass)
+			{
+				auto* Separator = CreateWidget<UBalhwajeomMessengerDateSeparator>(World, SeparatorClass);
+				if (Separator)
+				{
+					Separator->SetupDate(Message.SentAt);
+					SB_MessageList->AddChild(Separator);
+				}
+			}
+		}
+		bFirstMessage = false;
+		PreviousDate = Date;
 		UBalhwajeomMessengerMessageWidget* MessageWidget =
 			CreateWidget<UBalhwajeomMessengerMessageWidget>(World, ResolvedClass);
 		if (!MessageWidget)
@@ -306,6 +360,12 @@ void UBalhwajeomMessengerWidget::LoadMessages(const UBalhwajeomMessengerRoomData
 		}
 #endif
 		MessageWidget->SetupMessage(Message);
+		MessageWidget->OnKeywordClicked.AddUniqueDynamic(this, &ThisClass::HandleKeywordClicked);
+		if (UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem())
+		{
+			MessageWidget->SetKeywordAcquired(
+				Investigation->HasAcquiredWord(MessageWidget->GetKeywordWordID()));
+		}
 		SB_MessageList->AddChild(MessageWidget);
 	}
 
@@ -378,6 +438,31 @@ void UBalhwajeomMessengerWidget::BroadcastUnreadCount()
 	OnTotalUnreadChanged.Broadcast(GetTotalUnreadCount());
 }
 
+UBalhwajeomInvestigationSubsystem* UBalhwajeomMessengerWidget::GetInvestigationSubsystem() const
+{
+	UGameInstance* GameInstance = GetGameInstance();
+	return GameInstance ? GameInstance->GetSubsystem<UBalhwajeomInvestigationSubsystem>() : nullptr;
+}
+
+void UBalhwajeomMessengerWidget::RefreshDisplayedKeywordStates()
+{
+	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	if (!Investigation || !SB_MessageList)
+	{
+		return;
+	}
+
+	for (UWidget* Child : SB_MessageList->GetAllChildren())
+	{
+		if (UBalhwajeomMessengerMessageWidget* Message =
+			Cast<UBalhwajeomMessengerMessageWidget>(Child))
+		{
+			Message->SetKeywordAcquired(
+				Investigation->HasAcquiredWord(Message->GetKeywordWordID()));
+		}
+	}
+}
+
 void UBalhwajeomMessengerWidget::HandleRoomClicked(const FString& RoomID)
 {
 	SelectRoomByID(RoomID);
@@ -386,4 +471,42 @@ void UBalhwajeomMessengerWidget::HandleRoomClicked(const FString& RoomID)
 void UBalhwajeomMessengerWidget::HandleBackClicked()
 {
 	OnBackRequested.Broadcast();
+}
+
+void UBalhwajeomMessengerWidget::HandleKeywordClicked(
+	const FName WordID,
+	const FName MessageID)
+{
+	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	if (!Investigation || WordID.IsNone())
+	{
+		return;
+	}
+
+	FWordDefinition Definition;
+	if (!Investigation->GetWordDefinition(WordID, Definition))
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("Messenger keyword '%s' is not defined in DT_Words."),
+			*WordID.ToString());
+		return;
+	}
+
+	const FName SourceID = !MessageID.IsNone() ? MessageID : FName(*CurrentRoomID);
+	if (!Investigation->HasAcquiredWord(WordID))
+	{
+		Investigation->AcquireWord(
+			WordID,
+			EWordAcquisitionSource::Messenger,
+			SourceID);
+	}
+	RefreshDisplayedKeywordStates();
+}
+
+void UBalhwajeomMessengerWidget::HandleWordAcquired(const FAcquiredWordRecord& WordRecord)
+{
+	(void)WordRecord;
+	RefreshDisplayedKeywordStates();
 }

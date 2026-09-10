@@ -9,6 +9,10 @@ struct BALHWAJEOM_API FST_MessengerMessage
 {
 	GENERATED_BODY()
 
+	/** Stable provenance ID passed to the investigation subsystem when its keyword is acquired. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Messenger")
+	FName MessageID = NAME_None;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Messenger")
 	FText SenderName;
 
@@ -17,6 +21,10 @@ struct BALHWAJEOM_API FST_MessengerMessage
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Messenger")
 	bool bIsPlayer = false;
+
+	/** Authored story-local time. No operating-system timezone conversion. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Messenger")
+	FDateTime SentAt = FDateTime::MinValue();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Messenger")
 	FText KeywordText;

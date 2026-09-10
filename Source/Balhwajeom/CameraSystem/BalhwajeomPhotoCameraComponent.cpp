@@ -2,15 +2,27 @@
 
 #include "BalhwajeomPhotoCameraComponent.h"
 
+#include "Async/Async.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/Engine.h"
+#include "Engine/GameInstance.h"
+#include "Engine/GameViewportClient.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/FileManager.h"
+#include "ImageUtils.h"
+#include "Investigation/BalhwajeomInvestigationSubsystem.h"
+#include "Investigation/EvidenceDefinitions.h"
+#include "Investigation/InvestigationRuntimeTypes.h"
+#include "Investigation/PhotoDefinitions.h"
+#include "Kismet/GameplayStatics.h"
+#include "Misc/Paths.h"
 #include "TimerManager.h"
+#include "UnrealClient.h"
 #include "BalhwajeomEvidenceActor.h"
 #include "BalhwajeomEvidenceCameraHUD.h"
 #include "BalhwajeomCameraTargetInterface.h"
@@ -28,20 +40,41 @@ namespace
 		return OwnerPawn ? OwnerPawn->GetController() : nullptr;
 	}
 
-	bool ProjectActorBoundsToScreen(
-		const AActor* Actor,
+	AActor* ResolveCameraTargetFromHit(AActor* HitActor)
+	{
+		TSet<AActor*> Visited;
+		for (AActor* Candidate = HitActor; IsValid(Candidate) && !Visited.Contains(Candidate);)
+		{
+			Visited.Add(Candidate);
+			if (Candidate->GetClass()->ImplementsInterface(
+				UBalhwajeomCameraTargetInterface::StaticClass()))
+			{
+				return Candidate;
+			}
+
+			AActor* Parent = Candidate->GetAttachParentActor();
+			Candidate = Parent ? Parent : Candidate->GetOwner();
+		}
+		return nullptr;
+	}
+
+	bool ProjectPrimitiveBoundsToScreen(
+		const UPrimitiveComponent* FramingComponent,
 		APlayerController* PlayerController,
 		int32 ViewportWidth,
 		int32 ViewportHeight,
 		FVector2D& OutScreenMin,
 		FVector2D& OutScreenMax)
 	{
-		if (!Actor || !PlayerController)
+		if (!FramingComponent || !PlayerController)
 		{
 			return false;
 		}
 
-		const FBox Bounds = Actor->GetComponentsBoundingBox(true);
+		// Camera targets may own screen-space widgets and helper components whose
+		// bounds are unrelated to the photographed silhouette. Only the component
+		// explicitly supplied by RequestCameraFramingComponent is considered.
+		const FBox Bounds = FramingComponent->Bounds.GetBox();
 		if (!Bounds.IsValid)
 		{
 			return false;
@@ -144,7 +177,7 @@ namespace
 				RayOrigin,
 				RayOrigin + RayDirection * TraceDistance,
 				ECC_Visibility,
-				Params) && Hit.GetActor() == Actor;
+				Params) && ResolveCameraTargetFromHit(Hit.GetActor()) == Actor;
 			if (bHitTarget)
 			{
 				OutHitWorldPosition = Hit.ImpactPoint;
@@ -255,6 +288,24 @@ UBalhwajeomPhotoCameraComponent::UBalhwajeomPhotoCameraComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
+}
+
+void UBalhwajeomPhotoCameraComponent::BeginDestroy()
+{
+	ClearScreenshotDelegates();
+	if (PendingCapture.IsSet())
+	{
+		if (FScreenshotRequest::IsScreenshotRequested() &&
+			FPaths::IsSamePath(
+				FScreenshotRequest::GetFilename(),
+				PendingCapture->AbsolutePath))
+		{
+			FScreenshotRequest::Reset();
+		}
+		IFileManager::Get().Delete(*PendingCapture->AbsolutePath, false, true);
+	}
+	PendingCapture.Reset();
+	Super::BeginDestroy();
 }
 
 void UBalhwajeomPhotoCameraComponent::TickComponent(
@@ -430,22 +481,21 @@ void UBalhwajeomPhotoCameraComponent::TakePhoto()
 
 	AActor* Owner = GetOwner();
 
-	if (const APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this)))
-	{
-		if (ABalhwajeomEvidenceCameraHUD* CameraHUD = Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD()))
-		{
-			CameraHUD->TriggerPhotoFlash();
-		}
-	}
-
 	// The shutter always works. Evidence collection, however, requires a visible target
 	// inside the focus-distance band and the center guide.
 	if (bEnableEvidenceFocusSystem)
 	{
 		UpdateEvidenceFocus(0.0f);
-		TryCaptureActiveFocusTarget();
+		// A successful evidence shot flashes only after the viewport pixels have been
+		// copied. Otherwise the white shutter overlay becomes the saved photograph.
+		if (!TryCaptureActiveFocusTarget())
+		{
+			TriggerPhotoFlash();
+		}
 		return;
 	}
+
+	TriggerPhotoFlash();
 
 	const FVector TraceStart = PhotoCamera->GetComponentLocation();
 	const FVector TraceEnd = TraceStart + PhotoCamera->GetForwardVector() * PhotoTraceDistance;
@@ -786,7 +836,12 @@ bool UBalhwajeomPhotoCameraComponent::IsDisplayedGuideSurfaceVisible() const
 	const FVector GuideWorldPosition = TargetTransform.TransformPosition(DisplayedFocusGuideLocalPosition);
 	const FVector GuideWorldNormal = TargetTransform.TransformVectorNoScale(
 		DisplayedFocusGuideLocalNormal).GetSafeNormal();
-	const FVector CameraLocation = PhotoCamera->GetComponentLocation();
+	FVector CameraLocation;
+	FVector CameraForward;
+	if (!GetEffectiveCameraView(CameraLocation, CameraForward))
+	{
+		return false;
+	}
 	const FVector ToGuide = GuideWorldPosition - CameraLocation;
 	const float GuideDistance = ToGuide.Size();
 	if (GuideDistance <= KINDA_SMALL_NUMBER)
@@ -811,15 +866,50 @@ bool UBalhwajeomPhotoCameraComponent::IsDisplayedGuideSurfaceVisible() const
 		return false;
 	}
 
-	return Hit.GetActor() == Target &&
+	return ResolveCameraTargetFromHit(Hit.GetActor()) == Target &&
 		FVector::Distance(Hit.ImpactPoint, GuideWorldPosition) <= GuideVisibilityImpactTolerance;
 }
 
-bool UBalhwajeomPhotoCameraComponent::IsViewportCenterOverTarget(const AActor* Target) const
+void UBalhwajeomPhotoCameraComponent::TriggerPhotoFlash() const
+{
+	if (const APlayerController* PlayerController =
+		Cast<APlayerController>(GetOwningController(this)))
+	{
+		if (ABalhwajeomEvidenceCameraHUD* CameraHUD =
+			Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD()))
+		{
+			CameraHUD->TriggerPhotoFlash();
+		}
+	}
+}
+
+bool UBalhwajeomPhotoCameraComponent::GetEffectiveCameraView(
+	FVector& OutLocation,
+	FVector& OutForward) const
+{
+	if (APlayerController* PlayerController =
+		Cast<APlayerController>(GetOwningController(this)))
+	{
+		FRotator ViewRotation;
+		PlayerController->GetPlayerViewPoint(OutLocation, ViewRotation);
+		OutForward = ViewRotation.Vector();
+		return !OutForward.IsNearlyZero();
+	}
+
+	if (PhotoCamera)
+	{
+		OutLocation = PhotoCamera->GetComponentLocation();
+		OutForward = PhotoCamera->GetForwardVector();
+		return true;
+	}
+	return false;
+}
+
+bool UBalhwajeomPhotoCameraComponent::TraceViewportCenter(FHitResult& OutHit) const
 {
 	APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
 	UWorld* World = GetWorld();
-	if (!Target || !PlayerController || !World)
+	if (!PlayerController || !World)
 	{
 		return false;
 	}
@@ -845,13 +935,23 @@ bool UBalhwajeomPhotoCameraComponent::IsViewportCenterOverTarget(const AActor* T
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(EvidenceCenterTrace), true, GetOwner());
 	Params.bTraceComplex = true;
-	FHitResult Hit;
 	return World->LineTraceSingleByChannel(
-		Hit,
+		OutHit,
 		RayOrigin,
 		RayOrigin + RayDirection * FocusTargetScanDistance,
 		ECC_Visibility,
-		Params) && Hit.GetActor() == Target;
+		Params);
+}
+
+bool UBalhwajeomPhotoCameraComponent::IsViewportCenterOverTarget(const AActor* Target) const
+{
+	if (!Target)
+	{
+		return false;
+	}
+
+	FHitResult Hit;
+	return TraceViewportCenter(Hit) && ResolveCameraTargetFromHit(Hit.GetActor()) == Target;
 }
 
 bool UBalhwajeomPhotoCameraComponent::CalculateTargetFrameCoverage(
@@ -963,8 +1063,13 @@ void UBalhwajeomPhotoCameraComponent::UpdateEvidenceFocus(float DeltaTime)
 		return;
 	}
 
-	const FVector CameraLocation = PhotoCamera->GetComponentLocation();
-	const FVector CameraForward = PhotoCamera->GetForwardVector();
+	FVector CameraLocation;
+	FVector CameraForward;
+	if (!GetEffectiveCameraView(CameraLocation, CameraForward))
+	{
+		ResetEvidenceFocus();
+		return;
+	}
 	const FVector2D ViewportCenter(ViewportWidth * 0.5f, ViewportHeight * 0.5f);
 	const float ZoomRatio = SavedFirstPersonFieldOfView /
 		FMath::Max(PhotoCamera->FieldOfView, 1.0f);
@@ -992,6 +1097,20 @@ void UBalhwajeomPhotoCameraComponent::UpdateEvidenceFocus(float DeltaTime)
 			continue;
 		}
 
+		FBalhwajeomResolvedPhotoTarget ResolvedTarget;
+		const bool bUsesInvestigationData = ResolveInvestigationTarget(CandidateInfo, ResolvedTarget);
+		if (bUsesInvestigationData)
+		{
+			// The DataTable state is authoritative. Keeping the returned snapshot normalized
+			// lets the HUD migrate without reading legacy EvidenceData.
+			CandidateInfo.PhotoID = ResolvedTarget.PhotoID;
+			CandidateInfo.bCanCapture = ResolvedTarget.bCanCapture;
+			CandidateInfo.PreferredFocusDistance = ResolvedTarget.PreferredFocusDistance;
+			CandidateInfo.FocusDistanceTolerance = ResolvedTarget.FocusDistanceTolerance;
+			CandidateInfo.bScaleFocusDistanceWithZoom =
+				ResolvedTarget.bScaleFocusDistanceWithZoom;
+		}
+
 		const FVector FocusLocation =
 			IBalhwajeomCameraTargetInterface::Execute_RequestCameraFocusLocation(Candidate);
 		const FVector ToTarget = FocusLocation - CameraLocation;
@@ -1002,48 +1121,71 @@ void UBalhwajeomPhotoCameraComponent::UpdateEvidenceFocus(float DeltaTime)
 			continue;
 		}
 
-		const float DistanceScale = CandidateInfo.bScaleFocusDistanceWithZoom ? ZoomRatio : 1.0f;
-		const float PreferredDistance = CandidateInfo.PreferredFocusDistanceAt1x * DistanceScale;
-		const float DistanceTolerance = CandidateInfo.FocusDistanceToleranceAt1x * DistanceScale;
+		const bool bScaleDistanceWithZoom = bUsesInvestigationData
+			? ResolvedTarget.bScaleFocusDistanceWithZoom
+			: CandidateInfo.bScaleFocusDistanceWithZoom;
+		const float PreferredFocusDistance = bUsesInvestigationData
+			? ResolvedTarget.PreferredFocusDistance
+			: CandidateInfo.PreferredFocusDistanceAt1x;
+		const float FocusDistanceTolerance = bUsesInvestigationData
+			? ResolvedTarget.FocusDistanceTolerance
+			: CandidateInfo.FocusDistanceToleranceAt1x;
+		const float DistanceScale = bScaleDistanceWithZoom ? ZoomRatio : 1.0f;
+		const float PreferredDistance = PreferredFocusDistance * DistanceScale;
+		const float DistanceTolerance = FocusDistanceTolerance * DistanceScale;
 		if (FMath::Abs(TargetDistance - PreferredDistance) > DistanceTolerance)
 		{
 			continue;
 		}
 
-		FVector2D ScreenBoundsMin;
-		FVector2D ScreenBoundsMax;
-		if (!ProjectActorBoundsToScreen(
-			Candidate,
-			PlayerController,
-			ViewportWidth,
-			ViewportHeight,
-			ScreenBoundsMin,
-			ScreenBoundsMax))
-		{
-			continue;
-		}
-
-		// Use the projected bounds only as a search region. Complex visibility traces
-		// then reject holes and empty space inside concave silhouettes.
 		FVector2D ScreenPosition;
 		FVector GuideWorldPosition;
 		FVector GuideWorldNormal;
-		if (!FindClosestVisibleSilhouettePoint(
-			Candidate,
-			PlayerController,
-			GetWorld(),
-			GetOwner(),
-			ViewportCenter,
-			ScreenBoundsMin,
-			ScreenBoundsMax,
-			FocusTargetScanDistance,
-			SilhouetteTracePixelStep,
-			SilhouetteTraceMaxSamples,
-			ScreenPosition,
-			GuideWorldPosition,
-			GuideWorldNormal))
+		FHitResult CenterHit;
+		if (TraceViewportCenter(CenterHit) &&
+			ResolveCameraTargetFromHit(CenterHit.GetActor()) == Candidate)
 		{
-			continue;
+			// A direct reticle hit is definitive. It must not be rejected because a
+			// screen-space label or a coarse silhouette search distorted the bounds.
+			ScreenPosition = ViewportCenter;
+			GuideWorldPosition = CenterHit.ImpactPoint;
+			GuideWorldNormal = CenterHit.ImpactNormal.GetSafeNormal();
+		}
+		else
+		{
+			UPrimitiveComponent* FramingComponent =
+				IBalhwajeomCameraTargetInterface::Execute_RequestCameraFramingComponent(Candidate);
+			FVector2D ScreenBoundsMin;
+			FVector2D ScreenBoundsMax;
+			if (!IsValid(FramingComponent) || !ProjectPrimitiveBoundsToScreen(
+				FramingComponent,
+				PlayerController,
+				ViewportWidth,
+				ViewportHeight,
+				ScreenBoundsMin,
+				ScreenBoundsMax))
+			{
+				continue;
+			}
+
+			// Use the photographed primitive's projected bounds as the search region.
+			if (!FindClosestVisibleSilhouettePoint(
+				Candidate,
+				PlayerController,
+				GetWorld(),
+				GetOwner(),
+				ViewportCenter,
+				ScreenBoundsMin,
+				ScreenBoundsMax,
+				FocusTargetScanDistance,
+				SilhouetteTracePixelStep,
+				SilhouetteTraceMaxSamples,
+				ScreenPosition,
+				GuideWorldPosition,
+				GuideWorldNormal))
+			{
+				continue;
+			}
 		}
 
 		const float ScreenDistance = FVector2D::Distance(ScreenPosition, ViewportCenter);
@@ -1151,8 +1293,48 @@ bool UBalhwajeomPhotoCameraComponent::TryCaptureActiveFocusTarget()
 	}
 
 	FBalhwajeomCameraTargetInfo TargetInfo;
-	if (!IBalhwajeomCameraTargetInterface::Execute_RequestCameraTargetInfo(Target, TargetInfo) ||
-		!TargetInfo.bCanBeCaptured || TargetInfo.EvidenceData.EvidenceID.IsNone())
+	if (!IBalhwajeomCameraTargetInterface::Execute_RequestCameraTargetInfo(Target, TargetInfo))
+	{
+		ShowPhotoFeedback(TEXT("촬영할 수 없는 대상이다."), FColor::Silver);
+		return false;
+	}
+
+	FBalhwajeomResolvedPhotoTarget ResolvedTarget;
+	if (ResolveInvestigationTarget(TargetInfo, ResolvedTarget))
+	{
+		if (!ResolvedTarget.bCanCapture || ResolvedTarget.PhotoID.IsNone())
+		{
+			ShowPhotoFeedback(TEXT("현재 상태에서는 촬영할 수 없다."), FColor::Silver);
+			return false;
+		}
+
+		if (PendingCapture.IsSet())
+		{
+			ShowPhotoFeedback(TEXT("이전 사진을 저장하고 있다."), FColor::Yellow);
+			return false;
+		}
+
+		UBalhwajeomInvestigationSubsystem* InvestigationSubsystem =
+			GetInvestigationSubsystem();
+		if (!InvestigationSubsystem)
+		{
+			ShowPhotoFeedback(TEXT("사진 시스템을 사용할 수 없다."), FColor::Red);
+			return false;
+		}
+
+		if (InvestigationSubsystem->HasCapturedPhoto(ResolvedTarget.PhotoID))
+		{
+			ShowPhotoFeedback(TEXT("이미 기록한 사진이다."), FColor::Yellow);
+			return false;
+		}
+
+		return BeginInvestigationImageCapture(ResolvedTarget);
+	}
+
+	// Compatibility path for evidence Blueprints that have not yet migrated to the
+	// Investigation IDs. This path is removed after the owner of EvidenceActor
+	// supplies EvidenceInstanceID/ObjectID/StateID.
+	if (!TargetInfo.bCanBeCaptured || TargetInfo.EvidenceData.EvidenceID.IsNone())
 	{
 		ShowPhotoFeedback(TEXT("촬영할 수 없는 대상이다."), FColor::Silver);
 		return false;
@@ -1186,4 +1368,253 @@ bool UBalhwajeomPhotoCameraComponent::TryCaptureActiveFocusTarget()
 	ActiveFocusTargetInfo.EvidenceData.bAlreadyCollected = true;
 	DisplayedFocusTargetInfo.EvidenceData.bAlreadyCollected = true;
 	return true;
+}
+
+bool UBalhwajeomPhotoCameraComponent::ResolveInvestigationTarget(
+	const FBalhwajeomCameraTargetInfo& TargetInfo,
+	FBalhwajeomResolvedPhotoTarget& OutTarget) const
+{
+	OutTarget = FBalhwajeomResolvedPhotoTarget{};
+	if (!TargetInfo.EvidenceInstanceID.IsValid() ||
+		TargetInfo.ObjectID.IsNone() ||
+		TargetInfo.StateID.IsNone())
+	{
+		return false;
+	}
+
+	UBalhwajeomInvestigationSubsystem* InvestigationSubsystem =
+		GetInvestigationSubsystem();
+	if (!InvestigationSubsystem)
+	{
+		return false;
+	}
+
+	FEvidenceStateDefinition StateDefinition;
+	if (!InvestigationSubsystem->GetEvidenceStateDefinition(
+		TargetInfo.StateID,
+		StateDefinition) ||
+		StateDefinition.ObjectID != TargetInfo.ObjectID)
+	{
+		return false;
+	}
+
+	OutTarget.EvidenceInstanceID = TargetInfo.EvidenceInstanceID;
+	OutTarget.ObjectID = TargetInfo.ObjectID;
+	OutTarget.StateID = TargetInfo.StateID;
+	OutTarget.PhotoID = StateDefinition.PhotoID;
+	OutTarget.bCanCapture = StateDefinition.bCanCapture;
+	OutTarget.PreferredFocusDistance = StateDefinition.PreferredFocusDistance;
+	OutTarget.FocusDistanceTolerance = StateDefinition.FocusDistanceTolerance;
+	OutTarget.bScaleFocusDistanceWithZoom = StateDefinition.bScaleFocusDistanceWithZoom;
+	return true;
+}
+
+UBalhwajeomInvestigationSubsystem*
+UBalhwajeomPhotoCameraComponent::GetInvestigationSubsystem() const
+{
+	const UWorld* World = GetWorld();
+	UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+	return GameInstance
+		? GameInstance->GetSubsystem<UBalhwajeomInvestigationSubsystem>()
+		: nullptr;
+}
+
+bool UBalhwajeomPhotoCameraComponent::BeginInvestigationImageCapture(
+	const FBalhwajeomResolvedPhotoTarget& Target)
+{
+	if (PendingCapture.IsSet() || FScreenshotRequest::IsScreenshotRequested())
+	{
+		ShowPhotoFeedback(TEXT("다른 사진 저장 요청이 진행 중이다."), FColor::Yellow);
+		return false;
+	}
+
+	const FGuid RequestID = FGuid::NewGuid();
+	const FString SafePhotoID = FPaths::MakeValidFileName(Target.PhotoID.ToString(), TEXT('_'));
+	const FString FileName = FString::Printf(TEXT("%s.png"), *SafePhotoID);
+	FString RelativeDirectory = FPaths::Combine(TEXT("Investigation"), TEXT("Photos"));
+#if WITH_DEV_AUTOMATION_TESTS
+	if (GIsAutomationTesting)
+	{
+		RelativeDirectory = FPaths::Combine(RelativeDirectory, TEXT("Automation"));
+	}
+#endif
+	const FString RelativePath = FPaths::Combine(RelativeDirectory, FileName);
+	const FString AbsolutePath = FPaths::ConvertRelativePathToFull(
+		FPaths::Combine(FPaths::ProjectSavedDir(), RelativePath));
+
+	if (!IFileManager::Get().MakeDirectory(*FPaths::GetPath(AbsolutePath), true))
+	{
+		ShowPhotoFeedback(TEXT("사진 저장 폴더를 만들지 못했다."), FColor::Red);
+		return false;
+	}
+
+	FBalhwajeomPendingPhotoCapture NewCapture;
+	NewCapture.RequestID = RequestID;
+	NewCapture.TargetSnapshot = Target;
+	NewCapture.RequestedTime = FDateTime::UtcNow();
+	NewCapture.RelativePath = RelativePath;
+	NewCapture.AbsolutePath = AbsolutePath;
+	PendingCapture = MoveTemp(NewCapture);
+	bReceivedScreenshotPixels = false;
+
+	ScreenshotCapturedHandle = UGameViewportClient::OnScreenshotCaptured().AddUObject(
+		this,
+		&UBalhwajeomPhotoCameraComponent::HandleScreenshotCaptured);
+	ScreenshotProcessedHandle = FScreenshotRequest::OnScreenshotRequestProcessed().AddUObject(
+		this,
+		&UBalhwajeomPhotoCameraComponent::HandleScreenshotProcessed);
+
+	FScreenshotRequest::RequestScreenshot(
+		AbsolutePath,
+		false,
+		false);
+
+	if (!FScreenshotRequest::IsScreenshotRequested())
+	{
+		ClearScreenshotDelegates();
+		PendingCapture.Reset();
+		ShowPhotoFeedback(TEXT("사진 캡처를 요청하지 못했다."), FColor::Red);
+		return false;
+	}
+
+	ShowPhotoFeedback(TEXT("사진을 저장하고 있다."), FColor::Silver);
+	return true;
+}
+
+void UBalhwajeomPhotoCameraComponent::HandleScreenshotCaptured(
+	int32 Width,
+	int32 Height,
+	const TArray<FColor>& Colors)
+{
+	if (!PendingCapture.IsSet() || bReceivedScreenshotPixels)
+	{
+		return;
+	}
+
+	bReceivedScreenshotPixels = true;
+	const FGuid RequestID = PendingCapture->RequestID;
+	const FString AbsolutePath = PendingCapture->AbsolutePath;
+	ClearScreenshotDelegates();
+
+	// The pixels above represent the unflashed viewport. Start the visual shutter
+	// response now so it remains visible to the player but cannot contaminate the PNG.
+	TriggerPhotoFlash();
+
+	if (Width <= 0 || Height <= 0 || Colors.Num() != Width * Height)
+	{
+		CompleteImageSave(RequestID, false, AbsolutePath);
+		return;
+	}
+
+	TArray<FColor> OwnedPixels = Colors;
+	TWeakObjectPtr<UBalhwajeomPhotoCameraComponent> WeakThis(this);
+	Async(EAsyncExecution::ThreadPool,
+		[WeakThis, RequestID, AbsolutePath, Width, Height, Pixels = MoveTemp(OwnedPixels)]() mutable
+		{
+			const FImageView Image(Pixels.GetData(), Width, Height);
+			const bool bSaved = FImageUtils::SaveImageByExtension(*AbsolutePath, Image);
+			AsyncTask(ENamedThreads::GameThread,
+				[WeakThis, RequestID, AbsolutePath, bSaved]()
+				{
+					if (WeakThis.IsValid())
+					{
+						WeakThis->CompleteImageSave(RequestID, bSaved, AbsolutePath);
+					}
+					else if (bSaved)
+					{
+						IFileManager::Get().Delete(*AbsolutePath, false, true);
+					}
+				});
+		});
+}
+
+void UBalhwajeomPhotoCameraComponent::HandleScreenshotProcessed()
+{
+	if (!PendingCapture.IsSet() || bReceivedScreenshotPixels)
+	{
+		return;
+	}
+
+	const FGuid RequestID = PendingCapture->RequestID;
+	const FString AbsolutePath = PendingCapture->AbsolutePath;
+	ClearScreenshotDelegates();
+	CompleteImageSave(RequestID, false, AbsolutePath);
+}
+
+void UBalhwajeomPhotoCameraComponent::CompleteImageSave(
+	FGuid RequestID,
+	bool bSucceeded,
+	const FString& AbsolutePath)
+{
+	if (!PendingCapture.IsSet() || PendingCapture->RequestID != RequestID)
+	{
+		if (bSucceeded)
+		{
+			IFileManager::Get().Delete(*AbsolutePath, false, true);
+		}
+		return;
+	}
+
+	const FBalhwajeomPendingPhotoCapture CompletedCapture = PendingCapture.GetValue();
+	PendingCapture.Reset();
+	bReceivedScreenshotPixels = false;
+
+	if (!bSucceeded ||
+		IFileManager::Get().FileSize(*CompletedCapture.AbsolutePath) <= 0)
+	{
+		IFileManager::Get().Delete(*CompletedCapture.AbsolutePath, false, true);
+		ShowPhotoFeedback(TEXT("사진 이미지 저장에 실패했다."), FColor::Red);
+		return;
+	}
+
+	UBalhwajeomInvestigationSubsystem* InvestigationSubsystem =
+		GetInvestigationSubsystem();
+	if (!InvestigationSubsystem)
+	{
+		IFileManager::Get().Delete(*CompletedCapture.AbsolutePath, false, true);
+		ShowPhotoFeedback(TEXT("사진 시스템을 사용할 수 없다."), FColor::Red);
+		return;
+	}
+
+	FCapturedPhotoRecord Record;
+	Record.PhotoID = CompletedCapture.TargetSnapshot.PhotoID;
+	Record.ObjectID = CompletedCapture.TargetSnapshot.ObjectID;
+	Record.EvidenceInstanceID = CompletedCapture.TargetSnapshot.EvidenceInstanceID;
+	Record.CapturedStateID = CompletedCapture.TargetSnapshot.StateID;
+	Record.ImageRelativePath = CompletedCapture.RelativePath;
+	Record.CapturedTime = CompletedCapture.RequestedTime;
+	Record.bViewedInTablet = false;
+
+	if (!InvestigationSubsystem->RegisterCapturedPhoto(Record))
+	{
+		IFileManager::Get().Delete(*CompletedCapture.AbsolutePath, false, true);
+		ShowPhotoFeedback(TEXT("현재 상태가 바뀌어 사진을 등록하지 못했다."), FColor::Yellow);
+		return;
+	}
+
+	FPhotoDefinition PhotoDefinition;
+	if (InvestigationSubsystem->GetPhotoDefinition(Record.PhotoID, PhotoDefinition))
+	{
+		if (USoundBase* Voice = PhotoDefinition.StoryVoice.LoadSynchronous())
+		{
+			UGameplayStatics::PlaySound2D(this, Voice);
+		}
+	}
+
+	ShowPhotoFeedback(TEXT("사진을 기록했다."), FColor::Green);
+}
+
+void UBalhwajeomPhotoCameraComponent::ClearScreenshotDelegates()
+{
+	if (ScreenshotCapturedHandle.IsValid())
+	{
+		UGameViewportClient::OnScreenshotCaptured().Remove(ScreenshotCapturedHandle);
+		ScreenshotCapturedHandle.Reset();
+	}
+
+	if (ScreenshotProcessedHandle.IsValid())
+	{
+		FScreenshotRequest::OnScreenshotRequestProcessed().Remove(ScreenshotProcessedHandle);
+		ScreenshotProcessedHandle.Reset();
+	}
 }

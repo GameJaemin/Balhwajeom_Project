@@ -9,9 +9,11 @@
 
 class UCameraComponent;
 class USpringArmComponent;
+class UAnimationAsset;
 class ABalhwajeomFixedCameraZone;
 class UBalhwajeomPhotoCameraComponent;
 class UBalhwajeomTabletComponent;
+class UPlayerInteractionComponent;
 
 /** A keyboard-driven top-down character with hold-to-sprint movement. */
 UCLASS()
@@ -21,6 +23,7 @@ class BALHWAJEOM_API ABalhwajeomCameraCharacter : public ACharacter
 
 public:
 	ABalhwajeomCameraCharacter();
+	virtual void Tick(float DeltaSeconds) override;
 
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
@@ -34,7 +37,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Camera")
 	bool IsInCameraMode() const;
 
-	UFUNCTION(BlueprintPure, Category = "Evidence")
+	/** Restores the correct exploration view after an external interaction camera ends. */
+	UFUNCTION(BlueprintCallable, Category = "Camera")
+	void RestoreExplorationView(float BlendTime = 0.35f);
+
+	UFUNCTION(BlueprintPure, Category = "Evidence", meta = (DeprecatedFunction, DeprecationMessage = "A captured-photo list API will be supplied by BalhwajeomInvestigationSubsystem."))
 	TArray<FBalhwajeomEvidenceData> GetCollectedEvidence() const;
 
 protected:
@@ -49,6 +56,9 @@ protected:
 	/** Receives Mouse Y from the "LookUp" axis; routes to camera-mode pitch or boom orbit pitch. */
 	void HandleLookUp(float Value);
 
+	UFUNCTION()
+	void HandleInspectionSucceeded(FText InspectionText);
+
 	/**
 	 * When true, mouse movement orbits CameraBoom around the character (yaw + pitch) while not in
 	 * camera mode and not inside a FixedCameraZone. When false (default), CameraBoom keeps its
@@ -56,6 +66,10 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
 	bool bAllowCameraOrbit = false;
+
+	/** Starting pitch for free-orbit/third-person children. Negative values look down at the character. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "-89.0", ClampMax = "89.0"))
+	float InitialOrbitPitch = -12.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	TObjectPtr<USpringArmComponent> CameraBoom;
@@ -66,6 +80,17 @@ protected:
 	/** First-person viewpoint used while camera mode is active. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	TObjectPtr<UCameraComponent> FirstPersonCamera;
+
+	/** Optional single-node locomotion clips. Leave both unset to keep the existing AnimBP setup. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation|Locomotion")
+	TObjectPtr<UAnimationAsset> IdleAnimation;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation|Locomotion")
+	TObjectPtr<UAnimationAsset> WalkAnimation;
+
+	/** Horizontal speed at which WalkAnimation replaces IdleAnimation. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation|Locomotion", meta = (ClampMin = "0.0"))
+	float WalkAnimationThreshold = 5.0f;
 
 
 	/** Normal movement speed in Unreal units per second. */
@@ -93,4 +118,10 @@ protected:
 	/** Reusable tablet UI/input component. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "UI", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UBalhwajeomTabletComponent> TabletComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UPlayerInteractionComponent> PlayerInteractionComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimationAsset> ActiveLocomotionAnimation;
 };

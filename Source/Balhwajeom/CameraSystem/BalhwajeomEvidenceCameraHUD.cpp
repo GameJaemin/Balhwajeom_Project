@@ -4,10 +4,12 @@
 
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
+#include "Engine/GameInstance.h"
 #include "BalhwajeomPhotoCameraComponent.h"
 #include "BalhwajeomEvidenceActor.h"
 #include "Interaction/InspectionComponent.h"
 #include "GameFramework/Pawn.h"
+#include "Investigation/BalhwajeomInvestigationSubsystem.h"
 
 void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 {
@@ -85,29 +87,70 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 
 		FLinearColor GuideColor = FLinearColor::White;
 		GuideColor.A = GuideOpacity;
+		UBalhwajeomInvestigationSubsystem* InvestigationSubsystem =
+			GetWorld() && GetWorld()->GetGameInstance()
+				? GetWorld()->GetGameInstance()->GetSubsystem<UBalhwajeomInvestigationSubsystem>()
+				: nullptr;
+		const bool bUsesInvestigationData =
+			TargetInfo.EvidenceInstanceID.IsValid() &&
+			!TargetInfo.ObjectID.IsNone() &&
+			!TargetInfo.StateID.IsNone();
+
+		FEvidenceDefinition EvidenceDefinition;
+		FEvidenceStateDefinition StateDefinition;
+		const bool bResolvedInvestigationDefinitions =
+			bUsesInvestigationData &&
+			InvestigationSubsystem &&
+			InvestigationSubsystem->GetEvidenceDefinition(
+				TargetInfo.ObjectID,
+				EvidenceDefinition) &&
+			InvestigationSubsystem->GetEvidenceStateDefinition(
+				TargetInfo.StateID,
+				StateDefinition) &&
+			StateDefinition.ObjectID == TargetInfo.ObjectID;
+
 		const ABalhwajeomEvidenceActor* DisplayedEvidence =
 			Cast<ABalhwajeomEvidenceActor>(PhotoCamera->GetDisplayedFocusTarget());
-		const bool bAlreadyCaptured = DisplayedEvidence &&
-			DisplayedEvidence->GetEvidenceData().bAlreadyCollected;
-		const FString GuideSymbol = bAlreadyCaptured ? TEXT("✓") : TEXT("?");
-		DrawText(
-			GuideSymbol,
-			GuideColor,
-			DisplayedGuidePosition.X - 6.0f,
-			DisplayedGuidePosition.Y - 12.0f,
-			GEngine->GetMediumFont(),
-			1.0f,
-			false);
+		const bool bShowInvestigationCaptureSymbol =
+			bResolvedInvestigationDefinitions &&
+			StateDefinition.bCanCapture &&
+			!StateDefinition.PhotoID.IsNone();
+		const bool bShowLegacyCaptureSymbol = !bUsesInvestigationData;
+		if (bShowInvestigationCaptureSymbol || bShowLegacyCaptureSymbol)
+		{
+			const bool bAlreadyCaptured = bShowInvestigationCaptureSymbol
+				? InvestigationSubsystem->HasCapturedPhoto(StateDefinition.PhotoID)
+				: DisplayedEvidence && DisplayedEvidence->GetEvidenceData().bAlreadyCollected;
+			const FString GuideSymbol = bAlreadyCaptured ? TEXT("✓") : TEXT("?");
+			DrawText(
+				GuideSymbol,
+				GuideColor,
+				DisplayedGuidePosition.X - 6.0f,
+				DisplayedGuidePosition.Y - 12.0f,
+				GEngine->GetMediumFont(),
+				1.0f,
+				false);
+		}
 
 		if (bShowCenteredText)
 		{
-			const UInspectionComponent* Inspection = DisplayedEvidence
-				? DisplayedEvidence->GetInspectionComponent()
-				: nullptr;
-			if (Inspection && !Inspection->NearLabel.IsEmptyOrWhitespace())
+			FText NearLabelText;
+			if (bResolvedInvestigationDefinitions)
+			{
+				NearLabelText = StateDefinition.NearLabel;
+			}
+			else
+			{
+				const UInspectionComponent* Inspection = DisplayedEvidence
+					? DisplayedEvidence->GetInspectionComponent()
+					: nullptr;
+				NearLabelText = Inspection ? Inspection->NearLabel : FText::GetEmpty();
+			}
+
+			if (!NearLabelText.IsEmptyOrWhitespace())
 			{
 				DrawText(
-					Inspection->NearLabel.ToString(),
+					NearLabelText.ToString(),
 					GuideColor,
 					DisplayedGuidePosition.X + 15.0f,
 					DisplayedGuidePosition.Y - 9.0f,
@@ -118,8 +161,11 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 
 			float TextY = 95.0f;
 			const float TextX = Canvas->ClipX - 420.0f;
+			const FText DisplayName = bResolvedInvestigationDefinitions
+				? EvidenceDefinition.ObjectName
+				: TargetInfo.EvidenceData.EvidenceName;
 			DrawText(
-				TargetInfo.EvidenceData.EvidenceName.ToString(),
+				DisplayName.ToString(),
 				GuideColor,
 				TextX,
 				TextY,
@@ -128,17 +174,20 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 				false);
 			TextY += 30.0f;
 
-			for (const FText& InformationStage : TargetInfo.InformationStages)
+			if (!bResolvedInvestigationDefinitions)
 			{
-				DrawText(
-					InformationStage.ToString(),
-					FLinearColor::White,
-					TextX,
-					TextY,
-					GEngine->GetSmallFont(),
-					1.0f,
-					false);
-				TextY += 22.0f;
+				for (const FText& InformationStage : TargetInfo.InformationStages)
+				{
+					DrawText(
+						InformationStage.ToString(),
+						FLinearColor::White,
+						TextX,
+						TextY,
+						GEngine->GetSmallFont(),
+						1.0f,
+						false);
+					TextY += 22.0f;
+				}
 			}
 		}
 	}

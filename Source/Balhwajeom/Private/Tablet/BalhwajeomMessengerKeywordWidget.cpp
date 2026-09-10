@@ -2,7 +2,6 @@
 
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
-#include "Kismet/KismetSystemLibrary.h"
 
 void UBalhwajeomMessengerKeywordWidget::NativeOnInitialized()
 {
@@ -27,7 +26,20 @@ void UBalhwajeomMessengerKeywordWidget::SetupKeyword(
 	}
 	if (BTN_Keyword)
 	{
-		BTN_Keyword->SetIsEnabled(!WordID.IsEmpty());
+		BTN_Keyword->SetIsEnabled(!WordID.IsEmpty() && !bAcquired);
+	}
+}
+
+void UBalhwajeomMessengerKeywordWidget::SetAcquired(const bool bInAcquired)
+{
+	bAcquired = bInAcquired;
+	if (BTN_Keyword)
+	{
+		BTN_Keyword->SetIsEnabled(!WordID.IsEmpty() && !bAcquired);
+	}
+	if (TXT_Keyword)
+	{
+		TXT_Keyword->SetOpacity(bAcquired ? 0.55f : 1.0f);
 	}
 }
 
@@ -38,6 +50,5 @@ void UBalhwajeomMessengerKeywordWidget::HandleKeywordClicked()
 		return;
 	}
 
-	UKismetSystemLibrary::PrintString(this, TEXT("단서"), true, true);
 	OnKeywordClicked.Broadcast(WordID);
 }

@@ -30,24 +30,52 @@ struct BALHWAJEOM_API FBalhwajeomCameraTargetInfo
 {
 	GENERATED_BODY()
 
+	/** Stable identity of the placed evidence Actor registered with the investigation subsystem. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Investigation")
+	FGuid EvidenceInstanceID;
+
+	/** Evidence definition ID for the target. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Investigation")
+	FName ObjectID = NAME_None;
+
+	/** Current evidence state ID at the time this snapshot was requested. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Investigation")
+	FName StateID = NAME_None;
+
+	/** Photo awarded by the current state. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Investigation")
+	FName PhotoID = NAME_None;
+
+	/** Whether the current state permits a photo capture. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Investigation")
+	bool bCanCapture = false;
+
+	/** Preferred camera-to-target distance supplied by the current state. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Investigation", meta = (ClampMin = "1.0"))
+	float PreferredFocusDistance = 700.0f;
+
+	/** Accepted distance on either side of PreferredFocusDistance. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Investigation", meta = (ClampMin = "0.0"))
+	float FocusDistanceTolerance = 300.0f;
+
 	/** Evidence payload stored when a correctly focused and centered photo succeeds. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target", meta = (DeprecatedProperty, DeprecationMessage = "Use the investigation ID and state fields instead."))
 	FBalhwajeomEvidenceData EvidenceData;
 
 	/** Object-authored lines shown only while the target is focused and centered. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target", meta = (DeprecatedProperty, DeprecationMessage = "Use EvidenceStateDefinition.NearLabel instead."))
 	TArray<FText> InformationStages;
 
 	/** Allows informational targets that can be focused but should not be collected. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target", meta = (DeprecatedProperty, DeprecationMessage = "Use bCanCapture instead."))
 	bool bCanBeCaptured = true;
 
 	/** Preferred camera-to-target distance at 1x zoom, in centimeters. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus", meta = (ClampMin = "1.0", DeprecatedProperty, DeprecationMessage = "Use PreferredFocusDistance instead."))
 	float PreferredFocusDistanceAt1x = 700.0f;
 
 	/** Accepted distance on either side of the preferred distance at 1x zoom. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus", meta = (ClampMin = "1.0", DeprecatedProperty, DeprecationMessage = "Use FocusDistanceTolerance instead."))
 	float FocusDistanceToleranceAt1x = 300.0f;
 
 	/** When true, zooming in moves the accepted focus band farther away. */

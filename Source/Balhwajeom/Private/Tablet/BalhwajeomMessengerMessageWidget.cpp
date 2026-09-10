@@ -6,6 +6,7 @@
 #include "Components/TextBlock.h"
 #include "Components/WrapBox.h"
 #include "Tablet/BalhwajeomMessengerKeywordWidget.h"
+#include "Tablet/BalhwajeomMessengerDateSeparator.h"
 
 namespace
 {
@@ -23,6 +24,14 @@ void UBalhwajeomMessengerMessageWidget::SetupMessage(const FST_MessengerMessage&
 {
 	MessageData = InMessageData;
 	RenderMessage();
+}
+
+void UBalhwajeomMessengerMessageWidget::SetKeywordAcquired(const bool bAcquired)
+{
+	if (ActiveKeywordWidget)
+	{
+		ActiveKeywordWidget->SetAcquired(bAcquired);
+	}
 }
 
 bool UBalhwajeomMessengerMessageWidget::IsKeywordDataValid(
@@ -51,6 +60,16 @@ bool UBalhwajeomMessengerMessageWidget::IsKeywordDataValid(
 
 void UBalhwajeomMessengerMessageWidget::RenderMessage()
 {
+	if (TXT_TimeLeft)
+	{
+		TXT_TimeLeft->SetText(MessengerDate::TimeLabel(MessageData.SentAt));
+		TXT_TimeLeft->SetVisibility(MessageData.bIsPlayer ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	if (TXT_TimeRight)
+	{
+		TXT_TimeRight->SetText(MessengerDate::TimeLabel(MessageData.SentAt));
+		TXT_TimeRight->SetVisibility(MessageData.bIsPlayer ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+	}
 	if (TXT_SenderName)
 	{
 		TXT_SenderName->SetText(MessageData.SenderName);
@@ -80,6 +99,7 @@ void UBalhwajeomMessengerMessageWidget::RenderMessage()
 	SetSpacerRule(Spacer_Right, MessageData.bIsPlayer ? ESlateSizeRule::Automatic : ESlateSizeRule::Fill);
 
 	bHasInteractiveKeyword = false;
+	ActiveKeywordWidget = nullptr;
 	if (!WB_MessageContent)
 	{
 		return;
@@ -116,9 +136,19 @@ void UBalhwajeomMessengerMessageWidget::RenderMessage()
 	}
 #endif
 	KeywordWidget->SetupKeyword(MessageData.KeywordText, MessageData.WordID);
+	KeywordWidget->OnKeywordClicked.AddUniqueDynamic(this, &ThisClass::HandleKeywordClicked);
 	WB_MessageContent->AddChild(KeywordWidget);
+	ActiveKeywordWidget = KeywordWidget;
 	AddTextSegment(FullMessage.Mid(KeywordIndex + Keyword.Len()));
 	bHasInteractiveKeyword = true;
+}
+
+void UBalhwajeomMessengerMessageWidget::HandleKeywordClicked(const FString& WordID)
+{
+	if (!WordID.IsEmpty())
+	{
+		OnKeywordClicked.Broadcast(FName(*WordID), MessageData.MessageID);
+	}
 }
 
 void UBalhwajeomMessengerMessageWidget::AddTextSegment(const FString& Segment)
@@ -132,6 +162,7 @@ void UBalhwajeomMessengerMessageWidget::AddTextSegment(const FString& Segment)
 	Text->SetText(FText::FromString(Segment));
 	Text->SetColorAndOpacity(FSlateColor(FLinearColor(0.96f, 0.91f, 0.82f, 1.0f)));
 	Text->SetAutoWrapText(false);
+	Text->SetWrapTextAt(580.0f);
 	FSlateFontInfo Font = Text->GetFont();
 	Font.Size = 22;
 	Text->SetFont(Font);

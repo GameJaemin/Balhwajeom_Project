@@ -11,9 +11,23 @@ class UTabletWidgetBlueprintLibrary : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 
 public:
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool UpdateMessengerTimeline();
+
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool TestMessengerTimeline();
+
 	/** Creates the planner-owned catalog/room Data Assets if missing; never overwrites existing data. */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool CreateMessengerDataAssets();
+
+	/** Creates the offline browser and its page Widget Blueprints without overwriting existing Designer edits. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool CreateInternetWidgetBlueprints();
+
+	/** Rebuilds the Internet children and replaces only WBP_Tablet's Internet page slot. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool InstallInternetBrowser();
 
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool InspectTabletWidgetBlueprint();
@@ -27,5 +41,9 @@ public:
 	/** Instantiates the compiled WBP and exercises its navigation/state contract. */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool RunTabletWidgetSmokeTest();
+
+	/** Creates DT_KeywordChoices and migrates choices embedded in legacy keyword documents. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Investigation")
+	static bool UpgradeInvestigationDataTables();
 
 };
