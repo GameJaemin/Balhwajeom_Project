@@ -1890,6 +1890,38 @@ bool UTabletWidgetBlueprintLibrary::InspectTabletWidgetBlueprint()
 	return true;
 }
 
+bool UTabletWidgetBlueprintLibrary::InspectWidgetBlueprintByPath(const FString& AssetPath)
+{
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Widget inspection failed: %s could not be loaded."), *AssetPath);
+		return false;
+	}
+
+	TArray<UWidget*> Widgets;
+	Blueprint->WidgetTree->GetAllWidgets(Widgets);
+	UE_LOG(
+		LogTemp,
+		Display,
+		TEXT("WIDGET_INSPECT Asset=%s Parent=%s RootWidget=%s Widgets=%d"),
+		*AssetPath,
+		*GetNameSafe(Blueprint->ParentClass),
+		*GetNameSafe(Blueprint->WidgetTree->RootWidget),
+		Widgets.Num());
+	for (const UWidget* Widget : Widgets)
+	{
+		const UPanelWidget* Parent = Widget->GetParent();
+		UE_LOG(LogTemp, Display, TEXT("WIDGET_ENTRY Name=%s Class=%s Parent=%s Variable=%s Visibility=%s"),
+			*Widget->GetName(),
+			*Widget->GetClass()->GetName(),
+			Parent ? *Parent->GetName() : TEXT("(root)"),
+			Widget->bIsVariable ? TEXT("true") : TEXT("false"),
+			*UEnum::GetValueAsString(Widget->GetVisibility()));
+	}
+	return true;
+}
+
 bool UTabletWidgetBlueprintLibrary::CreateTabletWidgetBlueprint()
 {
 	using namespace TabletDesigner;
