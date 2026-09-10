@@ -42,6 +42,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool RunTabletWidgetSmokeTest();
 
+	/** Adds an editable StoryText TextBlock to the photo story Widget Blueprint Designer. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Photo Story")
+	static bool RedesignPhotoWorldStoryWidget();
+
 	/** Creates DT_KeywordChoices and migrates choices embedded in legacy keyword documents. */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Investigation")
 	static bool UpgradeInvestigationDataTables();

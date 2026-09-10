@@ -246,7 +246,7 @@ TObjectPtr<USoundMix> BedSoundMix;
 struct FPhotoDefinition
 {
     FName PhotoID;
-    TArray<FText> WorldStoryLines;
+    TArray<FPhotoStoryCue> WorldStoryCues;
     TSoftObjectPtr<USoundBase> StoryVoice;
 };
 ```

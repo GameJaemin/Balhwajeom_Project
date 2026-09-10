@@ -7,6 +7,22 @@
 
 class USoundBase;
 
+/** One world-story caption and the time at which it replaces the previous caption. */
+USTRUCT(BlueprintType)
+struct BALHWAJEOM_API FPhotoStoryCue
+{
+	GENERATED_BODY()
+
+	/** Text displayed for this cue. Embedded newlines and whitespace are preserved; empty text can intentionally clear the caption. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo|Story", meta = (MultiLine = "true"))
+	FText Text;
+
+	/** Seconds from the start of StoryVoice. The first cue must start at zero. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo|Story",
+		meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	float StartTimeSeconds = 0.0f;
+};
+
 USTRUCT(BlueprintType)
 struct BALHWAJEOM_API FPhotoDefinition : public FTableRowBase
 {
@@ -40,11 +56,15 @@ struct BALHWAJEOM_API FPhotoDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo")
 	TArray<FName> GrantedWordIDs;
 
-	/** World-locked 3D story lines shown after capture (and again when reopening the photo from the tablet), in order. */
+	/** Legacy untimed story lines. Kept while existing DT_Photos assets migrate to WorldStoryCues. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo")
 	TArray<FText> WorldStoryLines;
 
-	/** Narration voice played alongside WorldStoryLines. */
+	/** Timed world-locked captions shown after capture, in ascending StartTimeSeconds order. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo|Story")
+	TArray<FPhotoStoryCue> WorldStoryCues;
+
+	/** Optional narration voice played alongside WorldStoryCues. Cues also play as a timed text-only story when unset. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo|Audio")
 	TSoftObjectPtr<USoundBase> StoryVoice;
 };

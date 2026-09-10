@@ -382,13 +382,27 @@ void UBalhwajeomTabletWidget::OpenPhoto(const FName PhotoID)
 				? Analysis.ResultText : Analysis.SentenceTemplate;
 		}
 	}
-	else if (!Photo.WorldStoryLines.IsEmpty())
+	else if (!Photo.WorldStoryCues.IsEmpty() || !Photo.WorldStoryLines.IsEmpty())
 	{
-		// WorldStoryLines is additional narration, not an alternative to CustomDescription:
-		// PHOTO_01_013 (탄 베개) has both. The narration voice itself only plays once, at
-		// capture time (UBalhwajeomPhotoCameraComponent::CompleteImageSave), not on every
-		// tablet reopen.
-		const FText StoryText = FText::Join(FText::FromString(TEXT("\n")), Photo.WorldStoryLines);
+		// Timings matter only during the world presentation. The tablet shows the same
+		// authored cue text as one readable block without replaying StoryVoice.
+		TArray<FText> StoryLines;
+		if (!Photo.WorldStoryCues.IsEmpty())
+		{
+			StoryLines.Reserve(Photo.WorldStoryCues.Num());
+			for (const FPhotoStoryCue& Cue : Photo.WorldStoryCues)
+			{
+				if (!Cue.Text.IsEmpty())
+				{
+					StoryLines.Add(Cue.Text);
+				}
+			}
+		}
+		else
+		{
+			StoryLines = Photo.WorldStoryLines;
+		}
+		const FText StoryText = FText::Join(FText::FromString(TEXT("\n")), StoryLines);
 		Body = Body.IsEmpty()
 			? StoryText
 			: FText::Format(NSLOCTEXT("Tablet", "PhotoDescriptionAndStory", "{0}\n\n{1}"), Body, StoryText);

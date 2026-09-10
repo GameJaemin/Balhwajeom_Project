@@ -26,6 +26,7 @@
 #include "BalhwajeomEvidenceActor.h"
 #include "BalhwajeomEvidenceCameraHUD.h"
 #include "BalhwajeomCameraTargetInterface.h"
+#include "PhotoWorldStoryActor.h"
 
 namespace
 {
@@ -288,6 +289,7 @@ UBalhwajeomPhotoCameraComponent::UBalhwajeomPhotoCameraComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
+	PhotoWorldStoryClass = APhotoWorldStoryActor::StaticClass();
 }
 
 void UBalhwajeomPhotoCameraComponent::BeginDestroy()
@@ -636,6 +638,10 @@ void UBalhwajeomPhotoCameraComponent::ExitCameraMode()
 	ResetEvidenceFocus();
 
 	bIsInCameraMode = false;
+	if (ActivePhotoWorldStory.IsValid())
+	{
+		ActivePhotoWorldStory->TransitionToThirdPersonScale();
+	}
 	SetWorldInspectionLabelsSuppressed(false);
 	if (PhotoCamera)
 	{
@@ -1454,6 +1460,7 @@ bool UBalhwajeomPhotoCameraComponent::BeginInvestigationImageCapture(
 	NewCapture.RequestedTime = FDateTime::UtcNow();
 	NewCapture.RelativePath = RelativePath;
 	NewCapture.AbsolutePath = AbsolutePath;
+	NewCapture.bHasStorySpawnTransform = CalculateStorySpawnTransform(NewCapture.StorySpawnTransform);
 	PendingCapture = MoveTemp(NewCapture);
 	bReceivedScreenshotPixels = false;
 
@@ -1603,13 +1610,92 @@ void UBalhwajeomPhotoCameraComponent::CompleteImageSave(
 			}
 		}
 
-		if (USoundBase* Voice = PhotoDefinition.StoryVoice.LoadSynchronous())
+		if (CompletedCapture.bHasStorySpawnTransform)
 		{
-			UGameplayStatics::PlaySound2D(this, Voice);
+			StartPhotoWorldStory(PhotoDefinition, CompletedCapture.StorySpawnTransform);
 		}
 	}
 
 	ShowPhotoFeedback(TEXT("사진을 기록했다."), FColor::Green);
+}
+
+bool UBalhwajeomPhotoCameraComponent::CalculateStorySpawnTransform(FTransform& OutTransform) const
+{
+	OutTransform = FTransform::Identity;
+	APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
+	if (!PlayerController)
+	{
+		return false;
+	}
+
+	int32 ViewportWidth = 0;
+	int32 ViewportHeight = 0;
+	PlayerController->GetViewportSize(ViewportWidth, ViewportHeight);
+	if (ViewportWidth <= 0 || ViewportHeight <= 0)
+	{
+		return false;
+	}
+
+	FVector RayOrigin;
+	FVector RayDirection;
+	if (!PlayerController->DeprojectScreenPositionToWorld(
+		ViewportWidth * 0.5f,
+		ViewportHeight * PhotoStoryScreenYRatio,
+		RayOrigin,
+		RayDirection))
+	{
+		return false;
+	}
+
+	FVector CameraLocation;
+	FRotator CameraRotation;
+	PlayerController->GetPlayerViewPoint(CameraLocation, CameraRotation);
+	const FVector StoryLocation = RayOrigin + RayDirection * PhotoStoryDisplayDistance;
+	const FRotator StoryRotation = (CameraLocation - StoryLocation).Rotation();
+	OutTransform = FTransform(StoryRotation, StoryLocation);
+	return true;
+}
+
+void UBalhwajeomPhotoCameraComponent::StartPhotoWorldStory(
+	const FPhotoDefinition& PhotoDefinition,
+	const FTransform& SpawnTransform)
+{
+	if (!GetWorld() || !PhotoWorldStoryClass ||
+		(PhotoDefinition.WorldStoryCues.IsEmpty() && PhotoDefinition.WorldStoryLines.IsEmpty()))
+	{
+		return;
+	}
+
+	if (ActivePhotoWorldStory.IsValid())
+	{
+		ActivePhotoWorldStory->StopStory();
+	}
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.Owner = GetOwner();
+	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	APhotoWorldStoryActor* StoryActor = GetWorld()->SpawnActor<APhotoWorldStoryActor>(
+		PhotoWorldStoryClass,
+		SpawnTransform,
+		SpawnParameters);
+	if (!StoryActor)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to spawn photo world story for '%s'."),
+			*PhotoDefinition.PhotoID.ToString());
+		return;
+	}
+
+	ActivePhotoWorldStory = StoryActor;
+	StoryActor->StartStory(
+		PhotoDefinition.WorldStoryCues,
+		PhotoDefinition.WorldStoryLines,
+		PhotoDefinition.StoryVoice);
+
+	// Screenshot processing may finish after the player has already left photo mode.
+	if (!bIsInCameraMode && IsValid(StoryActor))
+	{
+		StoryActor->TransitionToThirdPersonScale();
+	}
 }
 
 void UBalhwajeomPhotoCameraComponent::ClearScreenshotDelegates()

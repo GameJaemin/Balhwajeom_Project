@@ -10,6 +10,7 @@
 
 class UCameraComponent;
 class UBalhwajeomInvestigationSubsystem;
+class APhotoWorldStoryActor;
 
 enum class EBalhwajeomPhotoCaptureResult : uint8
 {
@@ -44,6 +45,8 @@ struct FBalhwajeomPendingPhotoCapture
     FDateTime RequestedTime;
     FString RelativePath;
     FString AbsolutePath;
+    FTransform StorySpawnTransform = FTransform::Identity;
+    bool bHasStorySpawnTransform = false;
 };
 
 DECLARE_MULTICAST_DELEGATE(FOnCameraModeExited);
@@ -162,6 +165,10 @@ protected:
     void CompleteImageSave(FGuid RequestID, bool bSucceeded, const FString& AbsolutePath);
     void ClearScreenshotDelegates();
     void SetWorldInspectionLabelsSuppressed(bool bSuppressed) const;
+    bool CalculateStorySpawnTransform(FTransform& OutTransform) const;
+    void StartPhotoWorldStory(
+        const struct FPhotoDefinition& PhotoDefinition,
+        const FTransform& SpawnTransform);
 
     UPROPERTY(Transient)
     TObjectPtr<UCameraComponent> PhotoCamera;
@@ -264,6 +271,20 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "100.0"))
     float PhotoTraceDistance = 3000.0f;
 
+    /** World-space presentation spawned after a registered photo capture. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Photo Story")
+    TSubclassOf<APhotoWorldStoryActor> PhotoWorldStoryClass;
+
+    /** Depth along the deprojected lower-center screen ray, in centimetres. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Photo Story",
+        meta = (ClampMin = "10.0", UIMin = "10.0", Units = "cm"))
+    float PhotoStoryDisplayDistance = 200.0f;
+
+    /** Normalized viewport height at which the story initially appears. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Photo Story",
+        meta = (ClampMin = "0.5", ClampMax = "0.95", UIMin = "0.5", UIMax = "0.95"))
+    float PhotoStoryScreenYRatio = 0.72f;
+
     /** Hook for a future SceneCapture/thumbnail record without changing the collection API. */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Evidence")
     TArray<FBalhwajeomEvidenceData> CollectedEvidence;
@@ -308,6 +329,7 @@ protected:
     FDelegateHandle ScreenshotCapturedHandle;
     FDelegateHandle ScreenshotProcessedHandle;
     bool bReceivedScreenshotPixels = false;
+    TWeakObjectPtr<APhotoWorldStoryActor> ActivePhotoWorldStory;
 
 private:
 
