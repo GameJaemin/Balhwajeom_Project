@@ -3,11 +3,13 @@
 #include "Misc/AutomationTest.h"
 
 #include "CameraSystem/BalhwajeomCameraCharacter.h"
+#include "Components/SceneComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Interaction/BedMemoryActor.h"
 
@@ -41,6 +43,16 @@ struct FBedMemoryTestAccessor
 		Bed->EarliestExitTimeSeconds = 0.0;
 		Bed->HandleToggleInput();
 	}
+
+	static FVector GetPlayerAnchorLocation(const ABedMemoryActor* Bed)
+	{
+		return Bed->PlayerAnchor->GetComponentLocation();
+	}
+
+	static void EvaluateApproach(ABedMemoryActor* Bed)
+	{
+		Bed->UpdateApproach();
+	}
 };
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -63,7 +75,7 @@ bool FBedMemoryColliderToggleTest::RunTest(const FString& Parameters)
 		FVector::ZeroVector, FRotator::ZeroRotator);
 	ABalhwajeomCameraCharacter* Character =
 		World->SpawnActor<ABalhwajeomCameraCharacter>(
-			FVector(0.0f, 0.0f, 60.0f), FRotator::ZeroRotator);
+			FVector(100.0f, 0.0f, 96.0f), FRotator::ZeroRotator);
 	APlayerController* Controller =
 		World->SpawnActor<APlayerController>(
 			FVector::ZeroVector, FRotator::ZeroRotator);
@@ -86,6 +98,9 @@ bool FBedMemoryColliderToggleTest::RunTest(const FString& Parameters)
 		World->BeginPlay();
 	}
 	World->Tick(LEVELTICK_All, 0.1f);
+	// The standalone test world has no floor. Force the normal runtime movement
+	// mode so RequestDirectMove follows its grounded walking path.
+	Character->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 	TestFalse(
 		TEXT("Sit label is hidden before collider overlap"),
 		FBedMemoryTestAccessor::IsInteractionLabelVisible(Bed));
@@ -105,9 +120,25 @@ bool FBedMemoryColliderToggleTest::RunTest(const FString& Parameters)
 		TEXT("Sit label hides on collider EndOverlap"),
 		FBedMemoryTestAccessor::IsInteractionLabelVisible(Bed));
 	FBedMemoryTestAccessor::SimulateColliderBeginOverlap(Bed, Character);
+	const FVector AnchorLocation =
+		FBedMemoryTestAccessor::GetPlayerAnchorLocation(Bed);
 	FBedMemoryTestAccessor::PressToggleInput(Bed);
 	TestEqual(
-		TEXT("First collider-owned F reaches Listening without animation or audio"),
+		TEXT("First collider-owned F begins walking to PlayerAnchor"),
+		Bed->GetBedMemoryState(),
+		EBedMemoryState::Approaching);
+	TestTrue(
+		TEXT("Approach does not teleport a distant character immediately"),
+		FVector::Dist2D(
+			Character->GetActorLocation(),
+			AnchorLocation) > 10.0f);
+	TestTrue(
+		TEXT("Automatic approach sends a direct movement request toward PlayerAnchor"),
+		Character->GetCharacterMovement()->RequestedVelocity.Size2D() > 0.0f);
+	Character->SetActorLocation(AnchorLocation);
+	FBedMemoryTestAccessor::EvaluateApproach(Bed);
+	TestEqual(
+		TEXT("Reaching PlayerAnchor continues to Listening without animation or audio"),
 		Bed->GetBedMemoryState(),
 		EBedMemoryState::Listening);
 	TestFalse(

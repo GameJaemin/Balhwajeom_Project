@@ -27,6 +27,7 @@ UENUM(BlueprintType)
 enum class EBedMemoryState : uint8
 {
 	Idle,
+	Approaching,
 	AligningPlayer,
 	Entering,
 	PreparingAudio,
@@ -117,12 +118,18 @@ protected:
 	void FinishEntering();
 
 	UFUNCTION()
+	void UpdateApproach();
+
+	UFUNCTION()
 	void FinishExiting();
 
 	UFUNCTION()
 	void HandleVoiceFinished();
 
 	void BuildVoiceCandidates();
+	void BeginApproach();
+	void FinishApproach();
+	void CancelApproach();
 	void BeginPreparingAudio();
 	void HandleVoiceAssetsLoaded();
 	void BeginListening();
@@ -229,6 +236,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Camera", meta = (ClampMin = "0.0"))
 	float CameraBlendOutDuration = 0.4f;
 
+	/** Horizontal distance at which the walk finishes and the character is aligned exactly to PlayerAnchor. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Approach", meta = (ClampMin = "1.0"))
+	float ApproachAcceptanceRadius = 10.0f;
+
+	/** Cancels the interaction if collision prevents the character from reaching PlayerAnchor. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Approach", meta = (ClampMin = "0.5"))
+	float ApproachTimeout = 8.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Approach", meta = (ClampMin = "1.0"))
+	float ApproachRotationRate = 540.0f;
+
 	/** Per-room spatial direction. Unmapped photos use VoiceOrigin. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Voice")
 	TMap<FName, FName> PhotoEmitterMap;
@@ -267,10 +285,12 @@ private:
 
 	TSharedPtr<FStreamableHandle> VoiceLoadHandle;
 	FTimerHandle TransitionTimer;
+	FTimerHandle ApproachTimer;
 	FTimerHandle VoiceTimer;
 	FTransform SavedPlayerTransform;
 	FName LastPlayedPhotoID = NAME_None;
 	double EarliestExitTimeSeconds = 0.0;
+	double ApproachStartedAtSeconds = 0.0;
 	uint8 SavedMovementMode = 0;
 	uint8 SavedCustomMovementMode = 0;
 	EPlayerInspectionDistanceState LastInspectionDistanceState = EPlayerInspectionDistanceState::OutOfRange;
