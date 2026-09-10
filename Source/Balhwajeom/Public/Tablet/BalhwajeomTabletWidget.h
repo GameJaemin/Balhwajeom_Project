@@ -35,6 +35,7 @@ enum class ETabletPage : uint8
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPhotoSelected, FName, PhotoID);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletFolderSelected, FName, CharacterID);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTabletBlankDropped, int32, SlotIndex, FName, WordID);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletBlankPickedUp, int32, SlotIndex);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTabletPhotoSlotDropped, int32, SlotIndex, FName, PhotoID);
 
 /** Runtime-created photo entry shared by the folder grid and the statement tile. */
@@ -111,7 +112,12 @@ private:
 	FText DisplayLabel;
 };
 
-/** One droppable blank ("[]") inside the interactive sentence-builder row. */
+/**
+ * One droppable blank ("[]") inside the interactive sentence-builder row. Once filled, it is
+ * also itself a drag source: picking a filled blank back up empties it and carries the word
+ * onward, so a placed keyword can be freely moved to a different blank instead of staying locked
+ * in place.
+ */
 UCLASS()
 class BALHWAJEOM_API UBalhwajeomTabletSentenceBlank : public UUserWidget
 {
@@ -119,18 +125,25 @@ class BALHWAJEOM_API UBalhwajeomTabletSentenceBlank : public UUserWidget
 
 public:
 	void Configure(int32 InSlotIndex);
-	void SetFilled(const FText& WordText);
+	void SetFilled(FName InWordID, const FText& WordText);
 	void SetEmpty();
 	int32 GetSlotIndex() const { return SlotIndex; }
 
 	UPROPERTY()
 	FOnTabletBlankDropped OnBlankDropped;
 
+	/** Broadcast right before this blank empties itself because its filled word is being dragged back out. */
+	UPROPERTY()
+	FOnTabletBlankPickedUp OnBlankPickedUp;
+
 protected:
 	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
 
 private:
 	int32 SlotIndex = 0;
+	FName FilledWordID = NAME_None;
 
 	UPROPERTY()
 	TObjectPtr<UTextBlock> DisplayText;
@@ -328,6 +341,10 @@ private:
 	/** Bound to a UBalhwajeomTabletSentenceBlank's OnBlankDropped; fills that word slot (correctness is judged once the whole puzzle is filled in). */
 	UFUNCTION()
 	void HandleSentenceBlankDropped(int32 SlotIndex, FName WordID);
+
+	/** Bound to a UBalhwajeomTabletSentenceBlank's OnBlankPickedUp; clears that slot's submission so the puzzle no longer counts it as filled. */
+	UFUNCTION()
+	void HandleSentenceBlankPickedUp(int32 SlotIndex);
 
 	/** Bound to a UBalhwajeomTabletPhotoSlot's OnPhotoSlotDropped; fills that photo evidence slot. */
 	UFUNCTION()

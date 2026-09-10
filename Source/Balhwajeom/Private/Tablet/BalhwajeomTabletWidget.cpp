@@ -571,6 +571,7 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 			}
 			Blank->Configure(SegmentIndex);
 			Blank->OnBlankDropped.AddUniqueDynamic(this, &ThisClass::HandleSentenceBlankDropped);
+			Blank->OnBlankPickedUp.AddUniqueDynamic(this, &ThisClass::HandleSentenceBlankPickedUp);
 			ActiveBlanksBySlot.Add(SegmentIndex, Blank);
 			if (UWrapBoxSlot* WrapSlot = Cast<UWrapBoxSlot>(WB_SentenceBuilder->AddChild(Blank)))
 			{
@@ -649,7 +650,7 @@ void UBalhwajeomTabletWidget::HandleSentenceBlankDropped(const int32 SlotIndex, 
 		FWordDefinition WordDef;
 		if (Investigation->GetWordDefinition(WordID, WordDef))
 		{
-			Blank->SetFilled(WordDef.DisplayWord);
+			Blank->SetFilled(WordID, WordDef.DisplayWord);
 		}
 	}
 
@@ -659,6 +660,20 @@ void UBalhwajeomTabletWidget::HandleSentenceBlankDropped(const int32 SlotIndex, 
 	}
 
 	EvaluatePuzzleIfComplete();
+}
+
+void UBalhwajeomTabletWidget::HandleSentenceBlankPickedUp(const int32 SlotIndex)
+{
+	// The blank has already emptied itself visually (UBalhwajeomTabletSentenceBlank::NativeOnDragDetected);
+	// this just drops the matching submission entry so the puzzle stops counting that slot as filled,
+	// letting the word be dragged somewhere else (or dropped nowhere, which simply un-fills the blank --
+	// the word is still available to re-drag from the acquired-keyword list, since that list never removes it).
+	ActiveSubmission.SubmittedWords.RemoveAll(
+		[SlotIndex](const FSubmittedWordSlot& Candidate) { return Candidate.SlotIndex == SlotIndex; });
+	if (TXT_PuzzleFeedback)
+	{
+		TXT_PuzzleFeedback->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 void UBalhwajeomTabletWidget::HandlePhotoSlotDropped(const int32 SlotIndex, const FName PhotoID)
@@ -1095,6 +1110,7 @@ void UBalhwajeomTabletSentenceBlank::Configure(const int32 InSlotIndex)
 
 void UBalhwajeomTabletSentenceBlank::SetEmpty()
 {
+	FilledWordID = NAME_None;
 	if (!DisplayText)
 	{
 		return;
@@ -1103,8 +1119,9 @@ void UBalhwajeomTabletSentenceBlank::SetEmpty()
 	DisplayText->SetColorAndOpacity(FSlateColor(FLinearColor(0.62f, 0.56f, 0.46f, 1.0f)));
 }
 
-void UBalhwajeomTabletSentenceBlank::SetFilled(const FText& WordText)
+void UBalhwajeomTabletSentenceBlank::SetFilled(const FName InWordID, const FText& WordText)
 {
+	FilledWordID = InWordID;
 	if (!DisplayText)
 	{
 		return;
@@ -1124,6 +1141,55 @@ bool UBalhwajeomTabletSentenceBlank::NativeOnDrop(
 		return true;
 	}
 	return Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
+}
+
+FReply UBalhwajeomTabletSentenceBlank::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// Only a filled blank can be picked back up -- an empty one has nothing to drag.
+	if (!FilledWordID.IsNone() && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		return FReply::Handled().DetectDrag(TakeWidget(), EKeys::LeftMouseButton);
+	}
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+void UBalhwajeomTabletSentenceBlank::NativeOnDragDetected(
+	const FGeometry& InGeometry,
+	const FPointerEvent& InMouseEvent,
+	UDragDropOperation*& OutOperation)
+{
+	Super::NativeOnDragDetected(InGeometry, InMouseEvent, OutOperation);
+
+	if (FilledWordID.IsNone())
+	{
+		return;
+	}
+
+	UBalhwajeomWordDragDropOperation* Operation = NewObject<UBalhwajeomWordDragDropOperation>(this);
+	Operation->WordID = FilledWordID;
+	Operation->Pivot = EDragPivot::MouseDown;
+
+	if (WidgetTree && DisplayText)
+	{
+		UBorder* DragVisual = WidgetTree->ConstructWidget<UBorder>();
+		DragVisual->SetBrushColor(FLinearColor(0.30f, 0.24f, 0.16f, 0.9f));
+		DragVisual->SetPadding(FMargin(10.0f, 6.0f));
+		UTextBlock* DragLabel = WidgetTree->ConstructWidget<UTextBlock>();
+		DragLabel->SetText(DisplayText->GetText());
+		FSlateFontInfo Font = DragLabel->GetFont();
+		Font.Size = 20;
+		DragLabel->SetFont(Font);
+		DragVisual->SetContent(DragLabel);
+		Operation->DefaultDragVisual = DragVisual;
+	}
+
+	OutOperation = Operation;
+
+	// Picking the word back up empties this blank immediately; the owning widget (via
+	// OnBlankPickedUp) drops the matching ActiveSubmission entry so the puzzle no longer counts
+	// this slot as filled.
+	OnBlankPickedUp.Broadcast(SlotIndex);
+	SetEmpty();
 }
 
 void UBalhwajeomTabletPhotoChip::Configure(const FName InPhotoID, const FText& InLabel)
