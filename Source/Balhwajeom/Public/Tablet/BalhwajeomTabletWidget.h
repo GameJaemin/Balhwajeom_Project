@@ -34,8 +34,8 @@ enum class ETabletPage : uint8
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPhotoSelected, FName, PhotoID);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletFolderSelected, FName, CharacterID);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTabletBlankDropped, int32, SlotIndex, FName, WordID);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletBlankPickedUp, int32, SlotIndex);
+/** OriginSlotIndex is the sentence blank the word was dragged out of (INDEX_NONE if it came from the acquired-keyword list instead). */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnTabletBlankDropped, int32, SlotIndex, FName, WordID, int32, OriginSlotIndex);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTabletPhotoSlotDropped, int32, SlotIndex, FName, PhotoID);
 
 /** Runtime-created photo entry shared by the folder grid and the statement tile. */
@@ -86,6 +86,10 @@ class BALHWAJEOM_API UBalhwajeomWordDragDropOperation : public UDragDropOperatio
 public:
 	UPROPERTY(BlueprintReadWrite, Category = "Tablet")
 	FName WordID = NAME_None;
+
+	/** Set only when dragged out of a UBalhwajeomTabletSentenceBlank; INDEX_NONE when it came from the acquired-keyword list. */
+	UPROPERTY(BlueprintReadWrite, Category = "Tablet")
+	int32 OriginSlotIndex = INDEX_NONE;
 };
 
 /**
@@ -114,9 +118,9 @@ private:
 
 /**
  * One droppable blank ("[]") inside the interactive sentence-builder row. Once filled, it is
- * also itself a drag source: picking a filled blank back up empties it and carries the word
- * onward, so a placed keyword can be freely moved to a different blank instead of staying locked
- * in place.
+ * also itself a drag source: picking a filled blank back up carries its word onward (tagged with
+ * this blank's own slot index as the drag's origin) so a placed keyword can be freely moved to a
+ * different blank, swapping with whatever is already there, instead of staying locked in place.
  */
 UCLASS()
 class BALHWAJEOM_API UBalhwajeomTabletSentenceBlank : public UUserWidget
@@ -131,10 +135,6 @@ public:
 
 	UPROPERTY()
 	FOnTabletBlankDropped OnBlankDropped;
-
-	/** Broadcast right before this blank empties itself because its filled word is being dragged back out. */
-	UPROPERTY()
-	FOnTabletBlankPickedUp OnBlankPickedUp;
 
 protected:
 	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
@@ -338,13 +338,11 @@ private:
 	UFUNCTION()
 	void HandleFolderPhotoSelected(FName PhotoID);
 
-	/** Bound to a UBalhwajeomTabletSentenceBlank's OnBlankDropped; fills that word slot (correctness is judged once the whole puzzle is filled in). */
+	/** Bound to a UBalhwajeomTabletSentenceBlank's OnBlankDropped; fills that word slot, swapping with
+	 * whatever the drag's OriginSlotIndex blank held if it came from another blank (correctness is
+	 * judged once the whole puzzle is filled in). */
 	UFUNCTION()
-	void HandleSentenceBlankDropped(int32 SlotIndex, FName WordID);
-
-	/** Bound to a UBalhwajeomTabletSentenceBlank's OnBlankPickedUp; clears that slot's submission so the puzzle no longer counts it as filled. */
-	UFUNCTION()
-	void HandleSentenceBlankPickedUp(int32 SlotIndex);
+	void HandleSentenceBlankDropped(int32 SlotIndex, FName WordID, int32 OriginSlotIndex);
 
 	/** Bound to a UBalhwajeomTabletPhotoSlot's OnPhotoSlotDropped; fills that photo evidence slot. */
 	UFUNCTION()

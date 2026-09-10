@@ -585,7 +585,6 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 			}
 			Blank->Configure(SegmentIndex);
 			Blank->OnBlankDropped.AddUniqueDynamic(this, &ThisClass::HandleSentenceBlankDropped);
-			Blank->OnBlankPickedUp.AddUniqueDynamic(this, &ThisClass::HandleSentenceBlankPickedUp);
 			ActiveBlanksBySlot.Add(SegmentIndex, Blank);
 			if (UWrapBoxSlot* WrapSlot = Cast<UWrapBoxSlot>(WB_SentenceBuilder->AddChild(Blank)))
 			{
@@ -636,7 +635,8 @@ void UBalhwajeomTabletWidget::BuildPhotoSlots(const FSentenceDefinition& Sentenc
 		ActivePhotoSlotsBySlot.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 }
 
-void UBalhwajeomTabletWidget::HandleSentenceBlankDropped(const int32 SlotIndex, const FName WordID)
+void UBalhwajeomTabletWidget::HandleSentenceBlankDropped(
+	const int32 SlotIndex, const FName WordID, const int32 OriginSlotIndex)
 {
 	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
 	FSentenceDefinition Sentence;
@@ -648,9 +648,18 @@ void UBalhwajeomTabletWidget::HandleSentenceBlankDropped(const int32 SlotIndex, 
 
 	const bool bValidSlot = Sentence.WordSlots.ContainsByPredicate(
 		[SlotIndex](const FSentenceWordSlot& Candidate) { return Candidate.SlotIndex == SlotIndex; });
-	if (!bValidSlot)
+	if (!bValidSlot || SlotIndex == OriginSlotIndex)
 	{
+		// Dropped back onto the same blank it came from -- nothing to do.
 		return;
+	}
+
+	// Whatever word already occupied the destination slot gets displaced by this drop.
+	FName DisplacedWordID = NAME_None;
+	if (const FSubmittedWordSlot* Existing = ActiveSubmission.SubmittedWords.FindByPredicate(
+		[SlotIndex](const FSubmittedWordSlot& Candidate) { return Candidate.SlotIndex == SlotIndex; }))
+	{
+		DisplacedWordID = Existing->WordID;
 	}
 
 	// The drop just fills the blank; correctness (including order-flexible groups) is judged by
@@ -668,26 +677,35 @@ void UBalhwajeomTabletWidget::HandleSentenceBlankDropped(const int32 SlotIndex, 
 		}
 	}
 
+	// The dragged word came from another blank (not the acquired-keyword list): send the displaced
+	// word there instead of just discarding it (a swap), or empty that blank if there was nothing to
+	// displace (a plain move).
+	if (OriginSlotIndex != INDEX_NONE)
+	{
+		ActiveSubmission.SubmittedWords.RemoveAll(
+			[OriginSlotIndex](const FSubmittedWordSlot& Candidate) { return Candidate.SlotIndex == OriginSlotIndex; });
+		UBalhwajeomTabletSentenceBlank* OriginBlank = ActiveBlanksBySlot.FindRef(OriginSlotIndex);
+		if (!DisplacedWordID.IsNone())
+		{
+			ActiveSubmission.SubmittedWords.Add({OriginSlotIndex, DisplacedWordID});
+			FWordDefinition DisplacedWordDef;
+			if (OriginBlank && Investigation->GetWordDefinition(DisplacedWordID, DisplacedWordDef))
+			{
+				OriginBlank->SetFilled(DisplacedWordID, DisplacedWordDef.DisplayWord);
+			}
+		}
+		else if (OriginBlank)
+		{
+			OriginBlank->SetEmpty();
+		}
+	}
+
 	if (TXT_PuzzleFeedback)
 	{
 		TXT_PuzzleFeedback->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
 	EvaluatePuzzleIfComplete();
-}
-
-void UBalhwajeomTabletWidget::HandleSentenceBlankPickedUp(const int32 SlotIndex)
-{
-	// The blank has already emptied itself visually (UBalhwajeomTabletSentenceBlank::NativeOnDragDetected);
-	// this just drops the matching submission entry so the puzzle stops counting that slot as filled,
-	// letting the word be dragged somewhere else (or dropped nowhere, which simply un-fills the blank --
-	// the word is still available to re-drag from the acquired-keyword list, since that list never removes it).
-	ActiveSubmission.SubmittedWords.RemoveAll(
-		[SlotIndex](const FSubmittedWordSlot& Candidate) { return Candidate.SlotIndex == SlotIndex; });
-	if (TXT_PuzzleFeedback)
-	{
-		TXT_PuzzleFeedback->SetVisibility(ESlateVisibility::Collapsed);
-	}
 }
 
 void UBalhwajeomTabletWidget::HandlePhotoSlotDropped(const int32 SlotIndex, const FName PhotoID)
@@ -1151,7 +1169,7 @@ bool UBalhwajeomTabletSentenceBlank::NativeOnDrop(
 {
 	if (const UBalhwajeomWordDragDropOperation* WordOp = Cast<UBalhwajeomWordDragDropOperation>(InOperation))
 	{
-		OnBlankDropped.Broadcast(SlotIndex, WordOp->WordID);
+		OnBlankDropped.Broadcast(SlotIndex, WordOp->WordID, WordOp->OriginSlotIndex);
 		return true;
 	}
 	return Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
@@ -1179,8 +1197,12 @@ void UBalhwajeomTabletSentenceBlank::NativeOnDragDetected(
 		return;
 	}
 
+	// This blank is left showing its word until the drop actually resolves (see
+	// UBalhwajeomTabletWidget::HandleSentenceBlankDropped), so a cancelled drag (dropped nowhere)
+	// leaves the puzzle untouched instead of losing the word.
 	UBalhwajeomWordDragDropOperation* Operation = NewObject<UBalhwajeomWordDragDropOperation>(this);
 	Operation->WordID = FilledWordID;
+	Operation->OriginSlotIndex = SlotIndex;
 	Operation->Pivot = EDragPivot::MouseDown;
 
 	if (WidgetTree && DisplayText)
@@ -1198,12 +1220,6 @@ void UBalhwajeomTabletSentenceBlank::NativeOnDragDetected(
 	}
 
 	OutOperation = Operation;
-
-	// Picking the word back up empties this blank immediately; the owning widget (via
-	// OnBlankPickedUp) drops the matching ActiveSubmission entry so the puzzle no longer counts
-	// this slot as filled.
-	OnBlankPickedUp.Broadcast(SlotIndex);
-	SetEmpty();
 }
 
 void UBalhwajeomTabletPhotoChip::Configure(const FName InPhotoID, const FText& InLabel)
