@@ -5,12 +5,14 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/Image.h"
 #include "Components/WidgetComponent.h"
 #include "Interaction/InspectionComponent.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Engine/GameInstance.h"
+#include "Engine/Texture2D.h"
 
 ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 {
@@ -44,6 +46,20 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 	if (ObjectLabelWidgetClass.Succeeded())
 	{
 		ObjectLabelWidget->SetWidgetClass(ObjectLabelWidgetClass.Class);
+	}
+
+	static ConstructorHelpers::FObjectFinder<UTexture2D> PhotoRequiredIconAsset(
+		TEXT("/Game/Balhwajeom/UI/Icons/T_EvidencePhotoRequired.T_EvidencePhotoRequired"));
+	if (PhotoRequiredIconAsset.Succeeded())
+	{
+		PhotoRequiredIcon = PhotoRequiredIconAsset.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UTexture2D> PhotoCapturedIconAsset(
+		TEXT("/Game/Balhwajeom/UI/Icons/T_EvidencePhotoCaptured.T_EvidencePhotoCaptured"));
+	if (PhotoCapturedIconAsset.Succeeded())
+	{
+		PhotoCapturedIcon = PhotoCapturedIconAsset.Object;
 	}
 
 	CameraFocusPoint = CreateDefaultSubobject<USceneComponent>(TEXT("CameraFocusPoint"));
@@ -92,6 +108,11 @@ void ABalhwajeomEvidenceActor::BeginPlay()
 			this,
 			&ABalhwajeomEvidenceActor::HandlePlayerDistanceStateChanged);
 	}
+	if (UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem())
+	{
+		Investigation->OnPhotoCaptured.AddUniqueDynamic(
+			this, &ABalhwajeomEvidenceActor::HandlePhotoCaptured);
+	}
 
 	RegisterWithInvestigationSystem();
 }
@@ -102,6 +123,8 @@ void ABalhwajeomEvidenceActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		Investigation->OnEvidenceStateChanged.RemoveDynamic(
 			this, &ABalhwajeomEvidenceActor::HandleEvidenceStateChanged);
+		Investigation->OnPhotoCaptured.RemoveDynamic(
+			this, &ABalhwajeomEvidenceActor::HandlePhotoCaptured);
 	}
 	Super::EndPlay(EndPlayReason);
 }
@@ -182,6 +205,7 @@ void ABalhwajeomEvidenceActor::HandleEvidenceStateChanged(
 	if (ChangedInstanceID == EvidenceInstanceID)
 	{
 		ApplyInvestigationState(NewStateID);
+		ApplyInspectionDistanceState(LastInspectionDistanceState);
 	}
 }
 
@@ -265,6 +289,44 @@ void ABalhwajeomEvidenceActor::ApplyInspectionDistanceState(
 	}
 }
 
+void ABalhwajeomEvidenceActor::HandlePhotoCaptured(
+	const FCapturedPhotoRecord& PhotoRecord)
+{
+	if (EvidenceInstanceID.IsValid() &&
+		PhotoRecord.EvidenceInstanceID == EvidenceInstanceID)
+	{
+		MarkAsCollected();
+	}
+}
+
+FText ABalhwajeomEvidenceActor::FormatInspectionLabel(
+	EPlayerInspectionDistanceState DistanceState,
+	const FText& LabelText)
+{
+	if ((DistanceState == EPlayerInspectionDistanceState::Middle ||
+		 DistanceState == EPlayerInspectionDistanceState::Close) &&
+		!LabelText.IsEmptyOrWhitespace())
+	{
+		return LabelText;
+	}
+
+	return FText::GetEmpty();
+}
+
+bool ABalhwajeomEvidenceActor::ShouldDisplayInspectionLabel(
+	EPlayerInspectionDistanceState DistanceState,
+	const FText& LabelText)
+{
+	if (DistanceState == EPlayerInspectionDistanceState::Far)
+	{
+		return true;
+	}
+
+	return (DistanceState == EPlayerInspectionDistanceState::Middle ||
+			DistanceState == EPlayerInspectionDistanceState::Close) &&
+		!LabelText.IsEmptyOrWhitespace();
+}
+
 void ABalhwajeomEvidenceActor::SetInspectionLabel(
 	const FText& LabelText,
 	bool bVisible)
@@ -274,7 +336,11 @@ void ABalhwajeomEvidenceActor::SetInspectionLabel(
 		return;
 	}
 
-	const bool bShouldDisplay = bVisible && !LabelText.IsEmptyOrWhitespace();
+	const FText DisplayText = FormatInspectionLabel(
+		LastInspectionDistanceState,
+		LabelText);
+	const bool bShouldDisplay =
+		bVisible && ShouldDisplayInspectionLabel(LastInspectionDistanceState, LabelText);
 	ObjectLabelWidget->SetVisibility(bShouldDisplay);
 	if (!bShouldDisplay)
 	{
@@ -286,6 +352,17 @@ void ABalhwajeomEvidenceActor::SetInspectionLabel(
 	if (!IsValid(LabelWidget))
 	{
 		return;
+	}
+
+	if (UImage* StatusImage = Cast<UImage>(LabelWidget->GetWidgetFromName(TEXT("UseCamera"))))
+	{
+		UTexture2D* StatusTexture = EvidenceData.bAlreadyCollected
+			? PhotoCapturedIcon
+			: PhotoRequiredIcon;
+		if (StatusTexture)
+		{
+			StatusImage->SetBrushFromTexture(StatusTexture, false);
+		}
 	}
 
 	UFunction* SetLabelTextFunction = LabelWidget->FindFunction(TEXT("SetLabelText"));
@@ -304,33 +381,6 @@ void ABalhwajeomEvidenceActor::SetInspectionLabel(
 		FText NewText;
 	};
 
-	const FText StatusText = EvidenceData.bAlreadyCollected
-		? FText::FromString(TEXT("V"))
-		: FText::FromString(TEXT("?"));
-
-	FText DisplayText;
-	if (LastInspectionDistanceState == EPlayerInspectionDistanceState::Far) {
-		DisplayText = FText::Format(
-			NSLOCTEXT(
-				"Evidence",
-				"InspectionLabelWithStatus",
-				"{0}"
-			),
-			StatusText
-		);
-	}
-	else {
-		DisplayText = FText::Format(
-			NSLOCTEXT(
-				"Evidence",
-				"InspectionLabelWithStatus",
-				"{0}  {1}"
-			),
-			StatusText,
-			LabelText
-		);
-	}
-
 	FSetLabelTextParameters Parameters{ DisplayText };
 	LabelWidget->ProcessEvent(SetLabelTextFunction, &Parameters);
 }
@@ -338,6 +388,7 @@ void ABalhwajeomEvidenceActor::SetInspectionLabel(
 void ABalhwajeomEvidenceActor::MarkAsCollected()
 {
 	EvidenceData.bAlreadyCollected = true;
+	ApplyInspectionDistanceState(LastInspectionDistanceState);
 }
 
 bool ABalhwajeomEvidenceActor::RequestCameraTargetInfo_Implementation(

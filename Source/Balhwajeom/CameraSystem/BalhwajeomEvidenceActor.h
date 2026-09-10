@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "BalhwajeomEvidenceTypes.h"
 #include "BalhwajeomCameraTargetInterface.h"
+#include "Investigation/InvestigationRuntimeTypes.h"
 #include "Interaction/PlayerInteractionTypes.h"
 #include "BalhwajeomEvidenceActor.generated.h"
 
@@ -14,14 +15,18 @@ class UBoxComponent;
 class UPrimitiveComponent;
 class USceneComponent;
 class UInspectionComponent;
+class UTexture2D;
 class UWidgetComponent;
 class UBalhwajeomInvestigationSubsystem;
+struct FEvidenceActorTestAccessor;
 
 /** A simple Blueprint-placeable object that can be discovered with the camera trace. */
 UCLASS(Blueprintable)
 class BALHWAJEOM_API ABalhwajeomEvidenceActor : public AActor, public IBalhwajeomCameraTargetInterface
 {
 	GENERATED_BODY()
+
+	friend struct FEvidenceActorTestAccessor;
 
 public:
 	ABalhwajeomEvidenceActor();
@@ -45,6 +50,16 @@ public:
 	/** Hides the normal distance label while the dedicated photo camera HUD is active. */
 	void SetInspectionLabelSuppressed(bool bSuppressed);
 
+	/** Builds the label text; capture status is presented by the adjacent icon. */
+	static FText FormatInspectionLabel(
+		EPlayerInspectionDistanceState DistanceState,
+		const FText& LabelText);
+
+	/** Whether the normal inspection widget should stay visible for this distance state. */
+	static bool ShouldDisplayInspectionLabel(
+		EPlayerInspectionDistanceState DistanceState,
+		const FText& LabelText);
+
 	/** Per-object distance thresholds and text used by the normal inspection system. */
 	UFUNCTION(BlueprintPure, Category = "Inspection")
 	UInspectionComponent* GetInspectionComponent() const { return InspectionComponent; }
@@ -60,6 +75,9 @@ protected:
 
 	UFUNCTION()
 	void HandleEvidenceStateChanged(FGuid ChangedInstanceID, FName PreviousStateID, FName NewStateID);
+
+	UFUNCTION()
+	void HandlePhotoCaptured(const FCapturedPhotoRecord& PhotoRecord);
 
 	UFUNCTION()
 	void HandlePlayerDistanceStateChanged(EPlayerInspectionDistanceState NewState);
@@ -91,6 +109,14 @@ protected:
 	/** Screen-space label that follows this object in the normal third-person view. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inspection")
 	TObjectPtr<UWidgetComponent> ObjectLabelWidget;
+
+	/** Status icon used until this evidence has been photographed. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inspection|UI")
+	TObjectPtr<UTexture2D> PhotoRequiredIcon;
+
+	/** Status icon used after this evidence has been photographed. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inspection|UI")
+	TObjectPtr<UTexture2D> PhotoCapturedIcon;
 
 	/** Optional local offset from the evidence mesh's actual bounds center. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inspection|UI")
