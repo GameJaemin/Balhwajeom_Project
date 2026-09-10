@@ -36,6 +36,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool InspectWidgetBlueprintByPath(const FString& AssetPath);
 
+	/** Sets a named UButton's content to an Image using the given texture (e.g. an icon for a physical button). */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool SetButtonIconTexture(const FString& AssetPath, const FString& ButtonName, const FString& TexturePath);
+
+	/** Wraps a Widget Blueprint's existing root in a new ScaleBox(ScaleToFit)+SizeBox(DesignWidth x DesignHeight),
+	 * so its existing absolute-coordinate content (designed for that fixed size) scales proportionally to
+	 * whatever area it's actually given at runtime, instead of staying pinned to old pixel coordinates.
+	 * No-op (returns true) if the root is already a ScaleBox. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool WrapRootInScaleBox(const FString& AssetPath, float DesignWidth, float DesignHeight);
+
+	/** Sets a named widget's UCanvasPanelSlot position/size (its parent must be a CanvasPanel). */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool SetCanvasSlotGeometry(
+		const FString& AssetPath, const FString& WidgetName, float X, float Y, float Width, float Height);
+
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool CreateTabletWidgetBlueprint();
 

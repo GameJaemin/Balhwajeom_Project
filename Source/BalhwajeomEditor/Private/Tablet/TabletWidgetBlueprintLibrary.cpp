@@ -19,6 +19,7 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/WidgetSwitcher.h"
+#include "Components/WidgetSwitcherSlot.h"
 #include "Components/WrapBox.h"
 #include "Editor.h"
 #include "Engine/DataTable.h"
@@ -1936,8 +1937,146 @@ bool UTabletWidgetBlueprintLibrary::InspectWidgetBlueprintByPath(const FString& 
 				SizeBox->IsWidthOverride() ? *FString::SanitizeFloat(SizeBox->GetWidthOverride()) : TEXT("(none)"),
 				SizeBox->IsHeightOverride() ? *FString::SanitizeFloat(SizeBox->GetHeightOverride()) : TEXT("(none)"));
 		}
+		if (const UScaleBox* ScaleBoxWidget = Cast<UScaleBox>(Widget))
+		{
+			const TCHAR* StretchName = TEXT("Unknown");
+			switch (ScaleBoxWidget->GetStretch())
+			{
+			case EStretch::None: StretchName = TEXT("None"); break;
+			case EStretch::Fill: StretchName = TEXT("Fill"); break;
+			case EStretch::ScaleToFit: StretchName = TEXT("ScaleToFit"); break;
+			case EStretch::ScaleToFitX: StretchName = TEXT("ScaleToFitX"); break;
+			case EStretch::ScaleToFitY: StretchName = TEXT("ScaleToFitY"); break;
+			case EStretch::ScaleToFill: StretchName = TEXT("ScaleToFill"); break;
+			case EStretch::ScaleBySafeZone: StretchName = TEXT("ScaleBySafeZone"); break;
+			case EStretch::UserSpecified: StretchName = TEXT("UserSpecified"); break;
+			default: break;
+			}
+			UE_LOG(LogTemp, Display, TEXT("WIDGET_SCALEBOX Name=%s Stretch=%s"),
+				*ScaleBoxWidget->GetName(),
+				StretchName);
+		}
+		if (const UPanelSlot* PlainSlot = Widget->Slot)
+		{
+			if (!Cast<UCanvasPanelSlot>(PlainSlot))
+			{
+				UE_LOG(LogTemp, Display, TEXT("WIDGET_SLOT_CLASS Name=%s SlotClass=%s"),
+					*Widget->GetName(),
+					*PlainSlot->GetClass()->GetName());
+			}
+			if (const UWidgetSwitcherSlot* SwitcherSlot = Cast<UWidgetSwitcherSlot>(PlainSlot))
+			{
+				UE_LOG(LogTemp, Display, TEXT("WIDGET_SWITCHER_SLOT Name=%s HAlign=%d VAlign=%d"),
+					*Widget->GetName(),
+					static_cast<int32>(SwitcherSlot->GetHorizontalAlignment()),
+					static_cast<int32>(SwitcherSlot->GetVerticalAlignment()));
+			}
+		}
 	}
 	return true;
+}
+
+bool UTabletWidgetBlueprintLibrary::SetButtonIconTexture(
+	const FString& AssetPath, const FString& ButtonName, const FString& TexturePath)
+{
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetButtonIconTexture failed: %s could not be loaded."), *AssetPath);
+		return false;
+	}
+
+	UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, *TexturePath);
+	if (!Texture)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetButtonIconTexture failed: could not load texture %s."), *TexturePath);
+		return false;
+	}
+
+	UButton* TargetButton = Cast<UButton>(Blueprint->WidgetTree->FindWidget(FName(*ButtonName)));
+	if (!TargetButton)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetButtonIconTexture failed: %s has no button named %s."), *AssetPath, *ButtonName);
+		return false;
+	}
+
+	UImage* Icon = Blueprint->WidgetTree->ConstructWidget<UImage>(
+		UImage::StaticClass(), FName(*(ButtonName + TEXT("_Icon"))));
+	Icon->SetBrushFromTexture(Texture, true);
+	TargetButton->SetContent(Icon);
+
+	using namespace TabletDesigner;
+	const bool bSaved = SaveAndCompile(Blueprint);
+	UE_LOG(LogTemp, Display, TEXT("SET_BUTTON_ICON Result=%s Asset=%s Button=%s Texture=%s"),
+		bSaved ? TEXT("Success") : TEXT("Failure"), *AssetPath, *ButtonName, *TexturePath);
+	return bSaved;
+}
+
+bool UTabletWidgetBlueprintLibrary::WrapRootInScaleBox(
+	const FString& AssetPath, const float DesignWidth, const float DesignHeight)
+{
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+	if (!Blueprint || !Blueprint->WidgetTree || !Blueprint->WidgetTree->RootWidget)
+	{
+		UE_LOG(LogTemp, Error, TEXT("WrapRootInScaleBox failed: %s could not be loaded."), *AssetPath);
+		return false;
+	}
+
+	UWidget* ExistingRoot = Blueprint->WidgetTree->RootWidget;
+	if (Cast<UScaleBox>(ExistingRoot))
+	{
+		UE_LOG(LogTemp, Display, TEXT("WRAP_ROOT_SCALEBOX Result=Skipped Asset=%s (root is already a ScaleBox)"), *AssetPath);
+		return true;
+	}
+
+	UScaleBox* Scale = Blueprint->WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("ScaleBox_Wrapper"));
+	Scale->SetStretch(EStretch::ScaleToFit);
+
+	USizeBox* Size = Blueprint->WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("SizeBox_Wrapper"));
+	Size->SetWidthOverride(DesignWidth);
+	Size->SetHeightOverride(DesignHeight);
+
+	Scale->SetContent(Size);
+	Size->SetContent(ExistingRoot);
+	Blueprint->WidgetTree->RootWidget = Scale;
+
+	using namespace TabletDesigner;
+	const bool bSaved = SaveAndCompile(Blueprint);
+	UE_LOG(LogTemp, Display, TEXT("WRAP_ROOT_SCALEBOX Result=%s Asset=%s DesignSize=%dx%d"),
+		bSaved ? TEXT("Success") : TEXT("Failure"),
+		*AssetPath,
+		FMath::RoundToInt(DesignWidth),
+		FMath::RoundToInt(DesignHeight));
+	return bSaved;
+}
+
+bool UTabletWidgetBlueprintLibrary::SetCanvasSlotGeometry(
+	const FString& AssetPath, const FString& WidgetName, const float X, const float Y, const float Width, const float Height)
+{
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetCanvasSlotGeometry failed: %s could not be loaded."), *AssetPath);
+		return false;
+	}
+
+	UWidget* Target = Blueprint->WidgetTree->FindWidget(FName(*WidgetName));
+	UCanvasPanelSlot* CanvasSlot = Target ? Cast<UCanvasPanelSlot>(Target->Slot) : nullptr;
+	if (!CanvasSlot)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetCanvasSlotGeometry failed: %s has no CanvasPanelSlot-parented widget named %s."),
+			*AssetPath, *WidgetName);
+		return false;
+	}
+
+	CanvasSlot->SetPosition(FVector2D(X, Y));
+	CanvasSlot->SetSize(FVector2D(Width, Height));
+
+	using namespace TabletDesigner;
+	const bool bSaved = SaveAndCompile(Blueprint);
+	UE_LOG(LogTemp, Display, TEXT("SET_CANVAS_SLOT_GEOMETRY Result=%s Asset=%s Widget=%s Position=(%.0f,%.0f) Size=(%.0f,%.0f)"),
+		bSaved ? TEXT("Success") : TEXT("Failure"), *AssetPath, *WidgetName, X, Y, Width, Height);
+	return bSaved;
 }
 
 bool UTabletWidgetBlueprintLibrary::CreateTabletWidgetBlueprint()
