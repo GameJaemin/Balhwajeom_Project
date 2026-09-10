@@ -6,8 +6,10 @@
 #include "Misc/AutomationTest.h"
 
 #include "CameraSystem/BalhwajeomCameraCharacter.h"
+#include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
@@ -19,6 +21,21 @@
 
 struct FBedMemoryTestAccessor
 {
+	static ECollisionEnabled::Type GetBedMeshCollisionEnabled(const ABedMemoryActor* Bed)
+	{
+		return Bed->BedMesh->GetCollisionEnabled();
+	}
+
+	static ECollisionResponse GetBedMeshPawnResponse(const ABedMemoryActor* Bed)
+	{
+		return Bed->BedMesh->GetCollisionResponseToChannel(ECC_Pawn);
+	}
+
+	static ECollisionResponse GetInteractionPawnResponse(const ABedMemoryActor* Bed)
+	{
+		return Bed->InteractionCollision->GetCollisionResponseToChannel(ECC_Pawn);
+	}
+
 	static void SimulateColliderBeginOverlap(ABedMemoryActor* Bed, APawn* Pawn)
 	{
 		const FHitResult SweepResult;
@@ -157,6 +174,19 @@ bool FBedMemoryColliderToggleTest::RunTest(const FString& Parameters)
 		GameInstance->Shutdown();
 		return false;
 	}
+
+	TestEqual(
+		TEXT("Bed mesh collision is enabled for solid furniture"),
+		FBedMemoryTestAccessor::GetBedMeshCollisionEnabled(Bed),
+		ECollisionEnabled::QueryAndPhysics);
+	TestEqual(
+		TEXT("Bed mesh blocks the player pawn"),
+		FBedMemoryTestAccessor::GetBedMeshPawnResponse(Bed),
+		ECR_Block);
+	TestEqual(
+		TEXT("Interaction collider remains an overlap trigger for the player pawn"),
+		FBedMemoryTestAccessor::GetInteractionPawnResponse(Bed),
+		ECR_Overlap);
 
 	Controller->SetPlayer(LocalPlayer);
 	Controller->Possess(Character);

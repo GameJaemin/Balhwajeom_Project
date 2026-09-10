@@ -17,6 +17,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/AssetManager.h"
+#include "Engine/CollisionProfile.h"
 #include "Engine/GameInstance.h"
 #include "Engine/StreamableManager.h"
 #include "EngineUtils.h"
@@ -56,7 +57,12 @@ ABedMemoryActor::ABedMemoryActor()
 
 	BedMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BedMesh"));
 	BedMesh->SetupAttachment(SceneRoot);
-	BedMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// The mesh is the solid body of the bed. InteractionCollision remains a
+	// query-only trigger, while the assigned bed mesh blocks the player.
+	BedMesh->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+	BedMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	BedMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+	BedMesh->CanCharacterStepUpOn = ECB_No;
 	BedMesh->SetStaticMesh(nullptr);
 
 	InteractionCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractionCollision"));
