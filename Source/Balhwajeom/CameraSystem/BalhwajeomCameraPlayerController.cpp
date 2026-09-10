@@ -21,6 +21,13 @@ ABalhwajeomCameraPlayerController::ABalhwajeomCameraPlayerController()
 	{
 		InteractionPromptWidgetClass = DefaultInteractionPromptClass.Class;
 	}
+
+	static ConstructorHelpers::FClassFinder<UUserWidget> DefaultBedMemoryHUDClass(
+		TEXT("/Game/Balhwajeom/UI/HUD/WB_HUD2"));
+	if (DefaultBedMemoryHUDClass.Succeeded())
+	{
+		BedMemoryHUDWidgetClass = DefaultBedMemoryHUDClass.Class;
+	}
 }
 
 void ABalhwajeomCameraPlayerController::BeginPlay()
@@ -33,6 +40,7 @@ void ABalhwajeomCameraPlayerController::BeginPlay()
 	SetInputMode(InputMode);
 
 	EnsurePlayerHUD();
+	EnsureBedMemoryHUD();
 	EnsureInteractionPrompt();
 }
 
@@ -48,6 +56,94 @@ void ABalhwajeomCameraPlayerController::EnsurePlayerHUD()
 	{
 		PlayerHUDWidget->AddToViewport(0);
 	}
+}
+
+void ABalhwajeomCameraPlayerController::EnsureBedMemoryHUD()
+{
+	if (!IsLocalController() || IsValid(BedMemoryHUDWidget) || !BedMemoryHUDWidgetClass)
+	{
+		return;
+	}
+
+	BedMemoryHUDWidget = CreateWidget<UUserWidget>(this, BedMemoryHUDWidgetClass);
+	if (BedMemoryHUDWidget)
+	{
+		BedMemoryHUDWidget->SetRenderOpacity(0.0f);
+		BedMemoryHUDWidget->SetVisibility(ESlateVisibility::Collapsed);
+		BedMemoryHUDWidget->AddToViewport(1);
+	}
+}
+
+void ABalhwajeomCameraPlayerController::SetBedMemoryHUDActive(bool bActive)
+{
+	EnsurePlayerHUD();
+	EnsureBedMemoryHUD();
+	bBedMemoryHUDActive = bActive;
+
+	// Make both roots available while cross-fading. The fully transparent side
+	// is collapsed by ApplyBedMemoryHUDAlpha once the transition finishes.
+	if (PlayerHUDWidget)
+	{
+		PlayerHUDWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+	if (BedMemoryHUDWidget)
+	{
+		BedMemoryHUDWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+
+	if (BedMemoryHUDFadeDuration <= KINDA_SMALL_NUMBER)
+	{
+		BedMemoryHUDAlpha = bActive ? 1.0f : 0.0f;
+		ApplyBedMemoryHUDAlpha(BedMemoryHUDAlpha);
+	}
+}
+
+void ABalhwajeomCameraPlayerController::ApplyBedMemoryHUDAlpha(float Alpha)
+{
+	const float ClampedAlpha = FMath::Clamp(Alpha, 0.0f, 1.0f);
+	if (PlayerHUDWidget)
+	{
+		PlayerHUDWidget->SetRenderOpacity(1.0f - ClampedAlpha);
+		if (ClampedAlpha >= 1.0f - KINDA_SMALL_NUMBER)
+		{
+			PlayerHUDWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+	if (BedMemoryHUDWidget)
+	{
+		BedMemoryHUDWidget->SetRenderOpacity(ClampedAlpha);
+		if (ClampedAlpha <= KINDA_SMALL_NUMBER)
+		{
+			BedMemoryHUDWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+}
+
+void ABalhwajeomCameraPlayerController::UpdateBedMemoryHUD(float DeltaSeconds)
+{
+	const float TargetAlpha = bBedMemoryHUDActive ? 1.0f : 0.0f;
+	if (FMath::IsNearlyEqual(BedMemoryHUDAlpha, TargetAlpha))
+	{
+		BedMemoryHUDAlpha = TargetAlpha;
+		ApplyBedMemoryHUDAlpha(BedMemoryHUDAlpha);
+		return;
+	}
+
+	if (PlayerHUDWidget)
+	{
+		PlayerHUDWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+	if (BedMemoryHUDWidget)
+	{
+		BedMemoryHUDWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+
+	const float FadeSpeed = BedMemoryHUDFadeDuration <= KINDA_SMALL_NUMBER
+		? 1.0f
+		: 1.0f / BedMemoryHUDFadeDuration;
+	BedMemoryHUDAlpha = FMath::FInterpConstantTo(
+		BedMemoryHUDAlpha, TargetAlpha, DeltaSeconds, FadeSpeed);
+	ApplyBedMemoryHUDAlpha(BedMemoryHUDAlpha);
 }
 
 void ABalhwajeomCameraPlayerController::EnsureInteractionPrompt()
@@ -96,8 +192,13 @@ void ABalhwajeomCameraPlayerController::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	// Possession/local-player assignment can complete after BeginPlay in travel
+	// and test worlds, so keep creation idempotent and retry when needed.
+	EnsurePlayerHUD();
+	EnsureBedMemoryHUD();
 	EnsureInteractionPrompt();
 	UpdateInteractionPrompt(DeltaSeconds);
+	UpdateBedMemoryHUD(DeltaSeconds);
 }
 
 bool ABalhwajeomCameraPlayerController::ShouldShowInteractionPrompt() const
