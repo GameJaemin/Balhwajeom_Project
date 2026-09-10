@@ -3,10 +3,13 @@
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSingleNodeInstance.h"
 #include "Animation/AnimSequenceBase.h"
+#include "Blueprint/UserWidget.h"
 #include "Misc/AutomationTest.h"
 
 #include "CameraSystem/BalhwajeomCameraCharacter.h"
+#include "CameraSystem/BalhwajeomCameraPlayerController.h"
 #include "Components/BoxComponent.h"
+#include "Components/Image.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -51,6 +54,27 @@ struct FBedMemoryTestAccessor
 	static bool IsInteractionLabelVisible(const ABedMemoryActor* Bed)
 	{
 		return Bed->InteractionWidget && Bed->InteractionWidget->IsVisible();
+	}
+
+	static void AdvanceBedHUDCrossFade(
+		ABalhwajeomCameraPlayerController* Controller,
+		float DeltaSeconds)
+	{
+		Controller->UpdateBedMemoryHUD(DeltaSeconds);
+	}
+
+	static bool IsInteractionCameraIconCollapsed(const ABedMemoryActor* Bed)
+	{
+		if (!Bed->InteractionWidget)
+		{
+			return false;
+		}
+		Bed->InteractionWidget->InitWidget();
+		UUserWidget* Widget = Bed->InteractionWidget->GetUserWidgetObject();
+		const UImage* CameraIcon = Widget
+			? Cast<UImage>(Widget->GetWidgetFromName(TEXT("UseCamera")))
+			: nullptr;
+		return CameraIcon && CameraIcon->GetVisibility() == ESlateVisibility::Collapsed;
 	}
 
 	static void SimulateColliderEndOverlap(ABedMemoryActor* Bed, APawn* Pawn)
@@ -161,8 +185,8 @@ bool FBedMemoryColliderToggleTest::RunTest(const FString& Parameters)
 	ABalhwajeomCameraCharacter* Character =
 		World->SpawnActor<ABalhwajeomCameraCharacter>(
 			FVector(100.0f, 0.0f, 96.0f), FRotator::ZeroRotator);
-	APlayerController* Controller =
-		World->SpawnActor<APlayerController>(
+	ABalhwajeomCameraPlayerController* Controller =
+		World->SpawnActor<ABalhwajeomCameraPlayerController>(
 			FVector::ZeroVector, FRotator::ZeroRotator);
 	ULocalPlayer* LocalPlayer = NewObject<ULocalPlayer>(GEngine);
 
@@ -234,6 +258,12 @@ bool FBedMemoryColliderToggleTest::RunTest(const FString& Parameters)
 		World->BeginPlay();
 	}
 	World->Tick(LEVELTICK_All, 0.1f);
+	TestNotNull(
+		TEXT("Player controller owns one WB_HUD2 instance"),
+		Controller->GetBedMemoryHUD());
+	TestFalse(
+		TEXT("WB_HUD2 starts inactive during exploration"),
+		Controller->IsBedMemoryHUDActive());
 	TestFalse(
 		TEXT("Sit label is hidden before collider overlap"),
 		FBedMemoryTestAccessor::IsInteractionLabelVisible(Bed));
@@ -248,6 +278,9 @@ bool FBedMemoryColliderToggleTest::RunTest(const FString& Parameters)
 	TestTrue(
 		TEXT("Sit label is visible while the character overlaps the collider"),
 		FBedMemoryTestAccessor::IsInteractionLabelVisible(Bed));
+	TestTrue(
+		TEXT("Bed sit label hides the evidence camera icon"),
+		FBedMemoryTestAccessor::IsInteractionCameraIconCollapsed(Bed));
 	FBedMemoryTestAccessor::SimulateColliderEndOverlap(Bed, Character);
 	TestFalse(
 		TEXT("Sit label hides on collider EndOverlap"),
@@ -262,6 +295,16 @@ bool FBedMemoryColliderToggleTest::RunTest(const FString& Parameters)
 	const FRotator OriginalControlRotation(12.0f, 73.0f, 0.0f);
 	Controller->SetControlRotation(OriginalControlRotation);
 	FBedMemoryTestAccessor::PressToggleInput(Bed);
+	TestTrue(
+		TEXT("Entering the bed requests the WB_HUD to WB_HUD2 cross-fade"),
+		Controller->IsBedMemoryHUDActive());
+	FBedMemoryTestAccessor::AdvanceBedHUDCrossFade(Controller, 0.2f);
+	const float EnteringBedHUDOpacity = Controller->GetBedMemoryHUD()
+		? Controller->GetBedMemoryHUD()->GetRenderOpacity()
+		: 0.0f;
+	TestTrue(
+		TEXT("WB_HUD2 fades in gradually instead of appearing instantly"),
+		EnteringBedHUDOpacity > 0.0f && EnteringBedHUDOpacity < 1.0f);
 	TestEqual(
 		TEXT("First F enters camera-blended player alignment"),
 		Bed->GetBedMemoryState(),
@@ -357,6 +400,14 @@ bool FBedMemoryColliderToggleTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("Standing animation plays in reverse"), StandInstance->GetPlayRate() < 0.0f);
 	}
 	FBedMemoryTestAccessor::FinishStandAnimation(Bed);
+	TestFalse(
+		TEXT("Finishing the bed exit requests the WB_HUD2 to WB_HUD cross-fade"),
+		Controller->IsBedMemoryHUDActive());
+	FBedMemoryTestAccessor::AdvanceBedHUDCrossFade(Controller, 0.1f);
+	TestTrue(
+		TEXT("WB_HUD2 fades out gradually after the bed exit"),
+		Controller->GetBedMemoryHUD() &&
+		Controller->GetBedMemoryHUD()->GetRenderOpacity() < EnteringBedHUDOpacity);
 	TestEqual(
 		TEXT("Second collider-owned F restores Idle"),
 		Bed->GetBedMemoryState(),

@@ -8,10 +8,12 @@
 #include "Blueprint/UserWidget.h"
 #include "Camera/CameraComponent.h"
 #include "CameraSystem/BalhwajeomCameraCharacter.h"
+#include "CameraSystem/BalhwajeomCameraPlayerController.h"
 #include "CameraSystem/BalhwajeomEvidenceActor.h"
 #include "CameraSystem/BalhwajeomPhotoCameraComponent.h"
 #include "Components/AudioComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/Image.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -325,6 +327,11 @@ bool ABedMemoryActor::BeginRest(APawn* InteractingPawn)
 	{
 		bSavedHUDVisible = HUD->bShowHUD;
 		HUD->bShowHUD = false;
+	}
+	if (ABalhwajeomCameraPlayerController* CameraPlayerController =
+		Cast<ABalhwajeomCameraPlayerController>(PlayerController))
+	{
+		CameraPlayerController->SetBedMemoryHUDActive(true);
 	}
 	SetInspectionLabelSuppressed(true);
 	SetWorldEvidenceLabelsSuppressed(true);
@@ -924,6 +931,11 @@ void ABedMemoryActor::RestorePlayerState()
 	RestorePlayerAnimationState();
 	if (RestingPlayerController)
 	{
+		if (ABalhwajeomCameraPlayerController* CameraPlayerController =
+			Cast<ABalhwajeomCameraPlayerController>(RestingPlayerController))
+		{
+			CameraPlayerController->SetBedMemoryHUDActive(false);
+		}
 		RestingPlayerController->SetIgnoreMoveInput(false);
 		RestingPlayerController->SetIgnoreLookInput(false);
 		if (bHasSavedControlRotation)
@@ -1073,6 +1085,14 @@ void ABedMemoryActor::SetInspectionLabel(const FText& LabelText, bool bVisible)
 	};
 	FSetLabelTextParameters Parameters{LabelText};
 	Widget->ProcessEvent(Function, &Parameters);
+
+	// WBP_ObjectLabel is shared with photographic evidence, where UseCamera
+	// conveys capture status. A bed prompt is a plain interaction and must not
+	// inherit that evidence-camera icon.
+	if (UImage* CameraIcon = Cast<UImage>(Widget->GetWidgetFromName(TEXT("UseCamera"))))
+	{
+		CameraIcon->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 void ABedMemoryActor::SetWorldEvidenceLabelsSuppressed(bool bSuppressed) const
