@@ -8,6 +8,7 @@
 #include "Components/Widget.h"
 #include "Interaction/InspectionComponent.h"
 #include "Interaction/PlayerInteractionComponent.h"
+#include "Tablet/BalhwajeomTabletComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 ABalhwajeomCameraPlayerController::ABalhwajeomCameraPlayerController()
@@ -229,11 +230,42 @@ bool ABalhwajeomCameraPlayerController::ShouldShowInteractionPrompt() const
 	return IsValid(EvidenceActor) && EvidenceActor->CanRequestInvestigationInteraction();
 }
 
+bool ABalhwajeomCameraPlayerController::IsInteractionPromptSuppressedByTablet() const
+{
+	const UBalhwajeomTabletComponent* TabletComponent =
+		FindComponentByClass<UBalhwajeomTabletComponent>();
+	if (!TabletComponent)
+	{
+		const APawn* ControlledPawn = GetPawn();
+		TabletComponent = IsValid(ControlledPawn)
+			? ControlledPawn->FindComponentByClass<UBalhwajeomTabletComponent>()
+			: nullptr;
+	}
+
+	return IsValid(TabletComponent) && TabletComponent->IsTabletOpen();
+}
+
 void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSeconds)
 {
 	if (!IsValid(InteractionPromptWidget) || !IsValid(InteractionPromptFadeTarget))
 	{
 		return;
+	}
+
+	if (IsInteractionPromptSuppressedByTablet())
+	{
+		// The tablet owns the whole screen layer: hide both the center dot and text.
+		// Reset the text so closing the tablet starts a clean fade-in only when the
+		// currently focused evidence is still interactable.
+		InteractionPromptFadeTarget->SetRenderOpacity(0.0f);
+		InteractionPromptFadeTarget->SetVisibility(ESlateVisibility::Hidden);
+		InteractionPromptWidget->SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+
+	if (InteractionPromptWidget->GetVisibility() != ESlateVisibility::HitTestInvisible)
+	{
+		InteractionPromptWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 
 	const bool bShouldShow = ShouldShowInteractionPrompt();
