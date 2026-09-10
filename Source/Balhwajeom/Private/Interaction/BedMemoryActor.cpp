@@ -81,7 +81,7 @@ ABedMemoryActor::ABedMemoryActor()
 	InteractionWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	static ConstructorHelpers::FClassFinder<UUserWidget> LabelWidgetClass(
-		TEXT("/Game/Balhwajeom/Blueprints/UI/WBP_ObjectLabel"));
+		TEXT("/Game/Balhwajeom/UI/Inspection/WBP_ObjectLabel"));
 	if (LabelWidgetClass.Succeeded())
 	{
 		InteractionWidget->SetWidgetClass(LabelWidgetClass.Class);

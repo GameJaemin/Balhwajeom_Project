@@ -30,7 +30,7 @@ bool FEvidenceObjectLabelAssetTest::RunTest(const FString& Parameters)
 
 	const UWidgetBlueprint* ObjectLabelBlueprint = LoadObject<UWidgetBlueprint>(
 		nullptr,
-		TEXT("/Game/Balhwajeom/Blueprints/UI/WBP_ObjectLabel.WBP_ObjectLabel"));
+		TEXT("/Game/Balhwajeom/UI/Inspection/WBP_ObjectLabel.WBP_ObjectLabel"));
 	TestNotNull(TEXT("WBP_ObjectLabel should load"), ObjectLabelBlueprint);
 	if (!ObjectLabelBlueprint || !RequiredIcon)
 	{
