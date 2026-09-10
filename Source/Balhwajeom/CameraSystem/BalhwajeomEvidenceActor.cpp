@@ -42,7 +42,7 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 	ObjectLabelWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	static ConstructorHelpers::FClassFinder<UUserWidget> ObjectLabelWidgetClass(
-		TEXT("/Game/Balhwajeom/Blueprints/UI/WBP_ObjectLabel"));
+		TEXT("/Game/Balhwajeom/UI/Inspection/WBP_ObjectLabel"));
 	if (ObjectLabelWidgetClass.Succeeded())
 	{
 		ObjectLabelWidget->SetWidgetClass(ObjectLabelWidgetClass.Class);
