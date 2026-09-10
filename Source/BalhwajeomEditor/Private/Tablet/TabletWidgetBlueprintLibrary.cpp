@@ -1918,6 +1918,22 @@ bool UTabletWidgetBlueprintLibrary::InspectWidgetBlueprintByPath(const FString& 
 			Parent ? *Parent->GetName() : TEXT("(root)"),
 			Widget->bIsVariable ? TEXT("true") : TEXT("false"),
 			*UEnum::GetValueAsString(Widget->GetVisibility()));
+
+		if (const UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot))
+		{
+			UE_LOG(LogTemp, Display, TEXT("WIDGET_CANVAS_SLOT Name=%s Position=(%s) Size=(%s) ZOrder=%d"),
+				*Widget->GetName(),
+				*CanvasSlot->GetPosition().ToString(),
+				*CanvasSlot->GetSize().ToString(),
+				CanvasSlot->GetZOrder());
+		}
+		if (const USizeBox* SizeBox = Cast<USizeBox>(Widget))
+		{
+			UE_LOG(LogTemp, Display, TEXT("WIDGET_SIZEBOX Name=%s WidthOverride=%s HeightOverride=%s"),
+				*SizeBox->GetName(),
+				SizeBox->IsWidthOverride() ? *FString::SanitizeFloat(SizeBox->GetWidthOverride()) : TEXT("(none)"),
+				SizeBox->IsHeightOverride() ? *FString::SanitizeFloat(SizeBox->GetHeightOverride()) : TEXT("(none)"));
+		}
 	}
 	return true;
 }
