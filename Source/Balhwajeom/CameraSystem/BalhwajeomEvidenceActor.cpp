@@ -74,22 +74,34 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 	}
 }
 
+void ABalhwajeomEvidenceActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	FitCameraTargetBoundsToMesh();
+}
+
+void ABalhwajeomEvidenceActor::FitCameraTargetBoundsToMesh()
+{
+	if (!EvidenceMesh || !CameraTargetBounds)
+	{
+		return;
+	}
+	FVector LocalMin;
+	FVector LocalMax;
+	EvidenceMesh->GetLocalBounds(LocalMin, LocalMax);
+	const FVector LocalExtent = (LocalMax - LocalMin) * 0.5f;
+	CameraTargetBounds->SetRelativeLocation((LocalMin + LocalMax) * 0.5f);
+	CameraTargetBounds->SetBoxExtent(FVector(
+		FMath::Max(LocalExtent.X, 5.0f),
+		FMath::Max(LocalExtent.Y, 5.0f),
+		FMath::Max(LocalExtent.Z, 5.0f)));
+}
+
 void ABalhwajeomEvidenceActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (EvidenceMesh && CameraTargetBounds)
-	{
-		FVector LocalMin;
-		FVector LocalMax;
-		EvidenceMesh->GetLocalBounds(LocalMin, LocalMax);
-		const FVector LocalExtent = (LocalMax - LocalMin) * 0.5f;
-		CameraTargetBounds->SetRelativeLocation((LocalMin + LocalMax) * 0.5f);
-		CameraTargetBounds->SetBoxExtent(FVector(
-			FMath::Max(LocalExtent.X, 5.0f),
-			FMath::Max(LocalExtent.Y, 5.0f),
-			FMath::Max(LocalExtent.Z, 5.0f)));
-	}
+	FitCameraTargetBoundsToMesh();
 
 	if (ObjectLabelWidget)
 	{

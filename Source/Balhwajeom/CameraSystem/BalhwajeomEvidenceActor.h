@@ -74,8 +74,14 @@ public:
 	virtual void NotifyCameraCaptureSucceeded_Implementation() override;
 
 protected:
+	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	/** Resizes CameraTargetBounds to match EvidenceMesh's current static mesh bounds. Called from
+	 * OnConstruction (so it's correct in the editor right after placing/converting an actor, e.g.
+	 * via "Replace Selected Actors With") and again from BeginPlay as a safety net. */
+	void FitCameraTargetBoundsToMesh();
 
 	UFUNCTION()
 	void HandleEvidenceStateChanged(FGuid ChangedInstanceID, FName PreviousStateID, FName NewStateID);
