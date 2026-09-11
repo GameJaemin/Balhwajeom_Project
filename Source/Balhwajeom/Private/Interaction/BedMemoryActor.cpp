@@ -8,15 +8,18 @@
 #include "Blueprint/UserWidget.h"
 #include "Camera/CameraComponent.h"
 #include "CameraSystem/BalhwajeomCameraCharacter.h"
+#include "CameraSystem/BalhwajeomCameraPlayerController.h"
 #include "CameraSystem/BalhwajeomEvidenceActor.h"
 #include "CameraSystem/BalhwajeomPhotoCameraComponent.h"
 #include "Components/AudioComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/Image.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/AssetManager.h"
+#include "Engine/CollisionProfile.h"
 #include "Engine/GameInstance.h"
 #include "Engine/StreamableManager.h"
 #include "EngineUtils.h"
@@ -56,7 +59,12 @@ ABedMemoryActor::ABedMemoryActor()
 
 	BedMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BedMesh"));
 	BedMesh->SetupAttachment(SceneRoot);
-	BedMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// The mesh is the solid body of the bed. InteractionCollision remains a
+	// query-only trigger, while the assigned bed mesh blocks the player.
+	BedMesh->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+	BedMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	BedMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+	BedMesh->CanCharacterStepUpOn = ECB_No;
 	BedMesh->SetStaticMesh(nullptr);
 
 	InteractionCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractionCollision"));
@@ -319,6 +327,11 @@ bool ABedMemoryActor::BeginRest(APawn* InteractingPawn)
 	{
 		bSavedHUDVisible = HUD->bShowHUD;
 		HUD->bShowHUD = false;
+	}
+	if (ABalhwajeomCameraPlayerController* CameraPlayerController =
+		Cast<ABalhwajeomCameraPlayerController>(PlayerController))
+	{
+		CameraPlayerController->SetBedMemoryHUDActive(true);
 	}
 	SetInspectionLabelSuppressed(true);
 	SetWorldEvidenceLabelsSuppressed(true);
@@ -918,6 +931,11 @@ void ABedMemoryActor::RestorePlayerState()
 	RestorePlayerAnimationState();
 	if (RestingPlayerController)
 	{
+		if (ABalhwajeomCameraPlayerController* CameraPlayerController =
+			Cast<ABalhwajeomCameraPlayerController>(RestingPlayerController))
+		{
+			CameraPlayerController->SetBedMemoryHUDActive(false);
+		}
 		RestingPlayerController->SetIgnoreMoveInput(false);
 		RestingPlayerController->SetIgnoreLookInput(false);
 		if (bHasSavedControlRotation)
@@ -1067,6 +1085,14 @@ void ABedMemoryActor::SetInspectionLabel(const FText& LabelText, bool bVisible)
 	};
 	FSetLabelTextParameters Parameters{LabelText};
 	Widget->ProcessEvent(Function, &Parameters);
+
+	// WBP_ObjectLabel is shared with photographic evidence, where UseCamera
+	// conveys capture status. A bed prompt is a plain interaction and must not
+	// inherit that evidence-camera icon.
+	if (UImage* CameraIcon = Cast<UImage>(Widget->GetWidgetFromName(TEXT("UseCamera"))))
+	{
+		CameraIcon->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 void ABedMemoryActor::SetWorldEvidenceLabelsSuppressed(bool bSuppressed) const

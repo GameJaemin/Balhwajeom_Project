@@ -47,6 +47,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Evidence|Investigation")
 	bool RequestInvestigationInteraction(FText& OutDisplayText);
 
+	/** Read-only availability check used by the player's interaction prompt. */
+	UFUNCTION(BlueprintPure, Category = "Evidence|Investigation")
+	bool CanRequestInvestigationInteraction() const;
+
 	/** Hides the normal distance label while the dedicated photo camera HUD is active. */
 	void SetInspectionLabelSuppressed(bool bSuppressed);
 
@@ -70,8 +74,14 @@ public:
 	virtual void NotifyCameraCaptureSucceeded_Implementation() override;
 
 protected:
+	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	/** Resizes CameraTargetBounds to match EvidenceMesh's current static mesh bounds. Called from
+	 * OnConstruction (so it's correct in the editor right after placing/converting an actor, e.g.
+	 * via "Replace Selected Actors With") and again from BeginPlay as a safety net. */
+	void FitCameraTargetBoundsToMesh();
 
 	UFUNCTION()
 	void HandleEvidenceStateChanged(FGuid ChangedInstanceID, FName PreviousStateID, FName NewStateID);

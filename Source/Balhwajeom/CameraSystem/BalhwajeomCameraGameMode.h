@@ -13,4 +13,8 @@ class BALHWAJEOM_API ABalhwajeomCameraGameMode : public AGameModeBase
 
 public:
 	ABalhwajeomCameraGameMode();
+
+protected:
+	/** Prefers the PlayerStart tagged "Player1" over whichever one the default implementation would pick. */
+	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
 };
