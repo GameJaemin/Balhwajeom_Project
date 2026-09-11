@@ -549,6 +549,47 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 		return;
 	}
 
+	APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
+	if (PlayerController)
+	{
+		SavedExplorationControlRotation = PlayerController->GetControlRotation();
+		bHasSavedExplorationControlRotation = true;
+
+		FVector OutgoingViewLocation;
+		FRotator OutgoingViewRotation;
+		PlayerController->GetPlayerViewPoint(OutgoingViewLocation, OutgoingViewRotation);
+
+		// Aim the first-person camera at the world point under the third-person screen center.
+		// The cameras have different origins, so copying only their rotation causes parallax and
+		// pushes the object sideways on entry.
+		const FVector OutgoingViewDirection = OutgoingViewRotation.Vector();
+		FVector CenterTarget = OutgoingViewLocation + OutgoingViewDirection * WORLD_MAX;
+		bool bFoundCenterTarget = false;
+		if (UWorld* World = GetWorld())
+		{
+			FCollisionQueryParams QueryParams(
+				SCENE_QUERY_STAT(PhotoCameraModeCenterHandoff), true, GetOwner());
+			QueryParams.bTraceComplex = true;
+			FHitResult CenterHit;
+			if (World->LineTraceSingleByChannel(
+				CenterHit,
+				OutgoingViewLocation,
+				CenterTarget,
+				ECC_Visibility,
+				QueryParams))
+			{
+				CenterTarget = CenterHit.ImpactPoint;
+				bFoundCenterTarget = true;
+			}
+		}
+
+		const FVector PhotoViewDirection = CenterTarget - PhotoCamera->GetComponentLocation();
+		PlayerController->SetControlRotation(
+			!bFoundCenterTarget || PhotoViewDirection.IsNearlyZero()
+				? OutgoingViewRotation
+				: PhotoViewDirection.Rotation());
+	}
+
 	bIsInCameraMode = true;
 	SetWorldInspectionLabelsSuppressed(true);
 	SavedFirstPersonRelativeTransform = PhotoCamera->GetRelativeTransform();
@@ -574,12 +615,11 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 		}
 	}
 
-	if (APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this)))
+	if (PlayerController)
 	{
 		// Reclaim the view target from an active FixedCameraZone so camera mode is always visible,
 		// even while standing inside a zone. The switch happens while the screen is faded to black.
-		// Control rotation is intentionally left untouched (pitch included) so whatever direction
-		// the player was already looking (e.g. from orbit mode) carries straight into camera mode.
+		// Control rotation was aligned above so the outgoing center object remains in view.
 		PlayerController->SetViewTargetWithBlend(GetOwner(), 0.0f);
 	}
 
@@ -605,9 +645,15 @@ void UBalhwajeomPhotoCameraComponent::ExitCameraMode()
 		return;
 	}
 
-	// Control rotation is intentionally left as-is: whatever yaw/pitch the player looked at while
-	// in camera mode carries over into the normal view (e.g. the orbit boom). Only the camera's own
-	// pan/zoom state is reset below, not the character's rotation.
+	// Restore the exploration rotation captured before center-target alignment. Without this,
+	// entering and leaving camera mode repeatedly feeds the parallax correction back into the
+	// third-person view and makes it drift on every RMB press.
+	if (APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
+		PlayerController && bHasSavedExplorationControlRotation)
+	{
+		PlayerController->SetControlRotation(SavedExplorationControlRotation);
+	}
+	bHasSavedExplorationControlRotation = false;
 
 	if (PhotoCamera)
 	{
@@ -1608,7 +1654,7 @@ bool UBalhwajeomPhotoCameraComponent::CalculateStorySpawnTransform(FTransform& O
 	FVector RayOrigin;
 	FVector RayDirection;
 	if (!PlayerController->DeprojectScreenPositionToWorld(
-		ViewportWidth * 0.5f,
+		ViewportWidth * PhotoStoryScreenXRatio,
 		ViewportHeight * PhotoStoryScreenYRatio,
 		RayOrigin,
 		RayDirection))

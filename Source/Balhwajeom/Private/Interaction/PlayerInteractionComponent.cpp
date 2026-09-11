@@ -12,6 +12,7 @@
 #include "Interaction/InspectionComponent.h"
 #include "Interaction/WorldInteractable.h"
 #include "CameraSystem/BalhwajeomEvidenceActor.h"
+#include "CameraSystem/BalhwajeomPhotoCameraComponent.h"
 
 
 UPlayerInteractionComponent::UPlayerInteractionComponent()
@@ -156,6 +157,12 @@ void UPlayerInteractionComponent::TickComponent(
 	if (!bInteractionInputInitialized)
 	{
 		SetupInteractionInput();
+	}
+
+	if (IsInteractionSuppressedByPhotoCamera())
+	{
+		SetFocusedInspection(nullptr);
+		return;
 	}
 
 	AActor* PlayerActor = GetOwner();
@@ -332,6 +339,10 @@ bool UPlayerInteractionComponent::TryInspect(
 ) 
 {
 	OutInspectionText = FText::GetEmpty();
+	if (IsInteractionSuppressedByPhotoCamera())
+	{
+		return false;
+	}
 
 	if (!IsValid(FocusedInspection))
 	{
@@ -360,6 +371,11 @@ bool UPlayerInteractionComponent::TryInspect(
 
 bool UPlayerInteractionComponent::RequestInspect()
 {
+	if (IsInteractionSuppressedByPhotoCamera())
+	{
+		return false;
+	}
+
 	if (IsValid(FocusedInspection))
 	{
 		AActor* FocusedActor = FocusedInspection->GetOwner();
@@ -470,4 +486,15 @@ void UPlayerInteractionComponent::SetupInteractionInput()
 void UPlayerInteractionComponent::OnInteractActionStarted()
 {
 	HandleInteractStarted();
+}
+
+bool UPlayerInteractionComponent::IsInteractionSuppressedByPhotoCamera() const
+{
+	const AActor* OwnerActor = GetOwner();
+	const UBalhwajeomPhotoCameraComponent* PhotoCamera = IsValid(OwnerActor)
+		? OwnerActor->FindComponentByClass<UBalhwajeomPhotoCameraComponent>()
+		: nullptr;
+
+	return IsValid(PhotoCamera) &&
+		(PhotoCamera->IsInCameraMode() || PhotoCamera->IsCameraTransitioning());
 }

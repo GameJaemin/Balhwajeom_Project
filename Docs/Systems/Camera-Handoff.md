@@ -79,7 +79,7 @@ PIE에서는 먼저 FOV를 바꿔도 같은 실제 거리에서 초점 판정이
 
 촬영 파일 저장과 사진 등록이 모두 성공하면 `UBalhwajeomPhotoCameraComponent`가 `DT_Photos`의 `WorldStoryCues`와 `StoryVoice`를 읽어 `APhotoWorldStoryActor`를 생성한다.
 
-- 셔터 요청 시 화면 가로 50%, 세로 72% 지점을 월드로 Deproject하고 카메라 앞 200cm 위치의 Transform을 `FBalhwajeomPendingPhotoCapture`에 보관한다. 파일 저장은 비동기이므로 완료 시점의 카메라 Transform을 다시 사용하지 않는다.
+- 셔터 요청 시 `Photo Story Screen X/Y Ratio`로 지정한 화면 지점을 월드로 Deproject하고 `Photo Story Display Distance`만큼 떨어진 위치의 Transform을 `FBalhwajeomPendingPhotoCapture`에 보관한다. 기본값은 가로 50%, 세로 72%, 거리 200cm다. 파일 저장은 비동기이므로 완료 시점의 카메라 Transform을 다시 사용하지 않는다.
 - `APhotoWorldStoryActor`는 플레이어와 카메라에 Attach하지 않는다. `UWidgetComponent`와 비공간화 `UAudioComponent`만 자신의 Root에 Attach하므로 생성 위치에 그대로 남는다.
 - Cue 전환은 `StoryVoice` 시작 시각 기준으로 진행한다. 음성이 끝나면 마지막 문구가 페이드아웃하고 액터가 스스로 제거된다.
 - 새 사진 스토리가 시작될 때 이전 스토리가 아직 재생 중이면 이전 음성과 Cue를 중단하고 페이드아웃한다.
