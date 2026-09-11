@@ -50,7 +50,8 @@ void UBalhwajeomInternetWidget::NativeOnInitialized()
 
 	if (BTN_Maximize)
 	{
-		BTN_Maximize->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleMaximizeClicked);
+		BTN_Maximize->SetIsEnabled(false);
+		BTN_Maximize->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	if (BTN_Close)
 	{
@@ -310,24 +311,14 @@ void UBalhwajeomInternetWidget::ApplyWindowGeometry()
 	}
 
 	WindowSlot->SetAnchors(FAnchors(0.0f));
-	if (SessionState.IsMaximized())
-	{
-		WindowSlot->SetPosition(FVector2D::ZeroVector);
-		WindowSlot->SetSize(FVector2D(
-			FBalhwajeomInternetSessionState::TabletWidth,
-			FBalhwajeomInternetSessionState::TabletHeight));
-		SizeBox_BrowserWindow->SetWidthOverride(FBalhwajeomInternetSessionState::TabletWidth);
-		SizeBox_BrowserWindow->SetHeightOverride(FBalhwajeomInternetSessionState::TabletHeight);
-	}
-	else
-	{
-		WindowSlot->SetPosition(SessionState.GetNormalWindowPosition());
-		WindowSlot->SetSize(FVector2D(
-			FBalhwajeomInternetSessionState::NormalWindowWidth,
-			FBalhwajeomInternetSessionState::NormalWindowHeight));
-		SizeBox_BrowserWindow->SetWidthOverride(FBalhwajeomInternetSessionState::NormalWindowWidth);
-		SizeBox_BrowserWindow->SetHeightOverride(FBalhwajeomInternetSessionState::NormalWindowHeight);
-	}
+	WindowSlot->SetAlignment(FVector2D::ZeroVector);
+	WindowSlot->SetAutoSize(false);
+	WindowSlot->SetPosition(FVector2D::ZeroVector);
+	WindowSlot->SetSize(FVector2D(
+		FBalhwajeomInternetSessionState::TabletWidth,
+		FBalhwajeomInternetSessionState::TabletHeight));
+	SizeBox_BrowserWindow->SetWidthOverride(FBalhwajeomInternetSessionState::TabletWidth);
+	SizeBox_BrowserWindow->SetHeightOverride(FBalhwajeomInternetSessionState::TabletHeight);
 }
 
 void UBalhwajeomInternetWidget::RefreshMaximizeLabel()
@@ -367,16 +358,6 @@ FReply UBalhwajeomInternetWidget::NativeOnMouseButtonDown(
 	const FGeometry& InGeometry,
 	const FPointerEvent& InMouseEvent)
 {
-	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton
-		&& !SessionState.IsMaximized()
-		&& BRD_TitleBar
-		&& BRD_TitleBar->GetCachedGeometry().IsUnderLocation(InMouseEvent.GetScreenSpacePosition()))
-	{
-		bDraggingWindow = true;
-		DragStartMousePosition = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
-		DragStartWindowPosition = SessionState.GetNormalWindowPosition();
-		return FReply::Handled().CaptureMouse(TakeWidget());
-	}
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
@@ -384,13 +365,6 @@ FReply UBalhwajeomInternetWidget::NativeOnMouseMove(
 	const FGeometry& InGeometry,
 	const FPointerEvent& InMouseEvent)
 {
-	if (bDraggingWindow && !SessionState.IsMaximized())
-	{
-		const FVector2D CurrentMousePosition =
-			InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
-		SetNormalWindowPosition(DragStartWindowPosition + CurrentMousePosition - DragStartMousePosition);
-		return FReply::Handled();
-	}
 	return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
 }
 

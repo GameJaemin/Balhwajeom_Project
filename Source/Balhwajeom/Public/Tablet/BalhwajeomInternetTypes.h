@@ -24,10 +24,10 @@ struct BALHWAJEOM_API FBalhwajeomInternetSessionState
 	GENERATED_BODY()
 
 public:
-	static constexpr float TabletWidth = 1440.0f;
-	static constexpr float TabletHeight = 1080.0f;
-	static constexpr float NormalWindowWidth = 1180.0f;
-	static constexpr float NormalWindowHeight = 850.0f;
+	static constexpr float TabletWidth = 1274.0f;
+	static constexpr float TabletHeight = 907.0f;
+	static constexpr float NormalWindowWidth = TabletWidth;
+	static constexpr float NormalWindowHeight = TabletHeight;
 
 	void Reset();
 	bool OpenPage(EBalhwajeomInternetPage Page);
@@ -58,7 +58,7 @@ private:
 	EBalhwajeomInternetPage ActivePage = EBalhwajeomInternetPage::Main;
 
 	UPROPERTY(Transient)
-	FVector2D NormalWindowPosition = FVector2D(130.0f, 115.0f);
+	FVector2D NormalWindowPosition = FVector2D::ZeroVector;
 
 	UPROPERTY(Transient)
 	bool bMaximized = false;
