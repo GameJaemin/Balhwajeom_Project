@@ -143,7 +143,7 @@ Translucent materials, particles, separate translucency, and other render paths 
 ## Performance constraints
 
 - All passes remain full resolution to preserve alignment and avoid the previously observed low-resolution artifacts.
-- Each horizontal or vertical pass uses a five-fetch bilinear-optimized Gaussian kernel rather than nine independent fetches where Unreal's filtered User Scene Texture sampling supports it.
+- Each horizontal or vertical pass uses a dense 17-sample Gaussian kernel. At the supported 32-pixel test radius this keeps adjacent samples no more than 4 pixels apart, preventing the discrete repeated silhouettes produced by the earlier five-sample prototype.
 - The initial implementation uses four blur passes plus one composite pass. No quality-level system or half-resolution mode is introduced until GPU measurements show it is required.
 - The 1920x1080 camera view is the primary performance measurement. GPU cost is recorded before and after the change so visual quality is not accepted without a known cost.
 

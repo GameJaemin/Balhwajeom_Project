@@ -149,12 +149,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target")
 	bool bCanBeCaptured = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus", meta = (Units = "cm"))
+	float MinimumFocusDistanceOffset = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus", meta = (Units = "cm"))
+	float MaximumFocusDistanceOffset = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Legacy", meta = (ClampMin = "1.0", DeprecatedProperty, DeprecationMessage = "Focus distance is now owned by the photo camera."))
 	float PreferredFocusDistanceAt1x = 70.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Legacy", meta = (ClampMin = "1.0", DeprecatedProperty, DeprecationMessage = "Focus distance is now owned by the photo camera."))
 	float FocusDistanceToleranceAt1x = 300.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Legacy", meta = (DeprecatedProperty, DeprecationMessage = "Zoom no longer changes focus or capture distance."))
 	bool bScaleFocusDistanceWithZoom = true;
 };

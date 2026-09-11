@@ -50,12 +50,20 @@ struct BALHWAJEOM_API FBalhwajeomCameraTargetInfo
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Investigation")
 	bool bCanCapture = false;
 
+	/** Added to the photo camera's global minimum focus/capture distance. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Investigation", meta = (Units = "cm"))
+	float MinimumFocusDistanceOffset = 0.0f;
+
+	/** Added to the photo camera's global maximum focus/capture distance. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Investigation", meta = (Units = "cm"))
+	float MaximumFocusDistanceOffset = 0.0f;
+
 	/** Preferred camera-to-target distance supplied by the current state. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Investigation", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Legacy", meta = (ClampMin = "1.0", DeprecatedProperty, DeprecationMessage = "Focus distance is now owned by the photo camera."))
 	float PreferredFocusDistance = 700.0f;
 
 	/** Accepted distance on either side of PreferredFocusDistance. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Investigation", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Legacy", meta = (ClampMin = "0.0", DeprecatedProperty, DeprecationMessage = "Focus distance is now owned by the photo camera."))
 	float FocusDistanceTolerance = 300.0f;
 
 	/** Evidence payload stored when a correctly focused and centered photo succeeds. */
@@ -79,6 +87,6 @@ struct BALHWAJEOM_API FBalhwajeomCameraTargetInfo
 	float FocusDistanceToleranceAt1x = 300.0f;
 
 	/** When true, zooming in moves the accepted focus band farther away. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Legacy", meta = (DeprecatedProperty, DeprecationMessage = "Zoom no longer changes focus or capture distance."))
 	bool bScaleFocusDistanceWithZoom = true;
 };

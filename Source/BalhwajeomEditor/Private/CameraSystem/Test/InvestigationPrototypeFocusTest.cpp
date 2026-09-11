@@ -31,10 +31,10 @@ namespace
 			const FString AutomationPhotoDirectory = FPaths::Combine(
 				FPaths::ProjectSavedDir(), TEXT("Investigation"), TEXT("Photos"), TEXT("Automation"));
 			IFileManager::Get().Delete(
-				*FPaths::Combine(AutomationPhotoDirectory, TEXT("PHOTO_PIG_MIRROR.png")),
+				*FPaths::Combine(AutomationPhotoDirectory, TEXT("PHOTO_01_007.png")),
 				false, true);
 			IFileManager::Get().Delete(
-				*FPaths::Combine(AutomationPhotoDirectory, TEXT("PHOTO_SNOW_GLOBE.png")),
+				*FPaths::Combine(AutomationPhotoDirectory, TEXT("PHOTO_01_010.png")),
 				false, true);
 			return true;
 		}
@@ -66,22 +66,22 @@ namespace
 					return true;
 				}
 
-				ABalhwajeomEvidenceActor* Mirror = nullptr;
+				ABalhwajeomEvidenceActor* BurnedCurtain = nullptr;
 				ABalhwajeomEvidenceActor* SnowGlobe = nullptr;
 				for (TActorIterator<ABalhwajeomEvidenceActor> It(World); It; ++It)
 				{
-					if (It->GetObjectID() == TEXT("OBJ_PIG_MIRROR"))
+					if (It->GetObjectID() == TEXT("OBJ_01_007"))
 					{
-						Mirror = *It;
+						BurnedCurtain = *It;
 					}
-					else if (It->GetObjectID() == TEXT("OBJ_SNOW_GLOBE"))
+					else if (It->GetObjectID() == TEXT("OBJ_01_010"))
 					{
 						SnowGlobe = *It;
 					}
 				}
-				if (Mirror && SnowGlobe)
+				if (BurnedCurtain && SnowGlobe)
 				{
-					EvidenceTargets = {Mirror, SnowGlobe};
+					EvidenceTargets = {BurnedCurtain, SnowGlobe};
 				}
 
 				PhotoCamera = Character->FindComponentByClass<UBalhwajeomPhotoCameraComponent>();
@@ -157,7 +157,7 @@ namespace
 			}
 
 			const FName ExpectedPhotoID = TargetIndex == 0
-				? FName(TEXT("PHOTO_PIG_MIRROR")) : FName(TEXT("PHOTO_SNOW_GLOBE"));
+				? FName(TEXT("PHOTO_01_007")) : FName(TEXT("PHOTO_01_010"));
 
 			if (!bCaptureRequested)
 			{
@@ -293,10 +293,10 @@ namespace
 				return true;
 			}
 
-			Test->TestTrue(TEXT("PigMirror photo survives PIE restart"),
-				Investigation->HasCapturedPhoto(TEXT("PHOTO_PIG_MIRROR")));
+			Test->TestTrue(TEXT("Burned-curtain photo survives PIE restart"),
+				Investigation->HasCapturedPhoto(TEXT("PHOTO_01_007")));
 			Test->TestTrue(TEXT("SnowGlobe photo survives PIE restart"),
-				Investigation->HasCapturedPhoto(TEXT("PHOTO_SNOW_GLOBE")));
+				Investigation->HasCapturedPhoto(TEXT("PHOTO_01_010")));
 
 			TArray<FCapturedPhotoRecord> Photos;
 			Investigation->GetCapturedPhotos(Photos);

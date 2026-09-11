@@ -221,6 +221,8 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID)
 	bCanBeCaptured = State.bCanCapture;
 	EvidenceData.bAlreadyCollected = !State.PhotoID.IsNone() &&
 		Investigation->HasCapturedPhoto(State.PhotoID);
+	MinimumFocusDistanceOffset = State.MinimumFocusDistanceOffset;
+	MaximumFocusDistanceOffset = State.MaximumFocusDistanceOffset;
 	PreferredFocusDistanceAt1x = State.PreferredFocusDistance;
 	FocusDistanceToleranceAt1x = State.FocusDistanceTolerance;
 	bScaleFocusDistanceWithZoom = State.bScaleFocusDistanceWithZoom;
@@ -404,6 +406,8 @@ bool ABalhwajeomEvidenceActor::RequestCameraTargetInfo_Implementation(
 			OutInfo.StateID = CurrentStateID;
 			OutInfo.PhotoID = State.PhotoID;
 			OutInfo.bCanCapture = State.bCanCapture;
+			OutInfo.MinimumFocusDistanceOffset = State.MinimumFocusDistanceOffset;
+			OutInfo.MaximumFocusDistanceOffset = State.MaximumFocusDistanceOffset;
 			OutInfo.PreferredFocusDistance = State.PreferredFocusDistance;
 			OutInfo.FocusDistanceTolerance = State.FocusDistanceTolerance;
 			OutInfo.bScaleFocusDistanceWithZoom = State.bScaleFocusDistanceWithZoom;
@@ -414,6 +418,8 @@ bool ABalhwajeomEvidenceActor::RequestCameraTargetInfo_Implementation(
 	OutInfo.EvidenceData = EvidenceData;
 	OutInfo.InformationStages = CameraInformationStages;
 	OutInfo.bCanBeCaptured = bCanBeCaptured;
+	OutInfo.MinimumFocusDistanceOffset = MinimumFocusDistanceOffset;
+	OutInfo.MaximumFocusDistanceOffset = MaximumFocusDistanceOffset;
 	OutInfo.PreferredFocusDistanceAt1x = PreferredFocusDistanceAt1x;
 	OutInfo.FocusDistanceToleranceAt1x = FocusDistanceToleranceAt1x;
 	OutInfo.bScaleFocusDistanceWithZoom = bScaleFocusDistanceWithZoom;
