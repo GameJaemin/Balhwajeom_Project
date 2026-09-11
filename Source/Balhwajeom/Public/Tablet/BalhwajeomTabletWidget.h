@@ -36,6 +36,7 @@ enum class ETabletPage : uint8
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPhotoSelected, FName, PhotoID);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletFolderSelected, FName, CharacterID);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnTabletPersonFolderBackRequested);
 /** OriginSlotIndex is the sentence blank the word was dragged out of (INDEX_NONE if it came from the acquired-keyword list instead). */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnTabletBlankDropped, int32, SlotIndex, FName, WordID, int32, OriginSlotIndex);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTabletPhotoSlotDropped, int32, SlotIndex, FName, PhotoID);
@@ -67,7 +68,11 @@ class BALHWAJEOM_API UBalhwajeomTabletFolderButton : public UButton
 	GENERATED_BODY()
 
 public:
-	void Configure(FName InCharacterID, const FText& InLabel, UTexture2D* IconTexture);
+	void Configure(
+		FName InCharacterID,
+		const FText& InLabel,
+		UTexture2D* IconTexture,
+		const FSlateFontInfo& InLabelFont);
 
 	UPROPERTY()
 	FOnTabletFolderSelected OnFolderSelected;
@@ -117,6 +122,44 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UWrapBox> ContentWrapBox;
+};
+
+/**
+ * Designer-owned full folder screen shown after a home-page folder is selected.
+ * WBP_TabletPersonFolder owns the window chrome and list placement; the parent tablet
+ * supplies the selected character's title and the runtime-created section widgets.
+ */
+UCLASS()
+class BALHWAJEOM_API UBalhwajeomTabletPersonFolderWidget : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	void SetFolderHeader(const FText& FolderName, UTexture2D* FolderIcon);
+	void ClearFolderSections();
+	void AddFolderSection(UWidget* Section);
+
+	UPROPERTY(BlueprintAssignable, Category = "Tablet|Folder")
+	FOnTabletPersonFolderBackRequested OnBackRequested;
+
+protected:
+	virtual void NativeOnInitialized() override;
+
+private:
+	UFUNCTION()
+	void HandleCloseClicked();
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TXT_FolderTitle;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> IMG_FolderTitleIcon;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BTN_FolderClose;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UScrollBox> SB_EvidencePhotos;
 };
 
 /** Drag payload: which acquired keyword is being dragged onto a sentence blank. */
@@ -315,6 +358,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Home")
 	TObjectPtr<UTexture2D> DefaultFolderIcon;
 
+	/** Font used by runtime-created home-page folder labels. Assign in the WBP_Tablet class defaults. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Home")
+	FSlateFontInfo FolderLabelFont;
+
 	/** Icon shown on the folder page's 진술서 tile, so it reads as a document like the photo tiles next to it. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Family")
 	TObjectPtr<UTexture2D> StatementFileIcon;
@@ -417,6 +464,10 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UBalhwajeomInternetWidget> WBP_Internet;
 
+	/** Full folder page embedded in Page_PersonFolder. Its Designer controls all folder-screen geometry. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UBalhwajeomTabletPersonFolderWidget> WBP_PersonFolder;
+
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UOverlay> PopupLayer;
 
@@ -494,6 +545,12 @@ private:
 	/** Shows "잘못된 증거인 것 같다" briefly after an incorrect drop. Cleared on the next correct drop or popup open. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TXT_PuzzleFeedback;
+
+	/** "증거 사진" label above WB_PuzzlePhotos/WB_PhotoSlots. Only shown alongside them, when the
+	 * active sentence actually requires photo evidence (Sentence.PhotoSlots non-empty) -- never for
+	 * a plain photo popup. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TXT_PuzzlePhotoLabel;
 
 	/** Draggable photo-evidence candidates: captured photos whose own analysis sentence is solved.
 	 * Only populated/shown while the active sentence has PhotoSlots. */

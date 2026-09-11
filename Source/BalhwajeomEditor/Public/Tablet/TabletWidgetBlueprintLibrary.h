@@ -29,6 +29,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool InstallInternetBrowser();
 
+	/** Creates the editable full folder screen and embeds it in WBP_Tablet's folder page. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool InstallTabletPersonFolderWidget();
+
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool InspectTabletWidgetBlueprint();
 

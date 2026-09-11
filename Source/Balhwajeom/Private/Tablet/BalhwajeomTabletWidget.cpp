@@ -53,6 +53,57 @@ namespace
 	}
 }
 
+void UBalhwajeomTabletPersonFolderWidget::NativeOnInitialized()
+{
+	Super::NativeOnInitialized();
+	if (BTN_FolderClose)
+	{
+		BTN_FolderClose->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleCloseClicked);
+	}
+}
+
+void UBalhwajeomTabletPersonFolderWidget::SetFolderHeader(
+	const FText& FolderName,
+	UTexture2D* FolderIcon)
+{
+	if (TXT_FolderTitle)
+	{
+		TXT_FolderTitle->SetText(FolderName);
+	}
+	if (IMG_FolderTitleIcon)
+	{
+		if (FolderIcon)
+		{
+			IMG_FolderTitleIcon->SetBrushFromTexture(FolderIcon, true);
+		}
+		else
+		{
+			IMG_FolderTitleIcon->SetBrushFromTexture(nullptr);
+		}
+	}
+}
+
+void UBalhwajeomTabletPersonFolderWidget::ClearFolderSections()
+{
+	if (SB_EvidencePhotos)
+	{
+		SB_EvidencePhotos->ClearChildren();
+	}
+}
+
+void UBalhwajeomTabletPersonFolderWidget::AddFolderSection(UWidget* Section)
+{
+	if (SB_EvidencePhotos && Section)
+	{
+		SB_EvidencePhotos->AddChild(Section);
+	}
+}
+
+void UBalhwajeomTabletPersonFolderWidget::HandleCloseClicked()
+{
+	OnBackRequested.Broadcast();
+}
+
 #if WITH_EDITOR
 void UBalhwajeomTabletWidget::InitializeForAutomatedTest()
 {
@@ -135,6 +186,13 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 	if (BTN_FolderClose)
 	{
 		BTN_FolderClose->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBackClicked);
+	}
+	if (WBP_PersonFolder)
+	{
+		WBP_PersonFolder->OnBackRequested.AddUniqueDynamic(this, &ThisClass::HandleBackClicked);
+		WBP_PersonFolder->SetFolderHeader(
+			NSLOCTEXT("Tablet", "DefaultFolderTitle", "여동생"),
+			DefaultFolderIcon);
 	}
 	if (IMG_FolderTitleIcon && DefaultFolderIcon)
 	{
@@ -257,11 +315,12 @@ void UBalhwajeomTabletWidget::RefreshHomeFolders()
 	for (const FCharacterDefinition& Character : Characters)
 	{
 		USizeBox* EntrySize = WidgetTree->ConstructWidget<USizeBox>();
-		EntrySize->SetWidthOverride(170.0f);
-		EntrySize->SetHeightOverride(170.0f);
+		EntrySize->SetWidthOverride(109.0f);
+		EntrySize->SetHeightOverride(100.0f);
+		EntrySize->SetClipping(EWidgetClipping::ClipToBounds);
 		UBalhwajeomTabletFolderButton* Entry =
 			WidgetTree->ConstructWidget<UBalhwajeomTabletFolderButton>();
-		Entry->Configure(Character.CharacterID, Character.FolderName, DefaultFolderIcon);
+		Entry->Configure(Character.CharacterID, Character.FolderName, DefaultFolderIcon, FolderLabelFont);
 		Entry->OnFolderSelected.AddUniqueDynamic(this, &ThisClass::HandleHomeFolderSelected);
 		EntrySize->AddChild(Entry);
 		WB_PersonFolders->AddChild(EntrySize);
@@ -288,8 +347,8 @@ namespace
 	USizeBox* MakeFolderTileSlot(UWidgetTree& WidgetTree, UWidget* Content)
 	{
 		USizeBox* EntrySize = WidgetTree.ConstructWidget<USizeBox>();
-		EntrySize->SetWidthOverride(170.0f);
-		EntrySize->SetHeightOverride(170.0f);
+		EntrySize->SetWidthOverride(109.0f);
+		EntrySize->SetHeightOverride(100.0f);
 		EntrySize->SetClipping(EWidgetClipping::ClipToBounds);
 		EntrySize->AddChild(Content);
 		return EntrySize;
@@ -327,18 +386,34 @@ void UBalhwajeomTabletWidget::RefreshFolderContents()
 			!Character.FolderName.IsEmpty())
 		{
 			FolderName = Character.FolderName;
-			if (TXT_FolderTitle)
-			{
-				TXT_FolderTitle->SetText(FolderName);
-			}
 		}
 	}
 
-	if (!SB_EvidencePhotos || !WidgetTree)
+	if (WBP_PersonFolder)
+	{
+		WBP_PersonFolder->SetFolderHeader(FolderName, DefaultFolderIcon);
+		WBP_PersonFolder->ClearFolderSections();
+	}
+	else
+	{
+		if (TXT_FolderTitle)
+		{
+			TXT_FolderTitle->SetText(FolderName);
+		}
+		if (IMG_FolderTitleIcon && DefaultFolderIcon)
+		{
+			IMG_FolderTitleIcon->SetBrushFromTexture(DefaultFolderIcon, true);
+		}
+		if (SB_EvidencePhotos)
+		{
+			SB_EvidencePhotos->ClearChildren();
+		}
+	}
+
+	if ((!WBP_PersonFolder && !SB_EvidencePhotos) || !WidgetTree)
 	{
 		return;
 	}
-	SB_EvidencePhotos->ClearChildren();
 
 	// Three buckets, in the order the player should see them: the one thing to read (진술서), the
 	// puzzles still needing keywords (분석 문장), then everything already wrapped up (완성 문장).
@@ -394,7 +469,14 @@ void UBalhwajeomTabletWidget::RefreshFolderContents()
 	{
 		if (!Section->IsEmpty())
 		{
-			SB_EvidencePhotos->AddChild(Section);
+			if (WBP_PersonFolder)
+			{
+				WBP_PersonFolder->AddFolderSection(Section);
+			}
+			else
+			{
+				SB_EvidencePhotos->AddChild(Section);
+			}
 		}
 	}
 }
@@ -422,31 +504,8 @@ void UBalhwajeomTabletWidget::OpenPhoto(const FName PhotoID)
 				? Analysis.ResultText : Analysis.SentenceTemplate;
 		}
 	}
-	else if (!Photo.WorldStoryCues.IsEmpty() || !Photo.WorldStoryLines.IsEmpty())
-	{
-		// Timings matter only during the world presentation. The tablet shows the same
-		// authored cue text as one readable block without replaying StoryVoice.
-		TArray<FText> StoryLines;
-		if (!Photo.WorldStoryCues.IsEmpty())
-		{
-			StoryLines.Reserve(Photo.WorldStoryCues.Num());
-			for (const FPhotoStoryCue& Cue : Photo.WorldStoryCues)
-			{
-				if (!Cue.Text.IsEmpty())
-				{
-					StoryLines.Add(Cue.Text);
-				}
-			}
-		}
-		else
-		{
-			StoryLines = Photo.WorldStoryLines;
-		}
-		const FText StoryText = FText::Join(FText::FromString(TEXT("\n")), StoryLines);
-		Body = Body.IsEmpty()
-			? StoryText
-			: FText::Format(NSLOCTEXT("Tablet", "PhotoDescriptionAndStory", "{0}\n\n{1}"), Body, StoryText);
-	}
+	// WorldStoryCues/WorldStoryLines are the timed captions shown during the in-world capture
+	// presentation only (see APhotoWorldStoryActor); the tablet never repeats that text.
 	ShowPopup(Photo.PhotoName, Body, GetOrLoadCapturedPhotoTexture(PhotoID));
 	ActivePhotoID = PhotoID;
 	if (BTN_PlayStoryVoice)
@@ -480,6 +539,10 @@ void UBalhwajeomTabletWidget::HidePuzzleControls()
 		WB_SentenceBuilder->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	ActiveBlanksBySlot.Reset();
+	if (TXT_PuzzlePhotoLabel)
+	{
+		TXT_PuzzlePhotoLabel->SetVisibility(ESlateVisibility::Collapsed);
+	}
 	if (WB_PuzzlePhotos)
 	{
 		WB_PuzzlePhotos->ClearChildren();
@@ -560,6 +623,10 @@ void UBalhwajeomTabletWidget::RefreshPuzzleControls()
 	// sentence is already solved -- a photo that's merely captured isn't valid evidence yet.
 	if (WB_PuzzlePhotos && WidgetTree && !Sentence.PhotoSlots.IsEmpty())
 	{
+		if (TXT_PuzzlePhotoLabel)
+		{
+			TXT_PuzzlePhotoLabel->SetVisibility(ESlateVisibility::Visible);
+		}
 		TArray<FCapturedPhotoRecord> CapturedPhotoRecords;
 		Investigation->GetCapturedPhotos(CapturedPhotoRecords);
 		bool bAnyEligiblePhoto = false;
@@ -1061,7 +1128,8 @@ void UBalhwajeomTabletPhotoButton::HandleClicked()
 void UBalhwajeomTabletFolderButton::Configure(
 	const FName InCharacterID,
 	const FText& InLabel,
-	UTexture2D* IconTexture)
+	UTexture2D* IconTexture,
+	const FSlateFontInfo& InLabelFont)
 {
 	CharacterID = InCharacterID;
 	OnClicked.AddUniqueDynamic(this, &ThisClass::HandleClicked);
@@ -1072,8 +1140,8 @@ void UBalhwajeomTabletFolderButton::Configure(
 	if (IconTexture)
 	{
 		USizeBox* IconBox = NewObject<USizeBox>(this);
-		IconBox->SetWidthOverride(140.0f);
-		IconBox->SetHeightOverride(112.0f);
+		IconBox->SetWidthOverride(64.0f);
+		IconBox->SetHeightOverride(60.0f);
 
 		UImage* Icon = NewObject<UImage>(this);
 		Icon->SetBrushFromTexture(IconTexture, true);
@@ -1090,8 +1158,15 @@ void UBalhwajeomTabletFolderButton::Configure(
 	Label->SetAutoWrapText(false);
 	Label->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
 	Label->SetColorAndOpacity(FSlateColor(FLinearColor(0.96f, 0.91f, 0.82f, 1.0f)));
-	FSlateFontInfo Font = Label->GetFont();
-	Font.Size = 25;
+	FSlateFontInfo Font = InLabelFont;
+	if (!Font.FontObject)
+	{
+		Font = Label->GetFont();
+	}
+	if (Font.Size <= 0)
+	{
+		Font.Size = 18;
+	}
 	Label->SetFont(Font);
 	UVerticalBoxSlot* LabelSlot = Layout->AddChildToVerticalBox(Label);
 	LabelSlot->SetHorizontalAlignment(HAlign_Fill);

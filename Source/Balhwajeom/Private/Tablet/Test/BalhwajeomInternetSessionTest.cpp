@@ -50,9 +50,9 @@ bool FBalhwajeomInternetSessionTest::RunTest(const FString& Parameters)
 
 	State.SetNormalWindowPosition(FVector2D(-50.0f, 900.0f));
 	TestEqual(
-		TEXT("Normal window remains fully inside the tablet"),
+		TEXT("Fixed window position stays at the tablet origin"),
 		State.GetNormalWindowPosition(),
-		FVector2D(0.0f, 230.0f));
+		FVector2D::ZeroVector);
 
 	TestEqual(
 		TEXT("News page title is stable"),
@@ -86,7 +86,7 @@ bool FBalhwajeomInternetSessionTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Internet controller maximizes"), InternetWidget->IsMaximized());
 	InternetWidget->PrepareForDesktopOpen();
 	TestFalse(TEXT("Desktop reopen restores normal mode"), InternetWidget->IsMaximized());
-	TestEqual(TEXT("Desktop reopen keeps normal position"), InternetWidget->GetNormalWindowPosition(), FVector2D(90.0f, 70.0f));
+	TestEqual(TEXT("Desktop reopen keeps the fixed window at the origin"), InternetWidget->GetNormalWindowPosition(), FVector2D::ZeroVector);
 	TestEqual(TEXT("Desktop reopen keeps open tabs"), InternetWidget->GetOpenTabCount(), 2);
 	TestTrue(TEXT("News1 closes through the controller"), InternetWidget->ClosePage(EBalhwajeomInternetPage::News1));
 	TestEqual(TEXT("Controller returns to Main"), InternetWidget->GetActivePage(), EBalhwajeomInternetPage::Main);

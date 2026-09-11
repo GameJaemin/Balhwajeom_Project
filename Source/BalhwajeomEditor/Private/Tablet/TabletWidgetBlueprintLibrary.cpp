@@ -78,6 +78,9 @@ namespace TabletDesigner
 	const TCHAR* InternetClassPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_Internet.WBP_Internet_C");
 	const TCHAR* InternetTabAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetTab.WBP_InternetTab");
 	const TCHAR* InternetKeywordAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetKeyword.WBP_InternetKeyword");
+	const TCHAR* PersonFolderAssetName = TEXT("WBP_TabletPersonFolder");
+	const TCHAR* PersonFolderAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletPersonFolder.WBP_TabletPersonFolder");
+	const TCHAR* PersonFolderClassPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletPersonFolder.WBP_TabletPersonFolder_C");
 
 	const TCHAR* TabletBodyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Tablet_Body.Tablet_Body");
 	const TCHAR* FamilyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Family.Family");
@@ -444,7 +447,14 @@ namespace TabletDesigner
 
 		UCanvasPanel* BuildPersonFolderPage() const
 		{
-			UCanvasPanel* Page = MakePageBase(TEXT("Page_PersonFolder"));
+			UCanvasPanel* Page = Make<UCanvasPanel>(TEXT("Page_PersonFolder"));
+			if (UClass* PersonFolderClass = LoadClass<UUserWidget>(nullptr, PersonFolderClassPath))
+			{
+				FillCanvas(Page, MakeUserWidget(PersonFolderClass, TEXT("WBP_PersonFolder"), true));
+				return Page;
+			}
+
+			FillCanvas(Page, MakeColorImage(TEXT("IMG_Page_PersonFolderBackground"), PageBackground));
 			// Windows-Explorer-style title bar: small folder icon + name on the left, a single
 			// "x" close button on the right. No address/search bar (decoration only, per direction).
 			UImage* FolderTitleIcon = Make<UImage>(TEXT("IMG_FolderTitleIcon"), true);
@@ -468,6 +478,34 @@ namespace TabletDesigner
 
 			Place(Page, RecordArea, 120, 220, 1200, 750, 5);
 			return Page;
+		}
+
+		void BuildPersonFolderWidget() const
+		{
+			UScaleBox* Scale = Make<UScaleBox>(TEXT("ScaleBox_Wrapper"));
+			Scale->SetStretch(EStretch::ScaleToFit);
+			USizeBox* Size = Make<USizeBox>(TEXT("SizeBox_Wrapper"));
+			Size->SetWidthOverride(1440.0f);
+			Size->SetHeightOverride(1080.0f);
+			Scale->SetContent(Size);
+
+			UCanvasPanel* Page = Make<UCanvasPanel>(TEXT("Canvas_PersonFolderRoot"));
+			Size->SetContent(Page);
+			FillCanvas(Page, MakeColorImage(TEXT("IMG_Page_PersonFolderBackground"), PageBackground));
+
+			UImage* FolderTitleIcon = Make<UImage>(TEXT("IMG_FolderTitleIcon"), true);
+			Place(Page, FolderTitleIcon, 40, 88, 48, 48, 5);
+			Place(Page, MakeText(TEXT("TXT_FolderTitle"), TEXT("여동생"), 30, WarmWhite, true), 100, 86, 500, 52, 5);
+			Place(Page, MakeTextButton(TEXT("BTN_FolderClose"), TEXT("×"), 36), 1320, 78, 58, 58, 5);
+
+			UBorder* RecordArea = MakeBorder(TEXT("BRD_FolderRecordArea"), PagePanel, FMargin(28.0f));
+			UCanvasPanel* Records = Make<UCanvasPanel>(TEXT("Canvas_FolderRecords"));
+			RecordArea->SetContent(Records);
+			UScrollBox* PhotoScroll = Make<UScrollBox>(TEXT("SB_EvidencePhotos"), true);
+			Place(Records, PhotoScroll, 18, 20, 1144, 700);
+			Place(Page, RecordArea, 120, 220, 1200, 750, 5);
+
+			Tree->RootWidget = Scale;
 		}
 
 		UCanvasPanel* BuildAppPage(
@@ -1749,6 +1787,63 @@ bool UTabletWidgetBlueprintLibrary::InstallInternetBrowser()
 	return bSaved;
 }
 
+bool UTabletWidgetBlueprintLibrary::InstallTabletPersonFolderWidget()
+{
+	using namespace TabletDesigner;
+	if (!BuildWidgetBlueprint(
+		PersonFolderAssetName,
+		PersonFolderAssetPath,
+		UBalhwajeomTabletPersonFolderWidget::StaticClass(),
+		false,
+		[](const FBuilder& Builder) { Builder.BuildPersonFolderWidget(); }))
+	{
+		return false;
+	}
+
+	UWidgetBlueprint* TabletBlueprint = LoadObject<UWidgetBlueprint>(nullptr, AssetPath);
+	UCanvasPanel* FolderPage = TabletBlueprint && TabletBlueprint->WidgetTree
+		? Cast<UCanvasPanel>(TabletBlueprint->WidgetTree->FindWidget(TEXT("Page_PersonFolder")))
+		: nullptr;
+	UClass* PersonFolderClass = LoadClass<UUserWidget>(nullptr, PersonFolderClassPath);
+	if (!TabletBlueprint || !FolderPage || !PersonFolderClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PERSON_FOLDER_INSTALL could not resolve WBP_Tablet's Page_PersonFolder."));
+		return false;
+	}
+
+	if (FolderPage->GetChildrenCount() == 1)
+	{
+		if (UWidget* Existing = FolderPage->GetChildAt(0); Existing && Existing->IsA(PersonFolderClass))
+		{
+			const bool bSaved = SaveAndCompile(TabletBlueprint);
+			UE_LOG(LogTemp, Display, TEXT("PERSON_FOLDER_INSTALL Result=%s AlreadyEmbedded=true"),
+				bSaved ? TEXT("Success") : TEXT("Failure"));
+			return bSaved;
+		}
+	}
+
+	while (FolderPage->GetChildrenCount() > 0)
+	{
+		DiscardWidgetSubtree(TabletBlueprint, FolderPage->GetChildAt(0));
+	}
+
+	UUserWidget* PersonFolder = FBuilder(TabletBlueprint).MakeUserWidget(
+		PersonFolderClass,
+		TEXT("WBP_PersonFolder"),
+		true);
+	if (!PersonFolder)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PERSON_FOLDER_INSTALL could not construct WBP_PersonFolder."));
+		return false;
+	}
+	FBuilder(TabletBlueprint).FillCanvas(FolderPage, PersonFolder);
+
+	const bool bSaved = SaveAndCompile(TabletBlueprint);
+	UE_LOG(LogTemp, Display, TEXT("PERSON_FOLDER_INSTALL Result=%s AlreadyEmbedded=false"),
+		bSaved ? TEXT("Success") : TEXT("Failure"));
+	return bSaved;
+}
+
 bool UTabletWidgetBlueprintLibrary::UpdateMessengerTimeline()
 {
 	using namespace TabletDesigner;
@@ -2018,16 +2113,34 @@ bool UTabletWidgetBlueprintLibrary::WrapRootInScaleBox(
 	}
 
 	UWidget* ExistingRoot = Blueprint->WidgetTree->RootWidget;
-	if (Cast<UScaleBox>(ExistingRoot))
+	if (UScaleBox* ExistingScale = Cast<UScaleBox>(ExistingRoot))
 	{
-		UE_LOG(LogTemp, Display, TEXT("WRAP_ROOT_SCALEBOX Result=Skipped Asset=%s (root is already a ScaleBox)"), *AssetPath);
-		return true;
+		// Older versions of this helper constructed wrapper widgets directly and therefore
+		// did not register their Widget Blueprint GUIDs. Register them before recompiling.
+		if (!Blueprint->WidgetVariableNameToGuidMap.Contains(ExistingScale->GetFName()))
+		{
+			Blueprint->OnVariableAdded(ExistingScale->GetFName());
+		}
+		if (UWidget* ExistingChild = ExistingScale->GetContent())
+		{
+			if (!Blueprint->WidgetVariableNameToGuidMap.Contains(ExistingChild->GetFName()))
+			{
+				Blueprint->OnVariableAdded(ExistingChild->GetFName());
+			}
+		}
+		using namespace TabletDesigner;
+		const bool bSaved = SaveAndCompile(Blueprint);
+		UE_LOG(LogTemp, Display, TEXT("WRAP_ROOT_SCALEBOX Result=%s Asset=%s AlreadyWrapped=true"),
+			bSaved ? TEXT("Success") : TEXT("Failure"), *AssetPath);
+		return bSaved;
 	}
 
 	UScaleBox* Scale = Blueprint->WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("ScaleBox_Wrapper"));
+	Blueprint->OnVariableAdded(Scale->GetFName());
 	Scale->SetStretch(EStretch::ScaleToFit);
 
 	USizeBox* Size = Blueprint->WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("SizeBox_Wrapper"));
+	Blueprint->OnVariableAdded(Size->GetFName());
 	Size->SetWidthOverride(DesignWidth);
 	Size->SetHeightOverride(DesignHeight);
 
@@ -2215,7 +2328,13 @@ bool UTabletWidgetBlueprintLibrary::CreateTabletWidgetBlueprint()
 	using namespace TabletDesigner;
 	if (!CreateMessengerDataAssetsInternal()
 		|| !BuildMessengerWidgetBlueprints(false)
-		|| !BuildInternetWidgetBlueprints(false))
+		|| !BuildInternetWidgetBlueprints(false)
+		|| !BuildWidgetBlueprint(
+			PersonFolderAssetName,
+			PersonFolderAssetPath,
+			UBalhwajeomTabletPersonFolderWidget::StaticClass(),
+			false,
+			[](const FBuilder& Builder) { Builder.BuildPersonFolderWidget(); }))
 	{
 		return false;
 	}
@@ -2243,7 +2362,13 @@ bool UTabletWidgetBlueprintLibrary::RedesignTabletWidgetBlueprint()
 	using namespace TabletDesigner;
 	if (!CreateMessengerDataAssetsInternal()
 		|| !BuildMessengerWidgetBlueprints(true)
-		|| !BuildInternetWidgetBlueprints(true))
+		|| !BuildInternetWidgetBlueprints(true)
+		|| !BuildWidgetBlueprint(
+			PersonFolderAssetName,
+			PersonFolderAssetPath,
+			UBalhwajeomTabletPersonFolderWidget::StaticClass(),
+			false,
+			[](const FBuilder& Builder) { Builder.BuildPersonFolderWidget(); }))
 	{
 		UE_LOG(LogTemp, Error, TEXT("Tablet child widget blueprints could not be generated."));
 		return false;
@@ -2278,21 +2403,29 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 	}
 	Tablet->InitializeForAutomatedTest();
 
-	auto FindButton = [Tablet](const TCHAR* Name)
-	{
-		return Cast<UButton>(Tablet->GetWidgetFromName(Name));
-	};
-	auto FindBorder = [Tablet](const TCHAR* Name)
-	{
-		return Cast<UBorder>(Tablet->GetWidgetFromName(Name));
-	};
-	auto FindText = [Tablet](const TCHAR* Name)
-	{
-		return Cast<UTextBlock>(Tablet->GetWidgetFromName(Name));
-	};
 	auto FindWidget = [Tablet](const TCHAR* Name)
 	{
-		return Tablet->GetWidgetFromName(Name);
+		if (UWidget* Widget = Tablet->GetWidgetFromName(Name))
+		{
+			return Widget;
+		}
+		if (UUserWidget* PersonFolder = Cast<UUserWidget>(Tablet->GetWidgetFromName(TEXT("WBP_PersonFolder"))))
+		{
+			return PersonFolder->GetWidgetFromName(Name);
+		}
+		return static_cast<UWidget*>(nullptr);
+	};
+	auto FindButton = [&FindWidget](const TCHAR* Name)
+	{
+		return Cast<UButton>(FindWidget(Name));
+	};
+	auto FindBorder = [&FindWidget](const TCHAR* Name)
+	{
+		return Cast<UBorder>(FindWidget(Name));
+	};
+	auto FindText = [&FindWidget](const TCHAR* Name)
+	{
+		return Cast<UTextBlock>(FindWidget(Name));
 	};
 	auto Click = [&FindButton](const TCHAR* Name)
 	{
@@ -2381,8 +2514,8 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 		bPassed &= Require(Internet->GetOpenTabCount() == 2, TEXT("Internet X preserves tabs"));
 		bPassed &= Require(!Internet->IsMaximized(), TEXT("Internet X restores normal mode"));
 		bPassed &= Require(
-			Internet->GetNormalWindowPosition().Equals(FVector2D(80, 60)),
-			TEXT("Internet X preserves normal position"));
+			Internet->GetNormalWindowPosition().IsNearlyZero(),
+			TEXT("fixed Internet window remains at the tablet origin"));
 		bPassed &= Require(Click(TEXT("BTN_Internet")), TEXT("Internet reopens from desktop"));
 		bPassed &= Require(
 			Internet->GetActivePage() == EBalhwajeomInternetPage::News1,
