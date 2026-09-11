@@ -64,12 +64,20 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture")
 	FName PhotoID = NAME_None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture", meta = (ClampMin = "1.0"))
+	/** Added to the photo camera's global minimum focus/capture distance. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture|Focus", meta = (Units = "cm"))
+	float MinimumFocusDistanceOffset = 0.0f;
+
+	/** Added to the photo camera's global maximum focus/capture distance. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture|Focus", meta = (Units = "cm"))
+	float MaximumFocusDistanceOffset = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture|Legacy", meta = (ClampMin = "1.0", DeprecatedProperty, DeprecationMessage = "Focus distance is now owned by the photo camera. Use MinimumFocusDistanceOffset and MaximumFocusDistanceOffset for per-state variation."))
 	float PreferredFocusDistance = 700.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture|Legacy", meta = (ClampMin = "0.0", DeprecatedProperty, DeprecationMessage = "Focus distance is now owned by the photo camera. Use MinimumFocusDistanceOffset and MaximumFocusDistanceOffset for per-state variation."))
 	float FocusDistanceTolerance = 300.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture|Legacy", meta = (DeprecatedProperty, DeprecationMessage = "Zoom no longer changes focus or capture distance."))
 	bool bScaleFocusDistanceWithZoom = true;
 };
