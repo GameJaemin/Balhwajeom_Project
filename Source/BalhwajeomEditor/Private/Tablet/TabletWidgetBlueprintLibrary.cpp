@@ -455,23 +455,17 @@ namespace TabletDesigner
 			UCanvasPanel* Records = Make<UCanvasPanel>(TEXT("Canvas_FolderRecords"));
 			RecordArea->SetContent(Records);
 
-			// Photos scroll across the top; the statement tile is pinned in its own slot at the
-			// bottom-center, separate from the photo grid (both ~170x170, like a home-page folder
-			// icon -- see UBalhwajeomTabletWidget::RefreshFolderContents). Acquired keywords are no
+			// SB_EvidencePhotos starts empty -- UBalhwajeomTabletWidget::RefreshFolderContents()
+			// clears and repopulates it every time a folder opens, adding up to three
+			// UBalhwajeomTabletFolderSection children (진술서/분석 문장/완성 문장), each a collapsible
+			// group (like Explorer's date groups) holding that bucket's ~170x170 file tiles. The
+			// statement is one such tile now, not a separate pinned slot. Acquired keywords are no
 			// longer shown here at all times; they only appear inside the popup once a photo or the
 			// statement is actually opened (see BuildPopup's WB_PuzzleWords).
-			UScrollBox* PhotoScroll = Make<UScrollBox>(TEXT("SB_EvidencePhotos"));
-			UWrapBox* PhotoWrap = Make<UWrapBox>(TEXT("WB_EvidencePhotos"), true);
-			PhotoWrap->SetInnerSlotPadding(FVector2D(12.0f, 12.0f));
-			PhotoScroll->AddChild(PhotoWrap);
-			Place(Records, PhotoScroll, 18, 20, 1144, 200);
+			UScrollBox* PhotoScroll = Make<UScrollBox>(TEXT("SB_EvidencePhotos"), true);
+			Place(Records, PhotoScroll, 18, 20, 1144, 700);
 
-			USizeBox* StatementSlot = Make<USizeBox>(TEXT("SB_StatementTile"), true);
-			StatementSlot->SetWidthOverride(170.0f);
-			StatementSlot->SetHeightOverride(170.0f);
-			Place(Records, StatementSlot, 505, 250, 170, 170);
-
-			Place(Page, RecordArea, 120, 220, 1200, 470, 5);
+			Place(Page, RecordArea, 120, 220, 1200, 750, 5);
 			return Page;
 		}
 
@@ -2079,6 +2073,142 @@ bool UTabletWidgetBlueprintLibrary::SetCanvasSlotGeometry(
 	return bSaved;
 }
 
+bool UTabletWidgetBlueprintLibrary::SetSizeBoxOverride(
+	const FString& AssetPath, const FString& WidgetName, const float Width, const float Height)
+{
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetSizeBoxOverride failed: %s could not be loaded."), *AssetPath);
+		return false;
+	}
+
+	USizeBox* Target = Cast<USizeBox>(Blueprint->WidgetTree->FindWidget(FName(*WidgetName)));
+	if (!Target)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetSizeBoxOverride failed: %s has no SizeBox named %s."),
+			*AssetPath, *WidgetName);
+		return false;
+	}
+
+	Target->SetWidthOverride(Width);
+	Target->SetHeightOverride(Height);
+
+	using namespace TabletDesigner;
+	const bool bSaved = SaveAndCompile(Blueprint);
+	UE_LOG(LogTemp, Display, TEXT("SET_SIZEBOX_OVERRIDE Result=%s Asset=%s Widget=%s Size=(%.0f,%.0f)"),
+		bSaved ? TEXT("Success") : TEXT("Failure"), *AssetPath, *WidgetName, Width, Height);
+	return bSaved;
+}
+
+bool UTabletWidgetBlueprintLibrary::AddTextButtonToCanvas(
+	const FString& AssetPath, const FString& ParentCanvasName, const FString& ButtonName,
+	const FString& Label, const float X, const float Y, const float Width, const float Height, const int32 FontSize)
+{
+	using namespace TabletDesigner;
+
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("AddTextButtonToCanvas failed: %s could not be loaded."), *AssetPath);
+		return false;
+	}
+
+	if (Blueprint->WidgetTree->FindWidget(FName(*ButtonName)))
+	{
+		UE_LOG(LogTemp, Display, TEXT("ADD_TEXT_BUTTON Result=Skipped Asset=%s (widget %s already exists)"),
+			*AssetPath, *ButtonName);
+		return true;
+	}
+
+	UCanvasPanel* ParentCanvas = Cast<UCanvasPanel>(Blueprint->WidgetTree->FindWidget(FName(*ParentCanvasName)));
+	if (!ParentCanvas)
+	{
+		UE_LOG(LogTemp, Error, TEXT("AddTextButtonToCanvas failed: %s has no CanvasPanel named %s."),
+			*AssetPath, *ParentCanvasName);
+		return false;
+	}
+
+	// Matches BTN_PopupClose/BTN_StatementSubmit's existing style: fully transparent button
+	// background (the popup panel behind it already supplies the fill color), warm-white text.
+	UButton* Button = Blueprint->WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), FName(*ButtonName));
+	Button->bIsVariable = true;
+	Blueprint->OnVariableAdded(Button->GetFName());
+	FSlateBrush InvisibleBrush;
+	InvisibleBrush.DrawAs = ESlateBrushDrawType::NoDrawType;
+	FButtonStyle Style;
+	Style.SetNormal(InvisibleBrush);
+	Style.SetHovered(InvisibleBrush);
+	Style.SetPressed(InvisibleBrush);
+	Style.SetDisabled(InvisibleBrush);
+	Style.SetNormalForeground(FSlateColor(WarmWhite));
+	Style.SetHoveredForeground(FSlateColor(FLinearColor::White));
+	Style.SetPressedForeground(FSlateColor(FLinearColor(0.72f, 0.68f, 0.62f, 1.0f)));
+	Style.SetNormalPadding(FMargin(0.0f));
+	Style.SetPressedPadding(FMargin(2.0f));
+	Button->SetStyle(Style);
+
+	UTextBlock* Text = Blueprint->WidgetTree->ConstructWidget<UTextBlock>(
+		UTextBlock::StaticClass(), FName(*(TEXT("TXT_") + ButtonName)));
+	// Every new widget needs an entry in WidgetVariableNameToGuidMap, not just bIsVariable ones
+	// (mirrors FBuilder::Make<T>) -- otherwise the compiler's ensure fires (harmlessly self-healed,
+	// but avoidable).
+	Blueprint->OnVariableAdded(Text->GetFName());
+	Text->SetText(FText::FromString(Label));
+	Text->SetColorAndOpacity(FSlateColor::UseForeground());
+	Text->SetShadowOffset(FVector2D(1.0f, 1.0f));
+	Text->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f));
+	FSlateFontInfo Font = Text->GetFont();
+	Font.Size = FontSize;
+	Text->SetFont(Font);
+	Text->SetJustification(ETextJustify::Center);
+	Button->SetContent(Text);
+
+	UCanvasPanelSlot* Slot = ParentCanvas->AddChildToCanvas(Button);
+	Slot->SetPosition(FVector2D(X, Y));
+	Slot->SetSize(FVector2D(Width, Height));
+
+	const bool bSaved = SaveAndCompile(Blueprint);
+	UE_LOG(LogTemp, Display, TEXT("ADD_TEXT_BUTTON Result=%s Asset=%s Button=%s Parent=%s Position=(%.0f,%.0f) Size=(%.0f,%.0f)"),
+		bSaved ? TEXT("Success") : TEXT("Failure"), *AssetPath, *ButtonName, *ParentCanvasName, X, Y, Width, Height);
+	return bSaved;
+}
+
+bool UTabletWidgetBlueprintLibrary::SetClassDefaultTexture(
+	const FString& AssetPath, const FString& PropertyName, const FString& TexturePath)
+{
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+	if (!Blueprint || !Blueprint->GeneratedClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetClassDefaultTexture failed: %s could not be loaded."), *AssetPath);
+		return false;
+	}
+
+	UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, *TexturePath);
+	if (!Texture)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetClassDefaultTexture failed: could not load texture %s."), *TexturePath);
+		return false;
+	}
+
+	UObject* DefaultObject = Blueprint->GeneratedClass->GetDefaultObject();
+	FObjectProperty* Property = CastField<FObjectProperty>(
+		Blueprint->GeneratedClass->FindPropertyByName(FName(*PropertyName)));
+	if (!DefaultObject || !Property || !Property->PropertyClass->IsChildOf(UTexture2D::StaticClass()))
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetClassDefaultTexture failed: %s has no UTexture2D property named %s."),
+			*AssetPath, *PropertyName);
+		return false;
+	}
+	Property->SetObjectPropertyValue_InContainer(DefaultObject, Texture);
+
+	using namespace TabletDesigner;
+	const bool bSaved = SaveAndCompile(Blueprint);
+	UE_LOG(LogTemp, Display, TEXT("SET_CLASS_DEFAULT_TEXTURE Result=%s Asset=%s Property=%s Texture=%s"),
+		bSaved ? TEXT("Success") : TEXT("Failure"), *AssetPath, *PropertyName, *TexturePath);
+	return bSaved;
+}
+
 bool UTabletWidgetBlueprintLibrary::CreateTabletWidgetBlueprint()
 {
 	using namespace TabletDesigner;
@@ -2449,10 +2579,8 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 		UE_LOG(LogTemp, Display, TEXT("TABLET_SMOKE: no GameInstance in this harness; ")
 			TEXT("skipping DT_Characters-driven folder navigation checks (validate in PIE instead)."));
 	}
-	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_EvidencePhotos"))) != nullptr,
-		TEXT("dynamic evidence photo list exists"));
-	bPassed &= Require(Cast<USizeBox>(FindWidget(TEXT("SB_StatementTile"))) != nullptr,
-		TEXT("statement tile slot exists"));
+	bPassed &= Require(Cast<UScrollBox>(FindWidget(TEXT("SB_EvidencePhotos"))) != nullptr,
+		TEXT("folder file list container exists"));
 	// Acquired keywords are shown inside the popup (WB_PuzzleWords) once a photo or the statement
 	// opens, not as a standing list on the folder page -- see UBalhwajeomTabletWidget::ShowPopup.
 	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_PuzzleWords"))) != nullptr,

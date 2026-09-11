@@ -2,8 +2,12 @@
 
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/ButtonSlot.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
 #include "Components/Overlay.h"
+#include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
@@ -19,6 +23,8 @@
 #include "Tablet/BalhwajeomInternetWidget.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Engine/GameInstance.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 
 namespace
 {
@@ -150,6 +156,10 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 	{
 		BTN_PopupClose->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePopupCloseClicked);
 	}
+	if (BTN_PlayStoryVoice)
+	{
+		BTN_PlayStoryVoice->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePlayStoryVoiceClicked);
+	}
 	if (BTN_StatementSubmit) BTN_StatementSubmit->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleStatementSubmitClicked);
 	if (WBP_Messenger)
 	{
@@ -271,15 +281,31 @@ UBalhwajeomInvestigationSubsystem* UBalhwajeomTabletWidget::GetInvestigationSubs
 	return GameInstance ? GameInstance->GetSubsystem<UBalhwajeomInvestigationSubsystem>() : nullptr;
 }
 
+namespace
+{
+	/** Wraps a runtime-created file tile at the shared ~170x170 size, clipped so a long label's
+	 * ellipsis-truncated text can never visually spill into the neighboring tile. */
+	USizeBox* MakeFolderTileSlot(UWidgetTree& WidgetTree, UWidget* Content)
+	{
+		USizeBox* EntrySize = WidgetTree.ConstructWidget<USizeBox>();
+		EntrySize->SetWidthOverride(170.0f);
+		EntrySize->SetHeightOverride(170.0f);
+		EntrySize->SetClipping(EWidgetClipping::ClipToBounds);
+		EntrySize->AddChild(Content);
+		return EntrySize;
+	}
+}
+
 void UBalhwajeomTabletWidget::RefreshFolderContents()
 {
 	VisiblePhotoIDs.Reset();
 	VisibleStatementIDs.Reset();
 	FText FolderName;
 	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+
+	TArray<FPhotoDefinition> Photos;
 	if (Investigation)
 	{
-		TArray<FPhotoDefinition> Photos;
 		Investigation->GetPhotosForCharacter(GetActiveCharacterID(), Photos);
 		for (const FPhotoDefinition& Photo : Photos)
 		{
@@ -308,53 +334,67 @@ void UBalhwajeomTabletWidget::RefreshFolderContents()
 		}
 	}
 
-	// The statement is its own tile, separate from the scrolling photo grid, pinned at the
-	// bottom-center of the folder window (one statement per folder, for now).
-	if (SB_StatementTile && WidgetTree)
+	if (!SB_EvidencePhotos || !WidgetTree)
 	{
-		if (Investigation && VisibleStatementIDs.IsValidIndex(0))
-		{
-			const FName StatementID = VisibleStatementIDs[0];
-			const FText Label = FText::Format(
-				NSLOCTEXT("Tablet", "DynamicStatementFileLabel", "{0} 진술서"),
-				FolderName);
+		return;
+	}
+	SB_EvidencePhotos->ClearChildren();
 
-			UBalhwajeomTabletPhotoButton* Entry =
-				WidgetTree->ConstructWidget<UBalhwajeomTabletPhotoButton>();
-			Entry->Configure(StatementID, Label);
-			Entry->OnPhotoSelected.AddUniqueDynamic(this, &ThisClass::HandleStatementTileSelected);
-			SB_StatementTile->SetContent(Entry);
-			SB_StatementTile->SetVisibility(ESlateVisibility::Visible);
-		}
-		else
-		{
-			SB_StatementTile->SetContent(nullptr);
-			SB_StatementTile->SetVisibility(ESlateVisibility::Collapsed);
-		}
+	// Three buckets, in the order the player should see them: the one thing to read (진술서), the
+	// puzzles still needing keywords (분석 문장), then everything already wrapped up (완성 문장).
+	UBalhwajeomTabletFolderSection* StatementSection = Cast<UBalhwajeomTabletFolderSection>(
+		UUserWidget::CreateWidgetInstance(*WidgetTree, UBalhwajeomTabletFolderSection::StaticClass(), NAME_None));
+	UBalhwajeomTabletFolderSection* NeedsAnalysisSection = Cast<UBalhwajeomTabletFolderSection>(
+		UUserWidget::CreateWidgetInstance(*WidgetTree, UBalhwajeomTabletFolderSection::StaticClass(), NAME_None));
+	UBalhwajeomTabletFolderSection* CompletedSection = Cast<UBalhwajeomTabletFolderSection>(
+		UUserWidget::CreateWidgetInstance(*WidgetTree, UBalhwajeomTabletFolderSection::StaticClass(), NAME_None));
+	if (!StatementSection || !NeedsAnalysisSection || !CompletedSection)
+	{
+		return;
+	}
+	StatementSection->Configure(NSLOCTEXT("Tablet", "FolderSectionStatement", "진술서"));
+	NeedsAnalysisSection->Configure(NSLOCTEXT("Tablet", "FolderSectionNeedsAnalysis", "분석 문장"));
+	CompletedSection->Configure(NSLOCTEXT("Tablet", "FolderSectionCompleted", "완성 문장"));
+
+	if (Investigation && VisibleStatementIDs.IsValidIndex(0))
+	{
+		const FName StatementID = VisibleStatementIDs[0];
+		const FText Label = FText::Format(
+			NSLOCTEXT("Tablet", "DynamicStatementFileLabel", "{0} 진술서"), FolderName);
+
+		UBalhwajeomTabletPhotoButton* Entry =
+			WidgetTree->ConstructWidget<UBalhwajeomTabletPhotoButton>();
+		Entry->Configure(StatementID, Label, StatementFileIcon);
+		Entry->OnPhotoSelected.AddUniqueDynamic(this, &ThisClass::HandleStatementTileSelected);
+		StatementSection->AddTile(MakeFolderTileSlot(*WidgetTree, Entry));
 	}
 
-	if (WB_EvidencePhotos && WidgetTree)
+	for (const FName PhotoID : VisiblePhotoIDs)
 	{
-		WB_EvidencePhotos->ClearChildren();
-		for (const FName PhotoID : VisiblePhotoIDs)
+		FPhotoDefinition Photo;
+		if (!Investigation || !Investigation->GetPhotoDefinition(PhotoID, Photo))
 		{
-			FPhotoDefinition Photo;
-			if (!Investigation || !Investigation->GetPhotoDefinition(PhotoID, Photo))
-			{
-				continue;
-			}
-			const FText Label = Photo.PhotoName;
+			continue;
+		}
 
-			// ~170x170 to roughly match a home-page folder icon's size.
-			USizeBox* EntrySize = WidgetTree->ConstructWidget<USizeBox>();
-			EntrySize->SetWidthOverride(170.0f);
-			EntrySize->SetHeightOverride(170.0f);
-			UBalhwajeomTabletPhotoButton* Entry =
-				WidgetTree->ConstructWidget<UBalhwajeomTabletPhotoButton>();
-			Entry->Configure(PhotoID, Label, GetOrLoadCapturedPhotoTexture(PhotoID));
-			Entry->OnPhotoSelected.AddUniqueDynamic(this, &ThisClass::HandleFolderPhotoSelected);
-			EntrySize->AddChild(Entry);
-			WB_EvidencePhotos->AddChild(EntrySize);
+		UBalhwajeomTabletPhotoButton* Entry =
+			WidgetTree->ConstructWidget<UBalhwajeomTabletPhotoButton>();
+		Entry->Configure(PhotoID, Photo.PhotoName, GetOrLoadCapturedPhotoTexture(PhotoID));
+		Entry->OnPhotoSelected.AddUniqueDynamic(this, &ThisClass::HandleFolderPhotoSelected);
+		USizeBox* Tile = MakeFolderTileSlot(*WidgetTree, Entry);
+
+		// Completed = no analysis puzzle to begin with, or its puzzle is already solved.
+		// Needs analysis = there's an unsolved keyword puzzle still waiting on this photo.
+		const bool bNeedsAnalysis = !Photo.PhotoSentenceID.IsNone()
+			&& !Investigation->IsSentenceSolved(Photo.PhotoSentenceID);
+		(bNeedsAnalysis ? NeedsAnalysisSection : CompletedSection)->AddTile(Tile);
+	}
+
+	for (UBalhwajeomTabletFolderSection* Section : {StatementSection, NeedsAnalysisSection, CompletedSection})
+	{
+		if (!Section->IsEmpty())
+		{
+			SB_EvidencePhotos->AddChild(Section);
 		}
 	}
 }
@@ -408,6 +448,12 @@ void UBalhwajeomTabletWidget::OpenPhoto(const FName PhotoID)
 			: FText::Format(NSLOCTEXT("Tablet", "PhotoDescriptionAndStory", "{0}\n\n{1}"), Body, StoryText);
 	}
 	ShowPopup(Photo.PhotoName, Body, GetOrLoadCapturedPhotoTexture(PhotoID));
+	ActivePhotoID = PhotoID;
+	if (BTN_PlayStoryVoice)
+	{
+		BTN_PlayStoryVoice->SetVisibility(
+			Photo.StoryVoice.IsNull() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	}
 	if (!Photo.PhotoSentenceID.IsNone() && !Investigation->IsSentenceSolved(Photo.PhotoSentenceID))
 	{
 		PreparePuzzle(Photo.PhotoSentenceID);
@@ -790,6 +836,13 @@ void UBalhwajeomTabletWidget::ValidateActivePuzzle(const bool bExplicitStatement
 void UBalhwajeomTabletWidget::ShowPopup(const FText& Title, const FText& Body, UTexture2D* PhotoTexture)
 {
 	ActiveSentenceID = NAME_None;
+	// Reset here; OpenPhoto re-populates this (and BTN_PlayStoryVoice's visibility) right after this
+	// call for a photo popup. Callers that open a non-photo popup (e.g. the statement) leave both unset.
+	ActivePhotoID = NAME_None;
+	if (BTN_PlayStoryVoice)
+	{
+		BTN_PlayStoryVoice->SetVisibility(ESlateVisibility::Collapsed);
+	}
 	HidePuzzleControls();
 	if (TXT_PopupTitle)
 	{
@@ -1051,6 +1104,105 @@ void UBalhwajeomTabletFolderButton::HandleClicked()
 	if (!CharacterID.IsNone())
 	{
 		OnFolderSelected.Broadcast(CharacterID);
+	}
+}
+
+void UBalhwajeomTabletFolderSection::Configure(const FText& InTitle, const bool bStartExpanded)
+{
+	Title = InTitle;
+	bExpanded = bStartExpanded;
+
+	if (!WidgetTree)
+	{
+		WidgetTree = NewObject<UWidgetTree>(this, TEXT("WidgetTree"));
+	}
+
+	UVerticalBox* Root = WidgetTree->ConstructWidget<UVerticalBox>();
+
+	HeaderButton = WidgetTree->ConstructWidget<UButton>();
+	MakeButtonTransparent(HeaderButton);
+	HeaderButton->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleHeaderClicked);
+
+	UHorizontalBox* HeaderRow = WidgetTree->ConstructWidget<UHorizontalBox>();
+
+	ArrowText = WidgetTree->ConstructWidget<UTextBlock>();
+	FSlateFontInfo ArrowFont = ArrowText->GetFont();
+	ArrowFont.Size = 20;
+	ArrowText->SetFont(ArrowFont);
+	ArrowText->SetColorAndOpacity(FSlateColor(FLinearColor(0.91f, 0.86f, 0.78f, 1.0f)));
+	UHorizontalBoxSlot* ArrowSlot = HeaderRow->AddChildToHorizontalBox(ArrowText);
+	ArrowSlot->SetPadding(FMargin(0.0f, 0.0f, 10.0f, 0.0f));
+	ArrowSlot->SetVerticalAlignment(VAlign_Center);
+
+	TitleText = WidgetTree->ConstructWidget<UTextBlock>();
+	FSlateFontInfo TitleFont = TitleText->GetFont();
+	TitleFont.Size = 22;
+	TitleText->SetFont(TitleFont);
+	TitleText->SetColorAndOpacity(FSlateColor(FLinearColor(0.91f, 0.86f, 0.78f, 1.0f)));
+	UHorizontalBoxSlot* TitleSlot = HeaderRow->AddChildToHorizontalBox(TitleText);
+	TitleSlot->SetVerticalAlignment(VAlign_Center);
+
+	// UButton's content slot defaults to HAlign_Center; without this override the arrow+title
+	// row sits centered across the button's full (section-wide) width instead of hugging the left edge.
+	if (UButtonSlot* HeaderRowSlot = Cast<UButtonSlot>(HeaderButton->SetContent(HeaderRow)))
+	{
+		HeaderRowSlot->SetHorizontalAlignment(HAlign_Left);
+	}
+	UVerticalBoxSlot* HeaderSlot = Root->AddChildToVerticalBox(HeaderButton);
+	HeaderSlot->SetPadding(FMargin(0.0f, 6.0f, 0.0f, 10.0f));
+
+	ContentWrapBox = WidgetTree->ConstructWidget<UWrapBox>();
+	ContentWrapBox->SetInnerSlotPadding(FVector2D(12.0f, 12.0f));
+	UVerticalBoxSlot* ContentSlot = Root->AddChildToVerticalBox(ContentWrapBox);
+	ContentSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 14.0f));
+
+	WidgetTree->RootWidget = Root;
+
+	ContentWrapBox->SetVisibility(bExpanded ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	RefreshHeaderText();
+}
+
+void UBalhwajeomTabletFolderSection::AddTile(UWidget* Tile)
+{
+	if (!ContentWrapBox || !Tile)
+	{
+		return;
+	}
+	ContentWrapBox->AddChild(Tile);
+	++TileCount;
+	RefreshHeaderText();
+}
+
+void UBalhwajeomTabletFolderSection::ClearTiles()
+{
+	if (ContentWrapBox)
+	{
+		ContentWrapBox->ClearChildren();
+	}
+	TileCount = 0;
+	RefreshHeaderText();
+}
+
+void UBalhwajeomTabletFolderSection::HandleHeaderClicked()
+{
+	bExpanded = !bExpanded;
+	if (ContentWrapBox)
+	{
+		ContentWrapBox->SetVisibility(bExpanded ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+	RefreshHeaderText();
+}
+
+void UBalhwajeomTabletFolderSection::RefreshHeaderText()
+{
+	if (ArrowText)
+	{
+		ArrowText->SetText(FText::FromString(bExpanded ? TEXT("\x25BC") : TEXT("\x25B6")));
+	}
+	if (TitleText)
+	{
+		TitleText->SetText(FText::Format(
+			NSLOCTEXT("Tablet", "FolderSectionTitle", "{0} ({1})"), Title, TileCount));
 	}
 }
 
@@ -1378,3 +1530,20 @@ void UBalhwajeomTabletWidget::HandlePopupCloseClicked()
 }
 
 void UBalhwajeomTabletWidget::HandleStatementSubmitClicked() { ValidateActivePuzzle(true); }
+
+void UBalhwajeomTabletWidget::HandlePlayStoryVoiceClicked()
+{
+	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	FPhotoDefinition Photo;
+	if (!Investigation || ActivePhotoID.IsNone() || !Investigation->GetPhotoDefinition(ActivePhotoID, Photo))
+	{
+		return;
+	}
+	// One-shot playback triggered by a click; a synchronous load keeps this simple and is
+	// acceptable here since StoryVoice clips are short narration lines, not streamed music.
+	USoundBase* Voice = Photo.StoryVoice.LoadSynchronous();
+	if (Voice)
+	{
+		UGameplayStatics::PlaySound2D(this, Voice);
+	}
+}

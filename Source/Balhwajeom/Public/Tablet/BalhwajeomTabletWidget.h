@@ -14,6 +14,7 @@ class UBalhwajeomMessengerWidget;
 class UButton;
 class UImage;
 class UOverlay;
+class UScrollBox;
 class USizeBox;
 class UTextBlock;
 class UTexture2D;
@@ -21,6 +22,7 @@ class UWrapBox;
 class UWidgetSwitcher;
 class UWidgetAnimation;
 class UBalhwajeomInvestigationSubsystem;
+class USoundBase;
 
 UENUM(BlueprintType)
 enum class ETabletPage : uint8
@@ -75,6 +77,46 @@ private:
 	void HandleClicked();
 
 	FName CharacterID = NAME_None;
+};
+
+/**
+ * Collapsible group header for the folder page's file list (like Windows Explorer's date groups):
+ * a clickable title row ("{Title} ({Count})" with a ▼/▶ fold arrow) above a WrapBox of file tiles.
+ * Built entirely at runtime; RefreshFolderContents() clears and rebuilds one of these per bucket
+ * (진술서/분석 문장/완성 문장) every time a folder is opened.
+ */
+UCLASS()
+class BALHWAJEOM_API UBalhwajeomTabletFolderSection : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	void Configure(const FText& InTitle, bool bStartExpanded = true);
+	void AddTile(UWidget* Tile);
+	void ClearTiles();
+	bool IsEmpty() const { return TileCount == 0; }
+
+private:
+	UFUNCTION()
+	void HandleHeaderClicked();
+
+	void RefreshHeaderText();
+
+	FText Title;
+	int32 TileCount = 0;
+	bool bExpanded = true;
+
+	UPROPERTY()
+	TObjectPtr<UButton> HeaderButton;
+
+	UPROPERTY()
+	TObjectPtr<UTextBlock> ArrowText;
+
+	UPROPERTY()
+	TObjectPtr<UTextBlock> TitleText;
+
+	UPROPERTY()
+	TObjectPtr<UWrapBox> ContentWrapBox;
 };
 
 /** Drag payload: which acquired keyword is being dragged onto a sentence blank. */
@@ -273,6 +315,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Home")
 	TObjectPtr<UTexture2D> DefaultFolderIcon;
 
+	/** Icon shown on the folder page's 진술서 tile, so it reads as a document like the photo tiles next to it. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Family")
+	TObjectPtr<UTexture2D> StatementFileIcon;
+
 private:
 	void SetTabletPage(ETabletPage NewPage, bool bAddToHistory = true);
 	void NavigateBack();
@@ -358,6 +404,10 @@ private:
 	UFUNCTION()
 	void HandleStatementSubmitClicked();
 
+	/** Bound to BTN_PlayStoryVoice; replays the currently open photo's StoryVoice on demand. */
+	UFUNCTION()
+	void HandlePlayStoryVoiceClicked();
+
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidgetSwitcher> WidgetSwitcher_TabletPage;
 
@@ -386,6 +436,10 @@ private:
 	/** Shows the captured PNG for the photo currently open in the popup. Collapsed for non-photo popups (e.g. the statement). */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UImage> IMG_PopupPhoto;
+
+	/** On-demand narration replay button. Shown only while a photo with a set StoryVoice is open. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BTN_PlayStoryVoice;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> BRD_MessengerBadge;
@@ -419,12 +473,11 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_PhysicalHome;
 
+	/** Folder file list container. RefreshFolderContents() clears it and adds up to three
+	 * UBalhwajeomTabletFolderSection children (진술서/분석 문장/완성 문장), each holding its own tiles --
+	 * replaces the old single flat WB_EvidencePhotos WrapBox + separate SB_StatementTile slot. */
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UWrapBox> WB_EvidencePhotos;
-
-	/** Single-slot container pinned at the bottom-center of the folder window, holding the statement tile. */
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<USizeBox> SB_StatementTile;
+	TObjectPtr<UScrollBox> SB_EvidencePhotos;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_PopupClose;
@@ -457,6 +510,8 @@ private:
 	TArray<ETabletPage> PageHistory;
 	TArray<FName> VisiblePhotoIDs;
 	TArray<FName> VisibleStatementIDs;
+	/** PhotoID currently shown in the popup (NAME_None for the statement popup or when closed); drives BTN_PlayStoryVoice. */
+	FName ActivePhotoID = NAME_None;
 	FName ActiveSentenceID = NAME_None;
 	FSentenceSubmission ActiveSubmission;
 	TArray<FName> AvailablePuzzleWordIDs;
