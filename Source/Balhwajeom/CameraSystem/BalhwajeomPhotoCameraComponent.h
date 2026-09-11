@@ -280,9 +280,14 @@ protected:
         meta = (ClampMin = "10.0", UIMin = "10.0", Units = "cm"))
     float PhotoStoryDisplayDistance = 200.0f;
 
+    /** Normalized viewport width at which the story initially appears. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Photo Story",
+        meta = (ClampMin = "0.05", ClampMax = "0.95", UIMin = "0.05", UIMax = "0.95"))
+    float PhotoStoryScreenXRatio = 0.5f;
+
     /** Normalized viewport height at which the story initially appears. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Photo Story",
-        meta = (ClampMin = "0.5", ClampMax = "0.95", UIMin = "0.5", UIMax = "0.95"))
+        meta = (ClampMin = "0.05", ClampMax = "0.95", UIMin = "0.05", UIMax = "0.95"))
     float PhotoStoryScreenYRatio = 0.72f;
 
     /** Hook for a future SceneCapture/thumbnail record without changing the collection API. */

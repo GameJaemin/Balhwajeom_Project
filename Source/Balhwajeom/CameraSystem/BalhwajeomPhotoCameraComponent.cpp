@@ -1639,7 +1639,7 @@ bool UBalhwajeomPhotoCameraComponent::CalculateStorySpawnTransform(FTransform& O
 	FVector RayOrigin;
 	FVector RayDirection;
 	if (!PlayerController->DeprojectScreenPositionToWorld(
-		ViewportWidth * 0.5f,
+		ViewportWidth * PhotoStoryScreenXRatio,
 		ViewportHeight * PhotoStoryScreenYRatio,
 		RayOrigin,
 		RayDirection))
