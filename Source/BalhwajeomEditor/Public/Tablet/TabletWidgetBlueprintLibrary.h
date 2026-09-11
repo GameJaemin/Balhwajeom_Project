@@ -52,6 +52,25 @@ public:
 	static bool SetCanvasSlotGeometry(
 		const FString& AssetPath, const FString& WidgetName, float X, float Y, float Width, float Height);
 
+	/** Sets a named USizeBox's WidthOverride/HeightOverride. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool SetSizeBoxOverride(
+		const FString& AssetPath, const FString& WidgetName, float Width, float Height);
+
+	/** Adds a new transparent text button (matching the popup's existing BTN_PopupClose/BTN_StatementSubmit
+	 * styling) as a canvas-positioned child of a named CanvasPanel. Structural add only, never a rename --
+	 * safe against the WidgetVariableNameToGuidMap ensure. No-op (returns true) if ButtonName already exists. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool AddTextButtonToCanvas(
+		const FString& AssetPath, const FString& ParentCanvasName, const FString& ButtonName,
+		const FString& Label, float X, float Y, float Width, float Height, int32 FontSize = 22);
+
+	/** Sets a UTexture2D-typed EditDefaultsOnly property on a Widget Blueprint's class default object
+	 * (e.g. DefaultFolderIcon, StatementFileIcon), the same way the Designer's Class Defaults panel would. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool SetClassDefaultTexture(
+		const FString& AssetPath, const FString& PropertyName, const FString& TexturePath);
+
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool CreateTabletWidgetBlueprint();
 
