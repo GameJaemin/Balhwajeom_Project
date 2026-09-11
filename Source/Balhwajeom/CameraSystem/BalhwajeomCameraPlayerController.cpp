@@ -4,6 +4,7 @@
 
 #include "BalhwajeomCameraCharacter.h"
 #include "BalhwajeomEvidenceActor.h"
+#include "BalhwajeomPhotoCameraComponent.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Widget.h"
 #include "Interaction/InspectionComponent.h"
@@ -245,21 +246,41 @@ bool ABalhwajeomCameraPlayerController::IsInteractionPromptSuppressedByTablet() 
 	return IsValid(TabletComponent) && TabletComponent->IsTabletOpen();
 }
 
+bool ABalhwajeomCameraPlayerController::IsInteractionPromptSuppressedByPhotoCamera() const
+{
+	const APawn* ControlledPawn = GetPawn();
+	const UBalhwajeomPhotoCameraComponent* PhotoCamera = IsValid(ControlledPawn)
+		? ControlledPawn->FindComponentByClass<UBalhwajeomPhotoCameraComponent>()
+		: nullptr;
+
+	return IsValid(PhotoCamera) &&
+		(PhotoCamera->IsInCameraMode() || PhotoCamera->IsCameraTransitioning());
+}
+
 void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSeconds)
 {
-	if (!IsValid(InteractionPromptWidget) || !IsValid(InteractionPromptFadeTarget))
+	if (!IsValid(InteractionPromptWidget))
 	{
 		return;
 	}
 
-	if (IsInteractionPromptSuppressedByTablet())
+	if (IsInteractionPromptSuppressedByTablet() ||
+		IsInteractionPromptSuppressedByPhotoCamera())
 	{
-		// The tablet owns the whole screen layer: hide both the center dot and text.
+		// Full-screen modes own this layer: hide both the center dot and text.
 		// Reset the text so closing the tablet starts a clean fade-in only when the
 		// currently focused evidence is still interactable.
-		InteractionPromptFadeTarget->SetRenderOpacity(0.0f);
-		InteractionPromptFadeTarget->SetVisibility(ESlateVisibility::Hidden);
+		if (IsValid(InteractionPromptFadeTarget))
+		{
+			InteractionPromptFadeTarget->SetRenderOpacity(0.0f);
+			InteractionPromptFadeTarget->SetVisibility(ESlateVisibility::Hidden);
+		}
 		InteractionPromptWidget->SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+
+	if (!IsValid(InteractionPromptFadeTarget))
+	{
 		return;
 	}
 

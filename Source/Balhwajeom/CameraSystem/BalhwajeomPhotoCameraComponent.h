@@ -372,10 +372,12 @@ protected:
     FTimerHandle CameraSwitchTimerHandle;
     FTimerHandle CameraTransitionTimerHandle;
     FTransform SavedFirstPersonRelativeTransform;
+    FRotator SavedExplorationControlRotation = FRotator::ZeroRotator;
     FVector CameraModeEntryWorldLocation = FVector::ZeroVector;
     FVector CameraPanWorldOffset = FVector::ZeroVector;
     FVector CameraPanRightDirection = FVector::RightVector;
     float SavedFirstPersonFieldOfView = 90.0f;
+    bool bHasSavedExplorationControlRotation = false;
 
     FPostProcessSettings SavedPhotoPostProcessSettings;
     float SavedPostProcessBlendWeight = 1.0f;

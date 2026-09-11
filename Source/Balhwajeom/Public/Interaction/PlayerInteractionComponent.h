@@ -128,6 +128,7 @@ private:
 
 	void SetupInteractionInput();
 	void OnInteractActionStarted();
+	bool IsInteractionSuppressedByPhotoCamera() const;
 
 	bool bInteractionInputInitialized = false;
 };

@@ -99,6 +99,7 @@ private:
 	void HandleMouseYaw(float Value);
 	bool ShouldShowInteractionPrompt() const;
 	bool IsInteractionPromptSuppressedByTablet() const;
+	bool IsInteractionPromptSuppressedByPhotoCamera() const;
 	void UpdateInteractionPrompt(float DeltaSeconds);
 	void UpdateBedMemoryHUD(float DeltaSeconds);
 	void ApplyBedMemoryHUDAlpha(float Alpha);
