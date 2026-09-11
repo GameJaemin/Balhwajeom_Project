@@ -22,6 +22,8 @@ public class BalhwajeomEditor : ModuleRules
 			"BlueprintGraph",
 			"ImageCore",
 			"SlateCore",
+			"Slate",
+			"RenderCore",
 			"UMG",
 			"UMGEditor",
 			"UnrealEd"

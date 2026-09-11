@@ -184,7 +184,7 @@ void ABalhwajeomCameraCharacter::SetupPlayerInputComponent(UInputComponent* Play
 
 void ABalhwajeomCameraCharacter::MoveForward(float Value)
 {
-	if (FMath::IsNearlyZero(Value))
+	if (FMath::IsNearlyZero(Value) || (Controller && Controller->IsMoveInputIgnored()))
 	{
 		return;
 	}
@@ -204,7 +204,7 @@ void ABalhwajeomCameraCharacter::MoveForward(float Value)
 
 void ABalhwajeomCameraCharacter::MoveRight(float Value)
 {
-	if (FMath::IsNearlyZero(Value))
+	if (FMath::IsNearlyZero(Value) || (Controller && Controller->IsMoveInputIgnored()))
 	{
 		return;
 	}

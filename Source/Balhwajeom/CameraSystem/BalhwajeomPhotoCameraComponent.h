@@ -14,6 +14,7 @@ class UBalhwajeomInvestigationSubsystem;
 class APhotoWorldStoryActor;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class UTexture2D;
 
 enum class EBalhwajeomPhotoCaptureResult : uint8
 {
@@ -155,6 +156,7 @@ protected:
     void PanCamera(const FVector& ScreenDirection, float Value);
     void ShowPhotoFeedback(const FString& Message, const FColor& Color) const;
     void TriggerPhotoFlash() const;
+	void SetCameraUIHiddenForScreenshot(bool bHidden) const;
     void UpdateEvidenceFocus(float DeltaTime);
     void RefreshDisplayedGuideSnapshot();
     bool IsDisplayedGuideSurfaceVisible() const;
@@ -428,6 +430,10 @@ protected:
 
     /** Temporary compatibility storage. New investigation captures never write to this array. */
     TOptional<FBalhwajeomPendingPhotoCapture> PendingCapture;
+
+	/** Transient full-resolution preview retained until async PNG registration completes. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> PendingCapturePreviewTexture;
     FDelegateHandle ScreenshotCapturedHandle;
     FDelegateHandle ScreenshotProcessedHandle;
     bool bReceivedScreenshotPixels = false;

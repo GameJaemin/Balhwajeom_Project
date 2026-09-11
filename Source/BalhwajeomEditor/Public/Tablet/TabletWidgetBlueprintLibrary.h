@@ -85,6 +85,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Photo Story")
 	static bool RedesignPhotoWorldStoryWidget();
 
+	/** Creates the editable capture-result overlay used after a successful photo. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Camera")
+	static bool CreateCapturePhotoWidgetBlueprint();
+
 	/** Creates DT_KeywordChoices and migrates choices embedded in legacy keyword documents. */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Investigation")
 	static bool UpgradeInvestigationDataTables();

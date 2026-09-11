@@ -48,6 +48,7 @@
 #include "Investigation/SentenceDefinitions.h"
 #include "Tablet/BalhwajeomTabletWidget.h"
 #include "CameraSystem/PhotoWorldStoryWidget.h"
+#include "CameraSystem/BalhwajeomCapturePhotoWidget.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "WidgetBlueprint.h"
@@ -2655,6 +2656,125 @@ bool UTabletWidgetBlueprintLibrary::RedesignPhotoWorldStoryWidget()
 	UE_LOG(LogTemp, Display, TEXT("PHOTO_STORY_WIDGET_REDESIGN Result=%s Asset=%s"),
 		bSaved ? TEXT("Success") : TEXT("Failure"), PhotoStoryAssetPath);
 	return bSaved;
+}
+
+bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
+{
+	const FString AssetFolderPath = TEXT("/Game/Balhwajeom/UI/Camera");
+	const FString CaptureAssetName = TEXT("WBP_CapturePhoto");
+	const FString CaptureAssetPath =
+		TEXT("/Game/Balhwajeom/UI/Camera/WBP_CapturePhoto.WBP_CapturePhoto");
+	if (UWidgetBlueprint* ExistingBlueprint = LoadObject<UWidgetBlueprint>(nullptr, *CaptureAssetPath))
+	{
+		if (ExistingBlueprint->WidgetTree &&
+			!ExistingBlueprint->WidgetTree->FindWidget(TEXT("ScreenDimmer")))
+		{
+			UCanvasPanel* ExistingRoot = Cast<UCanvasPanel>(
+				ExistingBlueprint->WidgetTree->RootWidget);
+			if (!ExistingRoot)
+			{
+				return false;
+			}
+
+			UBorder* Dimmer = ExistingBlueprint->WidgetTree->ConstructWidget<UBorder>(
+				UBorder::StaticClass(), TEXT("ScreenDimmer"));
+			Dimmer->bIsVariable = true;
+			Dimmer->SetBrushColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.52f));
+			UCanvasPanelSlot* DimmerSlot = ExistingRoot->AddChildToCanvas(Dimmer);
+			DimmerSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+			DimmerSlot->SetOffsets(FMargin(0.0f));
+			DimmerSlot->SetZOrder(0);
+			return TabletDesigner::SaveAndCompile(ExistingBlueprint);
+		}
+		return true;
+	}
+
+	FAssetToolsModule& AssetToolsModule =
+		FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+	UWidgetBlueprintFactory* Factory = NewObject<UWidgetBlueprintFactory>();
+	Factory->ParentClass = UBalhwajeomCapturePhotoWidget::StaticClass();
+	UWidgetBlueprint* Blueprint = Cast<UWidgetBlueprint>(
+		AssetToolsModule.Get().CreateAsset(
+			CaptureAssetName,
+			AssetFolderPath,
+			UWidgetBlueprint::StaticClass(),
+			Factory));
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		return false;
+	}
+
+	UWidgetTree* Tree = Blueprint->WidgetTree;
+	UCanvasPanel* Root = Tree->ConstructWidget<UCanvasPanel>(
+		UCanvasPanel::StaticClass(), TEXT("ViewportRoot"));
+	Tree->RootWidget = Root;
+
+	UBorder* Dimmer = Tree->ConstructWidget<UBorder>(
+		UBorder::StaticClass(), TEXT("ScreenDimmer"));
+	Dimmer->bIsVariable = true;
+	Dimmer->SetBrushColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.52f));
+	UCanvasPanelSlot* DimmerSlot = Root->AddChildToCanvas(Dimmer);
+	DimmerSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+	DimmerSlot->SetOffsets(FMargin(0.0f));
+	DimmerSlot->SetZOrder(0);
+
+	UCanvasPanel* Card = Tree->ConstructWidget<UCanvasPanel>(
+		UCanvasPanel::StaticClass(), TEXT("CardRoot"));
+	Card->bIsVariable = true;
+	UCanvasPanelSlot* CardSlot = Root->AddChildToCanvas(Card);
+	CardSlot->SetAnchors(FAnchors(0.5f, 0.5f));
+	CardSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+	CardSlot->SetPosition(FVector2D::ZeroVector);
+	CardSlot->SetSize(FVector2D(1000.0f, 650.0f));
+	CardSlot->SetZOrder(1);
+
+	UBorder* CardBackground = Tree->ConstructWidget<UBorder>(
+		UBorder::StaticClass(), TEXT("CardBackground"));
+	CardBackground->SetBrushColor(FLinearColor(0.018f, 0.018f, 0.018f, 0.98f));
+	UCanvasPanelSlot* BackgroundSlot = Card->AddChildToCanvas(CardBackground);
+	BackgroundSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+	BackgroundSlot->SetOffsets(FMargin(0.0f));
+	BackgroundSlot->SetZOrder(0);
+
+	UImage* Photo = Tree->ConstructWidget<UImage>(
+		UImage::StaticClass(), TEXT("CapturedPhotoImage"));
+	Photo->bIsVariable = true;
+	Photo->SetColorAndOpacity(FLinearColor::White);
+	UCanvasPanelSlot* PhotoSlot = Card->AddChildToCanvas(Photo);
+	PhotoSlot->SetPosition(FVector2D(42.0f, 42.0f));
+	PhotoSlot->SetSize(FVector2D(720.0f, 430.0f));
+	PhotoSlot->SetZOrder(1);
+
+	UBorder* SentenceBackground = Tree->ConstructWidget<UBorder>(
+		UBorder::StaticClass(), TEXT("SentenceBackground"));
+	SentenceBackground->SetBrushColor(FLinearColor(0.075f, 0.075f, 0.075f, 1.0f));
+	SentenceBackground->SetPadding(FMargin(24.0f, 15.0f));
+	UCanvasPanelSlot* SentenceSlot = Card->AddChildToCanvas(SentenceBackground);
+	SentenceSlot->SetPosition(FVector2D(42.0f, 492.0f));
+	SentenceSlot->SetSize(FVector2D(720.0f, 116.0f));
+	SentenceSlot->SetZOrder(1);
+
+	UTextBlock* Sentence = Tree->ConstructWidget<UTextBlock>(
+		UTextBlock::StaticClass(), TEXT("SentenceTextBlock"));
+	Sentence->bIsVariable = true;
+	Sentence->SetText(FText::FromString(TEXT("[]와/과 []이/가 사진 속에서 발견되었다.")));
+	Sentence->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	Sentence->SetJustification(ETextJustify::Center);
+	Sentence->SetAutoWrapText(true);
+	FSlateFontInfo SentenceFont = Sentence->GetFont();
+	SentenceFont.Size = 30;
+	Sentence->SetFont(SentenceFont);
+	SentenceBackground->SetContent(Sentence);
+
+	UVerticalBox* Keywords = Tree->ConstructWidget<UVerticalBox>(
+		UVerticalBox::StaticClass(), TEXT("KeywordList"));
+	Keywords->bIsVariable = true;
+	UCanvasPanelSlot* KeywordsSlot = Card->AddChildToCanvas(Keywords);
+	KeywordsSlot->SetPosition(FVector2D(792.0f, 42.0f));
+	KeywordsSlot->SetSize(FVector2D(170.0f, 430.0f));
+	KeywordsSlot->SetZOrder(2);
+
+	return TabletDesigner::SaveAndCompile(Blueprint);
 }
 
 bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()

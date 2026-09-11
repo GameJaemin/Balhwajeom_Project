@@ -10,6 +10,7 @@ class UImage;
 class UTexture2D;
 class UTextBlock;
 class UUserWidget;
+class UBalhwajeomCapturePhotoWidget;
 
 /** Minimal functional camera overlay for the MVP. */
 UCLASS()
@@ -26,9 +27,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera")
 	void TriggerPhotoFlash();
 
+	/** Hides every camera overlay while the clean screenshot frame is rendered. */
+	void SetCaptureUIHiddenForScreenshot(bool bShouldHide);
+
 	/** Plays a short photo-card-to-gallery animation after a new evidence item is acquired. */
 	UFUNCTION(BlueprintCallable, Category = "Camera|Evidence")
 	void TriggerEvidenceSavedAnimation(const FText& EvidenceName);
+
+	/** Shows the captured image, its sentence, and newly granted keywords before flying to TAB. */
+	void TriggerCapturePhotoPresentation(
+		UTexture2D* CapturedTexture,
+		const FText& SentenceText,
+		const TArray<FText>& GrantedKeywords);
 
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.01"))
@@ -37,12 +47,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Guide", meta = (ClampMin = "0.01", ClampMax = "2.0"))
 	float GuideCenterTransitionDuration = 0.25f;
 
-	/** Total time for the captured photo card to settle into the gallery slot. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence", meta = (ClampMin = "0.2", ClampMax = "3.0"))
-	float EvidenceSavedAnimationDuration = 0.8f;
-
 private:
-	void DrawEvidenceSavedAnimation();
+	void UpdateCapturePhotoPresentation();
+	bool EnsureCapturePhotoWidget();
+	void FinishCapturePhotoPresentation();
 	bool EnsureFocusGuideWidget();
 	void HideFocusGuideWidget();
 	void UpdateFocusGuideWidget(
@@ -70,9 +78,17 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> FocusGuideLabelText;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Camera|Evidence")
+	TSubclassOf<UBalhwajeomCapturePhotoWidget> CapturePhotoWidgetClass;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UBalhwajeomCapturePhotoWidget> CapturePhotoWidget;
+
 	float PhotoFlashEndTime = -1.0f;
 	float EvidenceSavedAnimationStartTime = -1.0f;
-	FString EvidenceSavedAnimationName;
+	float CapturePhotoLayoutWaitStartTime = -1.0f;
+	bool bCapturePhotoMovementLocked = false;
+	bool bCaptureUIHiddenForScreenshot = false;
 	FVector2D DisplayedGuidePosition = FVector2D::ZeroVector;
 	FVector2D GuideTransitionStartPosition = FVector2D::ZeroVector;
 	float GuideTransitionElapsed = 0.0f;

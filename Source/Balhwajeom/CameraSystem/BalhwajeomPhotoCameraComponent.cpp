@@ -11,6 +11,7 @@
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/Texture2D.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
@@ -20,6 +21,8 @@
 #include "Investigation/EvidenceDefinitions.h"
 #include "Investigation/InvestigationRuntimeTypes.h"
 #include "Investigation/PhotoDefinitions.h"
+#include "Investigation/SentenceDefinitions.h"
+#include "Investigation/WordDefinitions.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
@@ -60,6 +63,33 @@ namespace
 			Candidate = Parent ? Parent : Candidate->GetOwner();
 		}
 		return nullptr;
+	}
+
+	UTexture2D* CreateCapturePreviewTexture(
+		const int32 Width,
+		const int32 Height,
+		const TArray<FColor>& Colors)
+	{
+		if (Width <= 0 || Height <= 0 || Colors.Num() != Width * Height)
+		{
+			return nullptr;
+		}
+
+		UTexture2D* Texture = UTexture2D::CreateTransient(
+			Width, Height, PF_B8G8R8A8, NAME_None);
+		if (!Texture || !Texture->GetPlatformData() || Texture->GetPlatformData()->Mips.IsEmpty())
+		{
+			return nullptr;
+		}
+
+		Texture->SRGB = true;
+		Texture->NeverStream = true;
+		FTexture2DMipMap& Mip = Texture->GetPlatformData()->Mips[0];
+		void* Destination = Mip.BulkData.Lock(LOCK_READ_WRITE);
+		FMemory::Memcpy(Destination, Colors.GetData(), Colors.Num() * sizeof(FColor));
+		Mip.BulkData.Unlock();
+		Texture->UpdateResource();
+		return Texture;
 	}
 
 	bool ProjectPrimitiveBoundsToScreen(
@@ -307,6 +337,7 @@ UBalhwajeomPhotoCameraComponent::UBalhwajeomPhotoCameraComponent()
 
 void UBalhwajeomPhotoCameraComponent::BeginDestroy()
 {
+	SetCameraUIHiddenForScreenshot(false);
 	ClearScreenshotDelegates();
 	if (PendingCapture.IsSet())
 	{
@@ -1477,6 +1508,7 @@ bool UBalhwajeomPhotoCameraComponent::BeginInvestigationImageCapture(
 	NewCapture.AbsolutePath = AbsolutePath;
 	NewCapture.bHasStorySpawnTransform = CalculateStorySpawnTransform(NewCapture.StorySpawnTransform);
 	PendingCapture = MoveTemp(NewCapture);
+	PendingCapturePreviewTexture = nullptr;
 	bReceivedScreenshotPixels = false;
 
 	ScreenshotCapturedHandle = UGameViewportClient::OnScreenshotCaptured().AddUObject(
@@ -1486,6 +1518,9 @@ bool UBalhwajeomPhotoCameraComponent::BeginInvestigationImageCapture(
 		this,
 		&UBalhwajeomPhotoCameraComponent::HandleScreenshotProcessed);
 
+	// Draw the requested frame without the first-person camera overlay.  The HUD
+	// is restored as soon as the clean back-buffer pixels arrive.
+	SetCameraUIHiddenForScreenshot(true);
 	FScreenshotRequest::RequestScreenshot(
 		AbsolutePath,
 		false,
@@ -1493,13 +1528,13 @@ bool UBalhwajeomPhotoCameraComponent::BeginInvestigationImageCapture(
 
 	if (!FScreenshotRequest::IsScreenshotRequested())
 	{
+		SetCameraUIHiddenForScreenshot(false);
 		ClearScreenshotDelegates();
 		PendingCapture.Reset();
 		ShowPhotoFeedback(TEXT("사진 캡처를 요청하지 못했다."), FColor::Red);
 		return false;
 	}
 
-	ShowPhotoFeedback(TEXT("사진을 저장하고 있다."), FColor::Silver);
 	return true;
 }
 
@@ -1514,6 +1549,9 @@ void UBalhwajeomPhotoCameraComponent::HandleScreenshotCaptured(
 	}
 
 	bReceivedScreenshotPixels = true;
+	SetCameraUIHiddenForScreenshot(false);
+	PendingCapturePreviewTexture = CreateCapturePreviewTexture(
+		Width, Height, Colors);
 	const FGuid RequestID = PendingCapture->RequestID;
 	const FString AbsolutePath = PendingCapture->AbsolutePath;
 	ClearScreenshotDelegates();
@@ -1521,6 +1559,7 @@ void UBalhwajeomPhotoCameraComponent::HandleScreenshotCaptured(
 	// The pixels above represent the unflashed viewport. Start the visual shutter
 	// response now so it remains visible to the player but cannot contaminate the PNG.
 	TriggerPhotoFlash();
+	ShowPhotoFeedback(TEXT("사진을 저장하고 있다."), FColor::Silver);
 
 	if (Width <= 0 || Height <= 0 || Colors.Num() != Width * Height)
 	{
@@ -1559,6 +1598,7 @@ void UBalhwajeomPhotoCameraComponent::HandleScreenshotProcessed()
 
 	const FGuid RequestID = PendingCapture->RequestID;
 	const FString AbsolutePath = PendingCapture->AbsolutePath;
+	SetCameraUIHiddenForScreenshot(false);
 	ClearScreenshotDelegates();
 	CompleteImageSave(RequestID, false, AbsolutePath);
 }
@@ -1568,6 +1608,7 @@ void UBalhwajeomPhotoCameraComponent::CompleteImageSave(
 	bool bSucceeded,
 	const FString& AbsolutePath)
 {
+	SetCameraUIHiddenForScreenshot(false);
 	if (!PendingCapture.IsSet() || PendingCapture->RequestID != RequestID)
 	{
 		if (bSucceeded)
@@ -1584,6 +1625,7 @@ void UBalhwajeomPhotoCameraComponent::CompleteImageSave(
 	if (!bSucceeded ||
 		IFileManager::Get().FileSize(*CompletedCapture.AbsolutePath) <= 0)
 	{
+		PendingCapturePreviewTexture = nullptr;
 		IFileManager::Get().Delete(*CompletedCapture.AbsolutePath, false, true);
 		ShowPhotoFeedback(TEXT("사진 이미지 저장에 실패했다."), FColor::Red);
 		return;
@@ -1593,6 +1635,7 @@ void UBalhwajeomPhotoCameraComponent::CompleteImageSave(
 		GetInvestigationSubsystem();
 	if (!InvestigationSubsystem)
 	{
+		PendingCapturePreviewTexture = nullptr;
 		IFileManager::Get().Delete(*CompletedCapture.AbsolutePath, false, true);
 		ShowPhotoFeedback(TEXT("사진 시스템을 사용할 수 없다."), FColor::Red);
 		return;
@@ -1607,21 +1650,60 @@ void UBalhwajeomPhotoCameraComponent::CompleteImageSave(
 	Record.CapturedTime = CompletedCapture.RequestedTime;
 	Record.bViewedInTablet = false;
 
+	TArray<FName> NewlyGrantedWordIDs;
+	FPhotoDefinition PhotoDefinition;
+	if (InvestigationSubsystem->GetPhotoDefinition(Record.PhotoID, PhotoDefinition))
+	{
+		for (const FName WordID : PhotoDefinition.GrantedWordIDs)
+		{
+			if (!InvestigationSubsystem->HasAcquiredWord(WordID))
+			{
+				NewlyGrantedWordIDs.Add(WordID);
+			}
+		}
+	}
+
 	if (!InvestigationSubsystem->RegisterCapturedPhoto(Record))
 	{
+		PendingCapturePreviewTexture = nullptr;
 		IFileManager::Get().Delete(*CompletedCapture.AbsolutePath, false, true);
 		ShowPhotoFeedback(TEXT("현재 상태가 바뀌어 사진을 등록하지 못했다."), FColor::Yellow);
 		return;
 	}
 
-	FPhotoDefinition PhotoDefinition;
-	if (InvestigationSubsystem->GetPhotoDefinition(Record.PhotoID, PhotoDefinition))
+	if (!PhotoDefinition.PhotoID.IsNone())
 	{
 		if (const APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this)))
 		{
 			if (ABalhwajeomEvidenceCameraHUD* CameraHUD = Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD()))
 			{
-				CameraHUD->TriggerEvidenceSavedAnimation(PhotoDefinition.PhotoName);
+				FText CaptureSentence = PhotoDefinition.CustomDescription;
+				if (!PhotoDefinition.PhotoSentenceID.IsNone())
+				{
+					FSentenceDefinition SentenceDefinition;
+					if (InvestigationSubsystem->GetSentenceDefinition(
+						PhotoDefinition.PhotoSentenceID, SentenceDefinition))
+					{
+						CaptureSentence = SentenceDefinition.SentenceTemplate;
+					}
+				}
+				if (CaptureSentence.IsEmpty())
+				{
+					CaptureSentence = PhotoDefinition.PhotoName;
+				}
+
+				TArray<FText> GrantedKeywordTexts;
+				for (const FName WordID : NewlyGrantedWordIDs)
+				{
+					FWordDefinition WordDefinition;
+					if (InvestigationSubsystem->GetWordDefinition(WordID, WordDefinition))
+					{
+						GrantedKeywordTexts.Add(WordDefinition.DisplayWord);
+					}
+				}
+
+				CameraHUD->TriggerCapturePhotoPresentation(
+					PendingCapturePreviewTexture, CaptureSentence, GrantedKeywordTexts);
 			}
 		}
 
@@ -1630,6 +1712,7 @@ void UBalhwajeomPhotoCameraComponent::CompleteImageSave(
 			StartPhotoWorldStory(PhotoDefinition, CompletedCapture.StorySpawnTransform);
 		}
 	}
+	PendingCapturePreviewTexture = nullptr;
 
 	ShowPhotoFeedback(TEXT("사진을 기록했다."), FColor::Green);
 }
@@ -1725,5 +1808,17 @@ void UBalhwajeomPhotoCameraComponent::ClearScreenshotDelegates()
 	{
 		FScreenshotRequest::OnScreenshotRequestProcessed().Remove(ScreenshotProcessedHandle);
 		ScreenshotProcessedHandle.Reset();
+	}
+}
+
+void UBalhwajeomPhotoCameraComponent::SetCameraUIHiddenForScreenshot(const bool bHidden) const
+{
+	const APlayerController* PlayerController =
+		Cast<APlayerController>(GetOwningController(this));
+	if (ABalhwajeomEvidenceCameraHUD* CameraHUD = PlayerController
+		? Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD())
+		: nullptr)
+	{
+		CameraHUD->SetCaptureUIHiddenForScreenshot(bHidden);
 	}
 }
