@@ -27,6 +27,8 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Misc/Paths.h"
+#include "Story/StoryStateSubsystem.h"
+#include "Story/StoryStateTags.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
 #include "BalhwajeomEvidenceActor.h"
@@ -622,6 +624,19 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 	}
 
 	bIsInCameraMode = true;
+	if (UWorld* World = GetWorld())
+	{
+		if (UGameInstance* GameInstance = World->GetGameInstance())
+		{
+			if (UStoryStateSubsystem* StoryState =
+				GameInstance->GetSubsystem<UStoryStateSubsystem>())
+			{
+				StoryState->SetPlayerModeTag(
+					BalhwajeomGameplayTags::Runtime_Player_Mode_PhotoCamera
+				);
+			}
+		}
+	}
 	SetWorldInspectionLabelsSuppressed(true);
 	SavedFirstPersonRelativeTransform = PhotoCamera->GetRelativeTransform();
 	SavedFirstPersonFieldOfView = PhotoCamera->FieldOfView;
@@ -709,6 +724,19 @@ void UBalhwajeomPhotoCameraComponent::ExitCameraMode()
 	ResetEvidenceFocus();
 
 	bIsInCameraMode = false;
+	if (UWorld* World = GetWorld())
+	{
+		if (UGameInstance* GameInstance = World->GetGameInstance())
+		{
+			if (UStoryStateSubsystem* StoryState =
+				GameInstance->GetSubsystem<UStoryStateSubsystem>())
+			{
+				StoryState->SetPlayerModeTag(
+					BalhwajeomGameplayTags::Runtime_Player_Mode_Exploration
+				);
+			}
+		}
+	}
 	if (ActivePhotoWorldStory.IsValid())
 	{
 		ActivePhotoWorldStory->TransitionToThirdPersonScale();
