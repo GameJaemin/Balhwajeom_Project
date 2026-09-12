@@ -245,6 +245,10 @@ void UBalhwajeomTabletComponent::RefreshPhotoCameraBinding()
 
 void UBalhwajeomTabletComponent::ToggleTablet()
 {
+	if (!bTabletInteractionEnabled)
+	{
+		return;
+	}
 	if (bPendingOpenAfterPhotoMode)
 	{
 		return;
@@ -265,6 +269,17 @@ void UBalhwajeomTabletComponent::ToggleTablet()
 	else
 	{
 		RequestOpenTablet();
+	}
+}
+
+void UBalhwajeomTabletComponent::SetTabletInteractionEnabled(bool bEnabled)
+{
+	bTabletInteractionEnabled = bEnabled;
+	if (!bEnabled && (bTabletOpen || bPendingOpenAfterPhotoMode))
+	{
+		bPendingOpenAfterPhotoMode = false;
+		bTabletClosing = false;
+		FinishCloseTablet();
 	}
 }
 

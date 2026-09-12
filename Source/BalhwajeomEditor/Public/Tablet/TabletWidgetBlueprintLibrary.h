@@ -93,6 +93,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Camera")
 	static bool CreateCapturePhotoWidgetBlueprint();
 
+	/** Creates WBP_MainMenu, WBP_ScreenFade, and BP_IntroFlowController. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Intro")
+	static bool CreateIntroFlowAssets();
+
+	/** Configures the room4 intro actor for the project's full-screen MP4 assets. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Intro")
+	static bool ConfigureRoom4IntroMedia();
+
 	/** Creates DT_KeywordChoices and migrates choices embedded in legacy keyword documents. */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Investigation")
 	static bool UpgradeInvestigationDataTables();

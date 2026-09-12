@@ -25,8 +25,11 @@
 #include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
 #include "Engine/Font.h"
+#include "EngineUtils.h"
 #include "Factories/DataAssetFactory.h"
 #include "Factories/DataTableFactory.h"
+#include "Factories/BlueprintFactory.h"
+#include "FileHelpers.h"
 #include "IAssetTools.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -49,6 +52,13 @@
 #include "Tablet/BalhwajeomTabletWidget.h"
 #include "CameraSystem/PhotoWorldStoryWidget.h"
 #include "CameraSystem/BalhwajeomCapturePhotoWidget.h"
+#include "Intro/BalhwajeomIntroFlowActor.h"
+#include "UI/BalhwajeomMainMenuWidget.h"
+#include "UI/BalhwajeomScreenFadeWidget.h"
+#include "UI/BalhwajeomCinematicVideoWidget.h"
+#include "MediaPlayer.h"
+#include "MediaSource.h"
+#include "MediaTexture.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "WidgetBlueprint.h"
@@ -2908,6 +2918,295 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 	KeywordsSlot->SetZOrder(2);
 
 	return TabletDesigner::SaveAndCompile(Blueprint);
+}
+
+bool UTabletWidgetBlueprintLibrary::CreateIntroFlowAssets()
+{
+	const FString Folder = TEXT("/Game/Balhwajeom/UI/Title");
+	IAssetTools& AssetTools =
+		FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+
+	auto MakeWidgetBlueprint = [&AssetTools, &Folder](
+		const TCHAR* Name, UClass* ParentClass) -> UWidgetBlueprint*
+	{
+		const FString Path = FString::Printf(TEXT("%s/%s.%s"), *Folder, Name, Name);
+		if (UWidgetBlueprint* Existing = LoadObject<UWidgetBlueprint>(nullptr, *Path))
+		{
+			return Existing;
+		}
+		UWidgetBlueprintFactory* Factory = NewObject<UWidgetBlueprintFactory>();
+		Factory->ParentClass = ParentClass;
+		return Cast<UWidgetBlueprint>(AssetTools.CreateAsset(
+			Name, Folder, UWidgetBlueprint::StaticClass(), Factory));
+	};
+
+	UWidgetBlueprint* Menu = MakeWidgetBlueprint(
+		TEXT("WBP_MainMenu"), UBalhwajeomMainMenuWidget::StaticClass());
+	if (!Menu || !Menu->WidgetTree)
+	{
+		return false;
+	}
+	if (!Menu->WidgetTree->RootWidget)
+	{
+		UWidgetTree* Tree = Menu->WidgetTree;
+		UScaleBox* Scale = Tree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("SB_ViewportScale"));
+		Scale->SetStretch(EStretch::ScaleToFit);
+		Scale->SetStretchDirection(EStretchDirection::Both);
+		Tree->RootWidget = Scale;
+
+		USizeBox* DesignSize = Tree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("SB_Design1920x1080"));
+		DesignSize->SetWidthOverride(1920.0f);
+		DesignSize->SetHeightOverride(1080.0f);
+		Scale->SetContent(DesignSize);
+
+		UCanvasPanel* Canvas = Tree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("Canvas_Design"));
+		DesignSize->SetContent(Canvas);
+
+		UBorder* Background = Tree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Background"));
+		Background->SetBrushColor(FLinearColor(0.012f, 0.016f, 0.018f, 1.0f));
+		UCanvasPanelSlot* BackgroundSlot = Canvas->AddChildToCanvas(Background);
+		BackgroundSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+		BackgroundSlot->SetOffsets(FMargin(0.0f));
+
+		UBorder* Accent = Tree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("AccentLine"));
+		Accent->SetBrushColor(FLinearColor(0.72f, 0.18f, 0.08f, 1.0f));
+		TabletDesigner::FBuilder::Place(Canvas, Accent, 745.0f, 644.0f, 430.0f, 3.0f, 1);
+
+		UTextBlock* Title = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TXT_Title"));
+		Title->SetText(FText::FromString(TEXT("발화점")));
+		Title->SetJustification(ETextJustify::Center);
+		Title->SetColorAndOpacity(FSlateColor(FLinearColor(0.96f, 0.93f, 0.86f, 1.0f)));
+		FSlateFontInfo TitleFont = Title->GetFont();
+		TitleFont.Size = 112;
+		TitleFont.LetterSpacing = 120;
+		if (UFont* KoreanFont = LoadObject<UFont>(nullptr,
+			TEXT("/Game/Balhwajeom/UI/JE/Freesentation-4Regular_Font.Freesentation-4Regular_Font")))
+		{
+			TitleFont.FontObject = KoreanFont;
+		}
+		Title->SetFont(TitleFont);
+		TabletDesigner::FBuilder::Place(Canvas, Title, 560.0f, 330.0f, 800.0f, 160.0f, 2);
+
+		UTextBlock* Subtitle = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TXT_Subtitle"));
+		Subtitle->SetText(FText::FromString(TEXT("잿더미 속에 남겨진 진실")));
+		Subtitle->SetJustification(ETextJustify::Center);
+		Subtitle->SetColorAndOpacity(FSlateColor(FLinearColor(0.63f, 0.61f, 0.56f, 1.0f)));
+		FSlateFontInfo SubtitleFont = Subtitle->GetFont();
+		SubtitleFont.Size = 28;
+		SubtitleFont.LetterSpacing = 80;
+		Subtitle->SetFont(SubtitleFont);
+		TabletDesigner::FBuilder::Place(Canvas, Subtitle, 660.0f, 505.0f, 600.0f, 55.0f, 2);
+
+		UButton* Start = Tree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("BTN_Start"));
+		Start->bIsVariable = true;
+		Menu->OnVariableAdded(Start->GetFName());
+		Start->SetBackgroundColor(FLinearColor(0.12f, 0.12f, 0.11f, 0.95f));
+		UTextBlock* StartText = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TXT_Start"));
+		StartText->SetText(FText::FromString(TEXT("시작하기")));
+		StartText->SetJustification(ETextJustify::Center);
+		StartText->SetColorAndOpacity(FSlateColor(FLinearColor(0.96f, 0.93f, 0.86f, 1.0f)));
+		FSlateFontInfo StartFont = StartText->GetFont();
+		StartFont.Size = 34;
+		StartFont.LetterSpacing = 50;
+		StartText->SetFont(StartFont);
+		Start->SetContent(StartText);
+		TabletDesigner::FBuilder::Place(Canvas, Start, 760.0f, 700.0f, 400.0f, 92.0f, 2);
+	}
+
+	UWidgetBlueprint* Fade = MakeWidgetBlueprint(
+		TEXT("WBP_ScreenFade"), UBalhwajeomScreenFadeWidget::StaticClass());
+	if (!Fade || !Fade->WidgetTree)
+	{
+		return false;
+	}
+	if (!Fade->WidgetTree->RootWidget)
+	{
+		UBorder* Black = Fade->WidgetTree->ConstructWidget<UBorder>(
+			UBorder::StaticClass(), TEXT("BlackOverlay"));
+		Black->SetBrushColor(FLinearColor::Black);
+		Black->SetVisibility(ESlateVisibility::HitTestInvisible);
+		Fade->WidgetTree->RootWidget = Black;
+	}
+
+	UWidgetBlueprint* Video = MakeWidgetBlueprint(
+		TEXT("WBP_CinematicVideo"), UBalhwajeomCinematicVideoWidget::StaticClass());
+	if (!Video || !Video->WidgetTree)
+	{
+		return false;
+	}
+	if (Video->WidgetTree->RootWidget && !TabletDesigner::ClearWidgetTree(Video))
+	{
+		return false;
+	}
+	if (!Video->WidgetTree->RootWidget)
+	{
+		UWidgetTree* Tree = Video->WidgetTree;
+		UCanvasPanel* Root = Tree->ConstructWidget<UCanvasPanel>(
+			UCanvasPanel::StaticClass(), TEXT("VideoRoot"));
+		Video->OnVariableAdded(Root->GetFName());
+		Tree->RootWidget = Root;
+
+		UBorder* Background = Tree->ConstructWidget<UBorder>(
+			UBorder::StaticClass(), TEXT("VideoBackground"));
+		Video->OnVariableAdded(Background->GetFName());
+		Background->SetBrushColor(FLinearColor::Black);
+		TabletDesigner::FBuilder::FillCanvas(Root, Background, 0);
+
+		UImage* Image = Tree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("IMG_Video"));
+		Image->bIsVariable = true;
+		Video->OnVariableAdded(Image->GetFName());
+		Image->SetColorAndOpacity(FLinearColor::White);
+		TabletDesigner::FBuilder::FillCanvas(Root, Image, 1);
+	}
+
+	const bool bWidgetsSaved = TabletDesigner::SaveAndCompile(Menu) &&
+		TabletDesigner::SaveAndCompile(Fade) && TabletDesigner::SaveAndCompile(Video);
+	if (!bWidgetsSaved)
+	{
+		return false;
+	}
+
+	const FString ActorPath = TEXT("/Game/Balhwajeom/Blueprints/Intro/BP_IntroFlowController.BP_IntroFlowController");
+	UBlueprint* ActorBlueprint = LoadObject<UBlueprint>(nullptr, *ActorPath);
+	if (!ActorBlueprint)
+	{
+		UBlueprintFactory* Factory = NewObject<UBlueprintFactory>();
+		Factory->ParentClass = ABalhwajeomIntroFlowActor::StaticClass();
+		ActorBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(
+			TEXT("BP_IntroFlowController"),
+			TEXT("/Game/Balhwajeom/Blueprints/Intro"),
+			UBlueprint::StaticClass(),
+			Factory));
+		if (!ActorBlueprint)
+		{
+			return false;
+		}
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ActorBlueprint);
+		FKismetEditorUtilities::CompileBlueprint(ActorBlueprint);
+		UPackage* Package = ActorBlueprint->GetOutermost();
+		Package->MarkPackageDirty();
+		const FString Filename = FPackageName::LongPackageNameToFilename(
+			Package->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		SaveArgs.SaveFlags = SAVE_NoError;
+		SaveArgs.bSlowTask = false;
+		if (!UPackage::SavePackage(Package, ActorBlueprint, *Filename, SaveArgs))
+		{
+			return false;
+		}
+	}
+
+	if (!ActorBlueprint || !ActorBlueprint->GeneratedClass)
+	{
+		return false;
+	}
+
+	const FString MapPath = TEXT("/Game/Balhwajeom/Maps/Prototype/L_InvestigationPrototype_Jung");
+	UWorld* World = UEditorLoadingAndSavingUtils::LoadMap(MapPath);
+	if (!World)
+	{
+		return false;
+	}
+
+	ABalhwajeomIntroFlowActor* FlowActor = nullptr;
+	int32 FlowActorCount = 0;
+	for (TActorIterator<ABalhwajeomIntroFlowActor> It(World); It; ++It)
+	{
+		if (IsValid(*It))
+		{
+			FlowActor = *It;
+			++FlowActorCount;
+		}
+	}
+	if (FlowActorCount == 0)
+	{
+		FActorSpawnParameters SpawnParameters;
+		SpawnParameters.Name = TEXT("BP_IntroFlowController");
+		SpawnParameters.OverrideLevel = World->GetCurrentLevel();
+		FlowActor = World->SpawnActor<ABalhwajeomIntroFlowActor>(
+			ActorBlueprint->GeneratedClass, FTransform::Identity, SpawnParameters);
+		if (!FlowActor)
+		{
+			return false;
+		}
+		FlowActor->SetActorLabel(TEXT("Intro Flow Controller"));
+		FlowActorCount = 1;
+	}
+	if (FlowActorCount != 1 || !UEditorLoadingAndSavingUtils::SaveMap(World, MapPath))
+	{
+		UE_LOG(LogTemp, Error, TEXT("INTRO_FLOW_ASSETS invalid actor count or map save failure: %d"), FlowActorCount);
+		return false;
+	}
+
+	UE_LOG(LogTemp, Display, TEXT("INTRO_FLOW_ASSETS Result=Success Actor=%s"), *GetNameSafe(FlowActor));
+	return true;
+}
+
+bool UTabletWidgetBlueprintLibrary::ConfigureRoom4IntroMedia()
+{
+	const FString MapPath = TEXT("/Game/Balhwajeom/Maps/Prototype/room4");
+	UWorld* World = UEditorLoadingAndSavingUtils::LoadMap(MapPath);
+	if (!World)
+	{
+		UE_LOG(LogTemp, Error, TEXT("ROOM4_INTRO_MEDIA failed to load %s"), *MapPath);
+		return false;
+	}
+
+	ABalhwajeomIntroFlowActor* FlowActor = nullptr;
+	for (TActorIterator<ABalhwajeomIntroFlowActor> It(World); It; ++It)
+	{
+		if (IsValid(*It))
+		{
+			FlowActor = *It;
+			break;
+		}
+	}
+
+	if (!FlowActor)
+	{
+		UBlueprint* FlowBlueprint = LoadObject<UBlueprint>(nullptr,
+			TEXT("/Game/Balhwajeom/Blueprints/Intro/BP_IntroFlowController.BP_IntroFlowController"));
+		if (!FlowBlueprint || !FlowBlueprint->GeneratedClass)
+		{
+			return false;
+		}
+		FActorSpawnParameters SpawnParameters;
+		SpawnParameters.Name = TEXT("BP_IntroFlowController");
+		SpawnParameters.OverrideLevel = World->GetCurrentLevel();
+		FlowActor = World->SpawnActor<ABalhwajeomIntroFlowActor>(
+			FlowBlueprint->GeneratedClass, FTransform::Identity, SpawnParameters);
+		if (!FlowActor)
+		{
+			return false;
+		}
+		FlowActor->SetActorLabel(TEXT("Intro Flow Controller"));
+	}
+
+	UMediaSource* Source = LoadObject<UMediaSource>(nullptr,
+		TEXT("/Game/Balhwajeom/Cinematics/Sequences/MS_Intro.MS_Intro"));
+	UMediaPlayer* Player = LoadObject<UMediaPlayer>(nullptr,
+		TEXT("/Game/Balhwajeom/Cinematics/Sequences/MP_Intro.MP_Intro"));
+	UMediaTexture* Texture = LoadObject<UMediaTexture>(nullptr,
+		TEXT("/Game/Balhwajeom/Cinematics/Sequences/MT_Intro.MT_Intro"));
+	if (!Source || !Player || !Texture)
+	{
+		UE_LOG(LogTemp, Error, TEXT("ROOM4_INTRO_MEDIA missing MS_Intro, MP_Intro, or MT_Intro"));
+		return false;
+	}
+
+	Texture->SetMediaPlayer(Player);
+	FlowActor->SetIntroMediaAssets(Source, Player, Texture);
+	FlowActor->Modify();
+	if (!UEditorLoadingAndSavingUtils::SaveMap(World, MapPath))
+	{
+		return false;
+	}
+
+	UE_LOG(LogTemp, Display,
+		TEXT("ROOM4_INTRO_MEDIA Result=Success Actor=%s Source=%s Player=%s Texture=%s"),
+		*GetNameSafe(FlowActor), *GetNameSafe(Source), *GetNameSafe(Player), *GetNameSafe(Texture));
+	return true;
 }
 
 bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()

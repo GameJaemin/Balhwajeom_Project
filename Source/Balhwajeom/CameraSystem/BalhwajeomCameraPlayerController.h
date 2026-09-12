@@ -46,6 +46,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Interaction")
 	UUserWidget* GetInteractionPrompt() const { return InteractionPromptWidget; }
 
+	/** Hides or restores every gameplay HUD layer owned by this controller. */
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void SetGameplayPresentationEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "UI")
+	bool IsGameplayPresentationEnabled() const { return bGameplayPresentationEnabled; }
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -106,4 +113,5 @@ private:
 
 	float BedMemoryHUDAlpha = 0.0f;
 	bool bBedMemoryHUDActive = false;
+	bool bGameplayPresentationEnabled = true;
 };

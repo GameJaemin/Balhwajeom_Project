@@ -36,10 +36,15 @@ void ABalhwajeomCameraPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	bShowMouseCursor = false;
-	FInputModeGameOnly InputMode;
-	InputMode.SetConsumeCaptureMouseDown(false);
-	SetInputMode(InputMode);
+	// An intro flow actor can lock presentation before the controller reaches
+	// BeginPlay. Do not overwrite its UI-only input mode or hide its cursor.
+	if (bGameplayPresentationEnabled)
+	{
+		bShowMouseCursor = false;
+		FInputModeGameOnly InputMode;
+		InputMode.SetConsumeCaptureMouseDown(false);
+		SetInputMode(InputMode);
+	}
 
 	EnsurePlayerHUD();
 	EnsureBedMemoryHUD();
@@ -56,7 +61,30 @@ void ABalhwajeomCameraPlayerController::EnsurePlayerHUD()
 	PlayerHUDWidget = CreateWidget<UUserWidget>(this, PlayerHUDWidgetClass);
 	if (PlayerHUDWidget)
 	{
+		PlayerHUDWidget->SetVisibility(
+			bGameplayPresentationEnabled ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 		PlayerHUDWidget->AddToViewport(0);
+	}
+}
+
+void ABalhwajeomCameraPlayerController::SetGameplayPresentationEnabled(bool bEnabled)
+{
+	bGameplayPresentationEnabled = bEnabled;
+
+	if (PlayerHUDWidget)
+	{
+		PlayerHUDWidget->SetVisibility(
+			bEnabled && !bBedMemoryHUDActive ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	if (BedMemoryHUDWidget)
+	{
+		BedMemoryHUDWidget->SetVisibility(
+			bEnabled && bBedMemoryHUDActive ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	if (InteractionPromptWidget)
+	{
+		InteractionPromptWidget->SetVisibility(
+			bEnabled ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	}
 }
 
@@ -123,6 +151,13 @@ void ABalhwajeomCameraPlayerController::ApplyBedMemoryHUDAlpha(float Alpha)
 
 void ABalhwajeomCameraPlayerController::UpdateBedMemoryHUD(float DeltaSeconds)
 {
+	if (!bGameplayPresentationEnabled)
+	{
+		if (PlayerHUDWidget) PlayerHUDWidget->SetVisibility(ESlateVisibility::Collapsed);
+		if (BedMemoryHUDWidget) BedMemoryHUDWidget->SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+
 	const float TargetAlpha = bBedMemoryHUDActive ? 1.0f : 0.0f;
 	if (FMath::IsNearlyEqual(BedMemoryHUDAlpha, TargetAlpha))
 	{
@@ -261,6 +296,11 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 {
 	if (!IsValid(InteractionPromptWidget))
 	{
+		return;
+	}
+	if (!bGameplayPresentationEnabled)
+	{
+		InteractionPromptWidget->SetVisibility(ESlateVisibility::Collapsed);
 		return;
 	}
 
