@@ -15,6 +15,8 @@ class UBoxComponent;
 class UPrimitiveComponent;
 class USceneComponent;
 class UInspectionComponent;
+class UJMInspectableComponent;
+class UJMItemInspectionData;
 class UTexture2D;
 class UWidgetComponent;
 class UBalhwajeomInvestigationSubsystem;
@@ -47,6 +49,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Evidence|Investigation")
 	bool RequestInvestigationInteraction(FText& OutDisplayText);
 
+	/** Read-only availability check used by the player's interaction prompt. */
+	UFUNCTION(BlueprintPure, Category = "Evidence|Investigation")
+	bool CanRequestInvestigationInteraction() const;
+
 	/** Hides the normal distance label while the dedicated photo camera HUD is active. */
 	void SetInspectionLabelSuppressed(bool bSuppressed);
 
@@ -64,14 +70,23 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inspection")
 	UInspectionComponent* GetInspectionComponent() const { return InspectionComponent; }
 
+	UFUNCTION(BlueprintPure, Category = "Inspection|3D")
+	UJMInspectableComponent* GetItemInspectionComponent() const { return ItemInspectionComponent; }
+
 	virtual bool RequestCameraTargetInfo_Implementation(FBalhwajeomCameraTargetInfo& OutInfo) const override;
 	virtual FVector RequestCameraFocusLocation_Implementation() const override;
 	virtual UPrimitiveComponent* RequestCameraFramingComponent_Implementation() const override;
 	virtual void NotifyCameraCaptureSucceeded_Implementation() override;
 
 protected:
+	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	/** Resizes CameraTargetBounds to match EvidenceMesh's current static mesh bounds. Called from
+	 * OnConstruction (so it's correct in the editor right after placing/converting an actor, e.g.
+	 * via "Replace Selected Actors With") and again from BeginPlay as a safety net. */
+	void FitCameraTargetBoundsToMesh();
 
 	UFUNCTION()
 	void HandleEvidenceStateChanged(FGuid ChangedInstanceID, FName PreviousStateID, FName NewStateID);
@@ -86,6 +101,7 @@ protected:
 	void ApplyInspectionDistanceState(EPlayerInspectionDistanceState DistanceState);
 	void RegisterWithInvestigationSystem();
 	void ApplyInvestigationState(FName StateID);
+	void ConfigureItemInspection();
 	UBalhwajeomInvestigationSubsystem* GetInvestigationSubsystem() const;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Evidence")
@@ -105,6 +121,21 @@ protected:
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inspection")
 	TObjectPtr<UInspectionComponent> InspectionComponent;
+
+	/** Enables the rotating SceneCapture inspector for this Evidence Actor. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inspection|3D")
+	bool bEnable3DInspection = false;
+
+	/** Optional authored settings. Missing mesh/text fields are filled from this Evidence Actor at runtime. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inspection|3D", meta = (EditCondition = "bEnable3DInspection"))
+	TObjectPtr<UJMItemInspectionData> ItemInspectionData;
+
+	/** Runtime bridge consumed by the existing F-key interaction trace. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inspection|3D")
+	TObjectPtr<UJMInspectableComponent> ItemInspectionComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UJMItemInspectionData> RuntimeItemInspectionData;
 
 	/** Screen-space label that follows this object in the normal third-person view. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inspection")
@@ -149,12 +180,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target")
 	bool bCanBeCaptured = true;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus", meta = (Units = "cm"))
+	float MinimumFocusDistanceOffset = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus", meta = (Units = "cm"))
+	float MaximumFocusDistanceOffset = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Legacy", meta = (ClampMin = "1.0", DeprecatedProperty, DeprecationMessage = "Focus distance is now owned by the photo camera."))
 	float PreferredFocusDistanceAt1x = 70.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Legacy", meta = (ClampMin = "1.0", DeprecatedProperty, DeprecationMessage = "Focus distance is now owned by the photo camera."))
 	float FocusDistanceToleranceAt1x = 300.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Legacy", meta = (DeprecatedProperty, DeprecationMessage = "Zoom no longer changes focus or capture distance."))
 	bool bScaleFocusDistanceWithZoom = true;
 };

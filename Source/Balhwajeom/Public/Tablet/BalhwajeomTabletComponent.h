@@ -39,6 +39,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Tablet")
 	bool IsTabletOpen() const { return bTabletOpen; }
 
+	/** Used by title/cinematic flows to prevent the tablet action from opening. */
+	UFUNCTION(BlueprintCallable, Category = "Tablet")
+	void SetTabletInteractionEnabled(bool bEnabled);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -103,4 +107,5 @@ private:
 	bool bSavedShowMouseCursor = false;
 	bool bSavedEnableClickEvents = false;
 	bool bSavedEnableMouseOverEvents = false;
+	bool bTabletInteractionEnabled = true;
 };

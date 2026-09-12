@@ -8,6 +8,8 @@
 #include "Components/Image.h"
 #include "Components/WidgetComponent.h"
 #include "Interaction/InspectionComponent.h"
+#include "ItemInspection/JMInspectableComponent.h"
+#include "ItemInspection/JMItemInspectionData.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
@@ -32,6 +34,10 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 	CameraTargetBounds->CanCharacterStepUpOn = ECB_No;
 
 	InspectionComponent = CreateDefaultSubobject<UInspectionComponent>(TEXT("InspectionComponent"));
+	ItemInspectionComponent = CreateDefaultSubobject<UJMInspectableComponent>(TEXT("ItemInspectionComponent"));
+	ItemInspectionComponent->bInspectionEnabled = false;
+	ItemInspectionComponent->bBlockPlayerInputDuringInspection = true;
+	ItemInspectionComponent->bHideSourceActorDuringInspection = true;
 
 	ObjectLabelWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("ObjectLabelWidget"));
 	ObjectLabelWidget->SetupAttachment(EvidenceMesh);
@@ -74,22 +80,34 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 	}
 }
 
+void ABalhwajeomEvidenceActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	FitCameraTargetBoundsToMesh();
+}
+
+void ABalhwajeomEvidenceActor::FitCameraTargetBoundsToMesh()
+{
+	if (!EvidenceMesh || !CameraTargetBounds)
+	{
+		return;
+	}
+	FVector LocalMin;
+	FVector LocalMax;
+	EvidenceMesh->GetLocalBounds(LocalMin, LocalMax);
+	const FVector LocalExtent = (LocalMax - LocalMin) * 0.5f;
+	CameraTargetBounds->SetRelativeLocation((LocalMin + LocalMax) * 0.5f);
+	CameraTargetBounds->SetBoxExtent(FVector(
+		FMath::Max(LocalExtent.X, 5.0f),
+		FMath::Max(LocalExtent.Y, 5.0f),
+		FMath::Max(LocalExtent.Z, 5.0f)));
+}
+
 void ABalhwajeomEvidenceActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (EvidenceMesh && CameraTargetBounds)
-	{
-		FVector LocalMin;
-		FVector LocalMax;
-		EvidenceMesh->GetLocalBounds(LocalMin, LocalMax);
-		const FVector LocalExtent = (LocalMax - LocalMin) * 0.5f;
-		CameraTargetBounds->SetRelativeLocation((LocalMin + LocalMax) * 0.5f);
-		CameraTargetBounds->SetBoxExtent(FVector(
-			FMath::Max(LocalExtent.X, 5.0f),
-			FMath::Max(LocalExtent.Y, 5.0f),
-			FMath::Max(LocalExtent.Z, 5.0f)));
-	}
+	FitCameraTargetBoundsToMesh();
 
 	if (ObjectLabelWidget)
 	{
@@ -115,6 +133,55 @@ void ABalhwajeomEvidenceActor::BeginPlay()
 	}
 
 	RegisterWithInvestigationSystem();
+	ConfigureItemInspection();
+}
+
+void ABalhwajeomEvidenceActor::ConfigureItemInspection()
+{
+	if (!ItemInspectionComponent)
+	{
+		return;
+	}
+
+	ItemInspectionComponent->bInspectionEnabled = bEnable3DInspection;
+	ItemInspectionComponent->InspectionData = nullptr;
+	RuntimeItemInspectionData = nullptr;
+	if (!bEnable3DInspection || !EvidenceMesh || !EvidenceMesh->GetStaticMesh())
+	{
+		return;
+	}
+
+	RuntimeItemInspectionData = ItemInspectionData
+		? DuplicateObject<UJMItemInspectionData>(ItemInspectionData, this)
+		: NewObject<UJMItemInspectionData>(this);
+	if (!RuntimeItemInspectionData)
+	{
+		ItemInspectionComponent->bInspectionEnabled = false;
+		return;
+	}
+
+	if (RuntimeItemInspectionData->ItemId.IsNone())
+	{
+		RuntimeItemInspectionData->ItemId = ObjectID.IsNone() ? EvidenceData.EvidenceID : ObjectID;
+	}
+	if (RuntimeItemInspectionData->DisplayName.IsEmpty())
+	{
+		RuntimeItemInspectionData->DisplayName = EvidenceData.EvidenceName;
+	}
+	if (RuntimeItemInspectionData->DisplayCategory.IsEmpty())
+	{
+		RuntimeItemInspectionData->DisplayCategory = NSLOCTEXT("Balhwajeom", "EvidenceInspectionCategory", "Evidence");
+	}
+	if (RuntimeItemInspectionData->Description.IsEmpty() && InspectionComponent)
+	{
+		RuntimeItemInspectionData->Description = InspectionComponent->InspectionText;
+	}
+	if (RuntimeItemInspectionData->PreviewMesh.IsNull())
+	{
+		RuntimeItemInspectionData->PreviewMesh = EvidenceMesh->GetStaticMesh();
+	}
+
+	ItemInspectionComponent->InspectionData = RuntimeItemInspectionData;
 }
 
 void ABalhwajeomEvidenceActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -164,6 +231,14 @@ bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplay
 		}
 	}
 	return Investigation->CompleteEvidenceInteraction(EvidenceInstanceID, ViewData.StateID);
+}
+
+bool ABalhwajeomEvidenceActor::CanRequestInvestigationInteraction() const
+{
+	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	FEvidenceInteractionViewData ViewData;
+	return Investigation &&
+		Investigation->BeginEvidenceInteraction(EvidenceInstanceID, ViewData);
 }
 
 UBalhwajeomInvestigationSubsystem* ABalhwajeomEvidenceActor::GetInvestigationSubsystem() const
@@ -221,6 +296,8 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID)
 	bCanBeCaptured = State.bCanCapture;
 	EvidenceData.bAlreadyCollected = !State.PhotoID.IsNone() &&
 		Investigation->HasCapturedPhoto(State.PhotoID);
+	MinimumFocusDistanceOffset = State.MinimumFocusDistanceOffset;
+	MaximumFocusDistanceOffset = State.MaximumFocusDistanceOffset;
 	PreferredFocusDistanceAt1x = State.PreferredFocusDistance;
 	FocusDistanceToleranceAt1x = State.FocusDistanceTolerance;
 	bScaleFocusDistanceWithZoom = State.bScaleFocusDistanceWithZoom;
@@ -238,6 +315,7 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID)
 		EvidenceData.EvidenceID = ObjectID;
 		EvidenceData.EvidenceName = ObjectDefinition.ObjectName;
 	}
+	ConfigureItemInspection();
 }
 
 void ABalhwajeomEvidenceActor::HandlePlayerDistanceStateChanged(
@@ -404,6 +482,8 @@ bool ABalhwajeomEvidenceActor::RequestCameraTargetInfo_Implementation(
 			OutInfo.StateID = CurrentStateID;
 			OutInfo.PhotoID = State.PhotoID;
 			OutInfo.bCanCapture = State.bCanCapture;
+			OutInfo.MinimumFocusDistanceOffset = State.MinimumFocusDistanceOffset;
+			OutInfo.MaximumFocusDistanceOffset = State.MaximumFocusDistanceOffset;
 			OutInfo.PreferredFocusDistance = State.PreferredFocusDistance;
 			OutInfo.FocusDistanceTolerance = State.FocusDistanceTolerance;
 			OutInfo.bScaleFocusDistanceWithZoom = State.bScaleFocusDistanceWithZoom;
@@ -414,6 +494,8 @@ bool ABalhwajeomEvidenceActor::RequestCameraTargetInfo_Implementation(
 	OutInfo.EvidenceData = EvidenceData;
 	OutInfo.InformationStages = CameraInformationStages;
 	OutInfo.bCanBeCaptured = bCanBeCaptured;
+	OutInfo.MinimumFocusDistanceOffset = MinimumFocusDistanceOffset;
+	OutInfo.MaximumFocusDistanceOffset = MaximumFocusDistanceOffset;
 	OutInfo.PreferredFocusDistanceAt1x = PreferredFocusDistanceAt1x;
 	OutInfo.FocusDistanceToleranceAt1x = FocusDistanceToleranceAt1x;
 	OutInfo.bScaleFocusDistanceWithZoom = bScaleFocusDistanceWithZoom;

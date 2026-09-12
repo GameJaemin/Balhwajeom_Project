@@ -34,7 +34,7 @@ void FBalhwajeomInternetSessionState::Reset()
 	OpenPages.Add(EBalhwajeomInternetPage::Main);
 	ScrollOffsets.Reset();
 	ActivePage = EBalhwajeomInternetPage::Main;
-	NormalWindowPosition = FVector2D(130.0f, 115.0f);
+	NormalWindowPosition = FVector2D::ZeroVector;
 	bMaximized = false;
 }
 

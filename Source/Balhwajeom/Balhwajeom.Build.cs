@@ -21,10 +21,14 @@ public class Balhwajeom : ModuleRules
 			"UMG",
 			"Slate",
 			"SlateCore",
-			"DeveloperSettings"
-		});
+			"DeveloperSettings",
+			"ItemInspectorRuntime",
+            "LevelSequence",
+            "MovieScene",
+            "MediaAssets"
+        });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[] { "JMInteraction" });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"Balhwajeom",

@@ -9,6 +9,8 @@
 
 class ACharacter;
 class APlayerController;
+class UAnimationAsset;
+class UAnimInstance;
 class UAnimMontage;
 class UAnimSequenceBase;
 class UAudioComponent;
@@ -137,6 +139,9 @@ protected:
 	void PlayNextVoice();
 	void RefillShuffleBag();
 	void ScheduleNextVoice(bool bInitialDelay);
+	void SavePlayerAnimationState();
+	float PlayBedAnimation(UAnimationAsset* Animation, bool bLooping, float PlayRate, float StartPosition);
+	void RestorePlayerAnimationState();
 	void RestorePlayerState();
 	bool SetupRestInput(APlayerController* PlayerController);
 	void TeardownRestInput();
@@ -200,11 +205,7 @@ protected:
 		meta = (DisplayName = "Sit Animation"))
 	TObjectPtr<UAnimSequenceBase> SitAnimation;
 
-	/** Slot used when Sit Animation is an Animation Sequence. Must exist in the AnimBP. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Animation")
-	FName SitAnimationSlotName = TEXT("DefaultSlot");
-
-	/** Optional looping seated idle. Leave empty to hold the final Sit Montage pose. */
+	/** Optional looping seated idle. Leave empty to hold the final Sit Animation pose. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Animation")
 	TObjectPtr<UAnimMontage> SeatedIdleMontage;
 
@@ -290,7 +291,10 @@ private:
 	TArray<int32> ShuffleBag;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UAnimMontage> ActiveSitMontage;
+	TObjectPtr<UAnimationAsset> SavedAnimationAsset;
+
+	UPROPERTY(Transient)
+	TSubclassOf<UAnimInstance> SavedAnimInstanceClass;
 
 	TSharedPtr<FStreamableHandle> VoiceLoadHandle;
 	FTimerHandle TransitionTimer;
@@ -305,9 +309,15 @@ private:
 	double PlayerTurnStartedAtSeconds = 0.0;
 	uint8 SavedMovementMode = 0;
 	uint8 SavedCustomMovementMode = 0;
+	uint8 SavedAnimationMode = 0;
+	float SavedAnimationPosition = 0.0f;
+	float SavedAnimationPlayRate = 1.0f;
 	EPlayerInspectionDistanceState LastInspectionDistanceState = EPlayerInspectionDistanceState::OutOfRange;
 	bool bInspectionLabelSuppressed = false;
 	bool bSoundMixApplied = false;
 	bool bSavedHUDVisible = true;
 	bool bHasSavedControlRotation = false;
+	bool bHasSavedAnimationState = false;
+	bool bSavedAnimationLooping = false;
+	bool bSavedAnimationPlaying = false;
 };

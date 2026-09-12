@@ -19,12 +19,17 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Components/WidgetSwitcher.h"
+#include "Components/WidgetSwitcherSlot.h"
 #include "Components/WrapBox.h"
 #include "Editor.h"
 #include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
+#include "Engine/Font.h"
+#include "EngineUtils.h"
 #include "Factories/DataAssetFactory.h"
 #include "Factories/DataTableFactory.h"
+#include "Factories/BlueprintFactory.h"
+#include "FileHelpers.h"
 #include "IAssetTools.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
@@ -45,6 +50,15 @@
 #include "Investigation/PhotoDefinitions.h"
 #include "Investigation/SentenceDefinitions.h"
 #include "Tablet/BalhwajeomTabletWidget.h"
+#include "CameraSystem/PhotoWorldStoryWidget.h"
+#include "CameraSystem/BalhwajeomCapturePhotoWidget.h"
+#include "Intro/BalhwajeomIntroFlowActor.h"
+#include "UI/BalhwajeomMainMenuWidget.h"
+#include "UI/BalhwajeomScreenFadeWidget.h"
+#include "UI/BalhwajeomCinematicVideoWidget.h"
+#include "MediaPlayer.h"
+#include "MediaSource.h"
+#include "MediaTexture.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "WidgetBlueprint.h"
@@ -74,6 +88,9 @@ namespace TabletDesigner
 	const TCHAR* InternetClassPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_Internet.WBP_Internet_C");
 	const TCHAR* InternetTabAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetTab.WBP_InternetTab");
 	const TCHAR* InternetKeywordAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_InternetKeyword.WBP_InternetKeyword");
+	const TCHAR* PersonFolderAssetName = TEXT("WBP_TabletPersonFolder");
+	const TCHAR* PersonFolderAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletPersonFolder.WBP_TabletPersonFolder");
+	const TCHAR* PersonFolderClassPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletPersonFolder.WBP_TabletPersonFolder_C");
 
 	const TCHAR* TabletBodyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Tablet_Body.Tablet_Body");
 	const TCHAR* FamilyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Family.Family");
@@ -440,7 +457,14 @@ namespace TabletDesigner
 
 		UCanvasPanel* BuildPersonFolderPage() const
 		{
-			UCanvasPanel* Page = MakePageBase(TEXT("Page_PersonFolder"));
+			UCanvasPanel* Page = Make<UCanvasPanel>(TEXT("Page_PersonFolder"));
+			if (UClass* PersonFolderClass = LoadClass<UUserWidget>(nullptr, PersonFolderClassPath))
+			{
+				FillCanvas(Page, MakeUserWidget(PersonFolderClass, TEXT("WBP_PersonFolder"), true));
+				return Page;
+			}
+
+			FillCanvas(Page, MakeColorImage(TEXT("IMG_Page_PersonFolderBackground"), PageBackground));
 			// Windows-Explorer-style title bar: small folder icon + name on the left, a single
 			// "x" close button on the right. No address/search bar (decoration only, per direction).
 			UImage* FolderTitleIcon = Make<UImage>(TEXT("IMG_FolderTitleIcon"), true);
@@ -452,24 +476,46 @@ namespace TabletDesigner
 			UCanvasPanel* Records = Make<UCanvasPanel>(TEXT("Canvas_FolderRecords"));
 			RecordArea->SetContent(Records);
 
-			// Photos scroll across the top; the statement tile is pinned in its own slot at the
-			// bottom-center, separate from the photo grid (both ~170x170, like a home-page folder
-			// icon -- see UBalhwajeomTabletWidget::RefreshFolderContents). Acquired keywords are no
+			// SB_EvidencePhotos starts empty -- UBalhwajeomTabletWidget::RefreshFolderContents()
+			// clears and repopulates it every time a folder opens, adding up to three
+			// UBalhwajeomTabletFolderSection children (진술서/분석 문장/완성 문장), each a collapsible
+			// group (like Explorer's date groups) holding that bucket's ~170x170 file tiles. The
+			// statement is one such tile now, not a separate pinned slot. Acquired keywords are no
 			// longer shown here at all times; they only appear inside the popup once a photo or the
 			// statement is actually opened (see BuildPopup's WB_PuzzleWords).
-			UScrollBox* PhotoScroll = Make<UScrollBox>(TEXT("SB_EvidencePhotos"));
-			UWrapBox* PhotoWrap = Make<UWrapBox>(TEXT("WB_EvidencePhotos"), true);
-			PhotoWrap->SetInnerSlotPadding(FVector2D(12.0f, 12.0f));
-			PhotoScroll->AddChild(PhotoWrap);
-			Place(Records, PhotoScroll, 18, 20, 1144, 200);
+			UScrollBox* PhotoScroll = Make<UScrollBox>(TEXT("SB_EvidencePhotos"), true);
+			Place(Records, PhotoScroll, 18, 20, 1144, 700);
 
-			USizeBox* StatementSlot = Make<USizeBox>(TEXT("SB_StatementTile"), true);
-			StatementSlot->SetWidthOverride(170.0f);
-			StatementSlot->SetHeightOverride(170.0f);
-			Place(Records, StatementSlot, 505, 250, 170, 170);
-
-			Place(Page, RecordArea, 120, 220, 1200, 470, 5);
+			Place(Page, RecordArea, 120, 220, 1200, 750, 5);
 			return Page;
+		}
+
+		void BuildPersonFolderWidget() const
+		{
+			UScaleBox* Scale = Make<UScaleBox>(TEXT("ScaleBox_Wrapper"));
+			Scale->SetStretch(EStretch::ScaleToFit);
+			USizeBox* Size = Make<USizeBox>(TEXT("SizeBox_Wrapper"));
+			Size->SetWidthOverride(1440.0f);
+			Size->SetHeightOverride(1080.0f);
+			Scale->SetContent(Size);
+
+			UCanvasPanel* Page = Make<UCanvasPanel>(TEXT("Canvas_PersonFolderRoot"));
+			Size->SetContent(Page);
+			FillCanvas(Page, MakeColorImage(TEXT("IMG_Page_PersonFolderBackground"), PageBackground));
+
+			UImage* FolderTitleIcon = Make<UImage>(TEXT("IMG_FolderTitleIcon"), true);
+			Place(Page, FolderTitleIcon, 40, 88, 48, 48, 5);
+			Place(Page, MakeText(TEXT("TXT_FolderTitle"), TEXT("여동생"), 30, WarmWhite, true), 100, 86, 500, 52, 5);
+			Place(Page, MakeTextButton(TEXT("BTN_FolderClose"), TEXT("×"), 36), 1320, 78, 58, 58, 5);
+
+			UBorder* RecordArea = MakeBorder(TEXT("BRD_FolderRecordArea"), PagePanel, FMargin(28.0f));
+			UCanvasPanel* Records = Make<UCanvasPanel>(TEXT("Canvas_FolderRecords"));
+			RecordArea->SetContent(Records);
+			UScrollBox* PhotoScroll = Make<UScrollBox>(TEXT("SB_EvidencePhotos"), true);
+			Place(Records, PhotoScroll, 18, 20, 1144, 700);
+			Place(Page, RecordArea, 120, 220, 1200, 750, 5);
+
+			Tree->RootWidget = Scale;
 		}
 
 		UCanvasPanel* BuildAppPage(
@@ -1751,6 +1797,63 @@ bool UTabletWidgetBlueprintLibrary::InstallInternetBrowser()
 	return bSaved;
 }
 
+bool UTabletWidgetBlueprintLibrary::InstallTabletPersonFolderWidget()
+{
+	using namespace TabletDesigner;
+	if (!BuildWidgetBlueprint(
+		PersonFolderAssetName,
+		PersonFolderAssetPath,
+		UBalhwajeomTabletPersonFolderWidget::StaticClass(),
+		false,
+		[](const FBuilder& Builder) { Builder.BuildPersonFolderWidget(); }))
+	{
+		return false;
+	}
+
+	UWidgetBlueprint* TabletBlueprint = LoadObject<UWidgetBlueprint>(nullptr, AssetPath);
+	UCanvasPanel* FolderPage = TabletBlueprint && TabletBlueprint->WidgetTree
+		? Cast<UCanvasPanel>(TabletBlueprint->WidgetTree->FindWidget(TEXT("Page_PersonFolder")))
+		: nullptr;
+	UClass* PersonFolderClass = LoadClass<UUserWidget>(nullptr, PersonFolderClassPath);
+	if (!TabletBlueprint || !FolderPage || !PersonFolderClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PERSON_FOLDER_INSTALL could not resolve WBP_Tablet's Page_PersonFolder."));
+		return false;
+	}
+
+	if (FolderPage->GetChildrenCount() == 1)
+	{
+		if (UWidget* Existing = FolderPage->GetChildAt(0); Existing && Existing->IsA(PersonFolderClass))
+		{
+			const bool bSaved = SaveAndCompile(TabletBlueprint);
+			UE_LOG(LogTemp, Display, TEXT("PERSON_FOLDER_INSTALL Result=%s AlreadyEmbedded=true"),
+				bSaved ? TEXT("Success") : TEXT("Failure"));
+			return bSaved;
+		}
+	}
+
+	while (FolderPage->GetChildrenCount() > 0)
+	{
+		DiscardWidgetSubtree(TabletBlueprint, FolderPage->GetChildAt(0));
+	}
+
+	UUserWidget* PersonFolder = FBuilder(TabletBlueprint).MakeUserWidget(
+		PersonFolderClass,
+		TEXT("WBP_PersonFolder"),
+		true);
+	if (!PersonFolder)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PERSON_FOLDER_INSTALL could not construct WBP_PersonFolder."));
+		return false;
+	}
+	FBuilder(TabletBlueprint).FillCanvas(FolderPage, PersonFolder);
+
+	const bool bSaved = SaveAndCompile(TabletBlueprint);
+	UE_LOG(LogTemp, Display, TEXT("PERSON_FOLDER_INSTALL Result=%s AlreadyEmbedded=false"),
+		bSaved ? TEXT("Success") : TEXT("Failure"));
+	return bSaved;
+}
+
 bool UTabletWidgetBlueprintLibrary::UpdateMessengerTimeline()
 {
 	using namespace TabletDesigner;
@@ -1890,12 +1993,358 @@ bool UTabletWidgetBlueprintLibrary::InspectTabletWidgetBlueprint()
 	return true;
 }
 
+bool UTabletWidgetBlueprintLibrary::InspectWidgetBlueprintByPath(const FString& AssetPath)
+{
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Widget inspection failed: %s could not be loaded."), *AssetPath);
+		return false;
+	}
+
+	TArray<UWidget*> Widgets;
+	Blueprint->WidgetTree->GetAllWidgets(Widgets);
+	UE_LOG(
+		LogTemp,
+		Display,
+		TEXT("WIDGET_INSPECT Asset=%s Parent=%s RootWidget=%s Widgets=%d"),
+		*AssetPath,
+		*GetNameSafe(Blueprint->ParentClass),
+		*GetNameSafe(Blueprint->WidgetTree->RootWidget),
+		Widgets.Num());
+	for (const UWidget* Widget : Widgets)
+	{
+		const UPanelWidget* Parent = Widget->GetParent();
+		UE_LOG(LogTemp, Display, TEXT("WIDGET_ENTRY Name=%s Class=%s Parent=%s Variable=%s Visibility=%s"),
+			*Widget->GetName(),
+			*Widget->GetClass()->GetName(),
+			Parent ? *Parent->GetName() : TEXT("(root)"),
+			Widget->bIsVariable ? TEXT("true") : TEXT("false"),
+			*UEnum::GetValueAsString(Widget->GetVisibility()));
+
+		if (const UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot))
+		{
+			UE_LOG(LogTemp, Display, TEXT("WIDGET_CANVAS_SLOT Name=%s Position=(%s) Size=(%s) ZOrder=%d"),
+				*Widget->GetName(),
+				*CanvasSlot->GetPosition().ToString(),
+				*CanvasSlot->GetSize().ToString(),
+				CanvasSlot->GetZOrder());
+		}
+		if (const USizeBox* SizeBox = Cast<USizeBox>(Widget))
+		{
+			UE_LOG(LogTemp, Display, TEXT("WIDGET_SIZEBOX Name=%s WidthOverride=%s HeightOverride=%s"),
+				*SizeBox->GetName(),
+				SizeBox->IsWidthOverride() ? *FString::SanitizeFloat(SizeBox->GetWidthOverride()) : TEXT("(none)"),
+				SizeBox->IsHeightOverride() ? *FString::SanitizeFloat(SizeBox->GetHeightOverride()) : TEXT("(none)"));
+		}
+		if (const UScaleBox* ScaleBoxWidget = Cast<UScaleBox>(Widget))
+		{
+			const TCHAR* StretchName = TEXT("Unknown");
+			switch (ScaleBoxWidget->GetStretch())
+			{
+			case EStretch::None: StretchName = TEXT("None"); break;
+			case EStretch::Fill: StretchName = TEXT("Fill"); break;
+			case EStretch::ScaleToFit: StretchName = TEXT("ScaleToFit"); break;
+			case EStretch::ScaleToFitX: StretchName = TEXT("ScaleToFitX"); break;
+			case EStretch::ScaleToFitY: StretchName = TEXT("ScaleToFitY"); break;
+			case EStretch::ScaleToFill: StretchName = TEXT("ScaleToFill"); break;
+			case EStretch::ScaleBySafeZone: StretchName = TEXT("ScaleBySafeZone"); break;
+			case EStretch::UserSpecified: StretchName = TEXT("UserSpecified"); break;
+			default: break;
+			}
+			UE_LOG(LogTemp, Display, TEXT("WIDGET_SCALEBOX Name=%s Stretch=%s"),
+				*ScaleBoxWidget->GetName(),
+				StretchName);
+		}
+		if (const UPanelSlot* PlainSlot = Widget->Slot)
+		{
+			if (!Cast<UCanvasPanelSlot>(PlainSlot))
+			{
+				UE_LOG(LogTemp, Display, TEXT("WIDGET_SLOT_CLASS Name=%s SlotClass=%s"),
+					*Widget->GetName(),
+					*PlainSlot->GetClass()->GetName());
+			}
+			if (const UWidgetSwitcherSlot* SwitcherSlot = Cast<UWidgetSwitcherSlot>(PlainSlot))
+			{
+				UE_LOG(LogTemp, Display, TEXT("WIDGET_SWITCHER_SLOT Name=%s HAlign=%d VAlign=%d"),
+					*Widget->GetName(),
+					static_cast<int32>(SwitcherSlot->GetHorizontalAlignment()),
+					static_cast<int32>(SwitcherSlot->GetVerticalAlignment()));
+			}
+		}
+	}
+	return true;
+}
+
+bool UTabletWidgetBlueprintLibrary::SetButtonIconTexture(
+	const FString& AssetPath, const FString& ButtonName, const FString& TexturePath)
+{
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetButtonIconTexture failed: %s could not be loaded."), *AssetPath);
+		return false;
+	}
+
+	UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, *TexturePath);
+	if (!Texture)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetButtonIconTexture failed: could not load texture %s."), *TexturePath);
+		return false;
+	}
+
+	UButton* TargetButton = Cast<UButton>(Blueprint->WidgetTree->FindWidget(FName(*ButtonName)));
+	if (!TargetButton)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetButtonIconTexture failed: %s has no button named %s."), *AssetPath, *ButtonName);
+		return false;
+	}
+
+	UImage* Icon = Blueprint->WidgetTree->ConstructWidget<UImage>(
+		UImage::StaticClass(), FName(*(ButtonName + TEXT("_Icon"))));
+	Icon->SetBrushFromTexture(Texture, true);
+	TargetButton->SetContent(Icon);
+
+	using namespace TabletDesigner;
+	const bool bSaved = SaveAndCompile(Blueprint);
+	UE_LOG(LogTemp, Display, TEXT("SET_BUTTON_ICON Result=%s Asset=%s Button=%s Texture=%s"),
+		bSaved ? TEXT("Success") : TEXT("Failure"), *AssetPath, *ButtonName, *TexturePath);
+	return bSaved;
+}
+
+bool UTabletWidgetBlueprintLibrary::WrapRootInScaleBox(
+	const FString& AssetPath, const float DesignWidth, const float DesignHeight)
+{
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+	if (!Blueprint || !Blueprint->WidgetTree || !Blueprint->WidgetTree->RootWidget)
+	{
+		UE_LOG(LogTemp, Error, TEXT("WrapRootInScaleBox failed: %s could not be loaded."), *AssetPath);
+		return false;
+	}
+
+	UWidget* ExistingRoot = Blueprint->WidgetTree->RootWidget;
+	if (UScaleBox* ExistingScale = Cast<UScaleBox>(ExistingRoot))
+	{
+		// Older versions of this helper constructed wrapper widgets directly and therefore
+		// did not register their Widget Blueprint GUIDs. Register them before recompiling.
+		if (!Blueprint->WidgetVariableNameToGuidMap.Contains(ExistingScale->GetFName()))
+		{
+			Blueprint->OnVariableAdded(ExistingScale->GetFName());
+		}
+		if (UWidget* ExistingChild = ExistingScale->GetContent())
+		{
+			if (!Blueprint->WidgetVariableNameToGuidMap.Contains(ExistingChild->GetFName()))
+			{
+				Blueprint->OnVariableAdded(ExistingChild->GetFName());
+			}
+		}
+		using namespace TabletDesigner;
+		const bool bSaved = SaveAndCompile(Blueprint);
+		UE_LOG(LogTemp, Display, TEXT("WRAP_ROOT_SCALEBOX Result=%s Asset=%s AlreadyWrapped=true"),
+			bSaved ? TEXT("Success") : TEXT("Failure"), *AssetPath);
+		return bSaved;
+	}
+
+	UScaleBox* Scale = Blueprint->WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("ScaleBox_Wrapper"));
+	Blueprint->OnVariableAdded(Scale->GetFName());
+	Scale->SetStretch(EStretch::ScaleToFit);
+
+	USizeBox* Size = Blueprint->WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("SizeBox_Wrapper"));
+	Blueprint->OnVariableAdded(Size->GetFName());
+	Size->SetWidthOverride(DesignWidth);
+	Size->SetHeightOverride(DesignHeight);
+
+	Scale->SetContent(Size);
+	Size->SetContent(ExistingRoot);
+	Blueprint->WidgetTree->RootWidget = Scale;
+
+	using namespace TabletDesigner;
+	const bool bSaved = SaveAndCompile(Blueprint);
+	UE_LOG(LogTemp, Display, TEXT("WRAP_ROOT_SCALEBOX Result=%s Asset=%s DesignSize=%dx%d"),
+		bSaved ? TEXT("Success") : TEXT("Failure"),
+		*AssetPath,
+		FMath::RoundToInt(DesignWidth),
+		FMath::RoundToInt(DesignHeight));
+	return bSaved;
+}
+
+bool UTabletWidgetBlueprintLibrary::SetCanvasSlotGeometry(
+	const FString& AssetPath, const FString& WidgetName, const float X, const float Y, const float Width, const float Height)
+{
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetCanvasSlotGeometry failed: %s could not be loaded."), *AssetPath);
+		return false;
+	}
+
+	UWidget* Target = Blueprint->WidgetTree->FindWidget(FName(*WidgetName));
+	UCanvasPanelSlot* CanvasSlot = Target ? Cast<UCanvasPanelSlot>(Target->Slot) : nullptr;
+	if (!CanvasSlot)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetCanvasSlotGeometry failed: %s has no CanvasPanelSlot-parented widget named %s."),
+			*AssetPath, *WidgetName);
+		return false;
+	}
+
+	CanvasSlot->SetPosition(FVector2D(X, Y));
+	CanvasSlot->SetSize(FVector2D(Width, Height));
+
+	using namespace TabletDesigner;
+	const bool bSaved = SaveAndCompile(Blueprint);
+	UE_LOG(LogTemp, Display, TEXT("SET_CANVAS_SLOT_GEOMETRY Result=%s Asset=%s Widget=%s Position=(%.0f,%.0f) Size=(%.0f,%.0f)"),
+		bSaved ? TEXT("Success") : TEXT("Failure"), *AssetPath, *WidgetName, X, Y, Width, Height);
+	return bSaved;
+}
+
+bool UTabletWidgetBlueprintLibrary::SetSizeBoxOverride(
+	const FString& AssetPath, const FString& WidgetName, const float Width, const float Height)
+{
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetSizeBoxOverride failed: %s could not be loaded."), *AssetPath);
+		return false;
+	}
+
+	USizeBox* Target = Cast<USizeBox>(Blueprint->WidgetTree->FindWidget(FName(*WidgetName)));
+	if (!Target)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetSizeBoxOverride failed: %s has no SizeBox named %s."),
+			*AssetPath, *WidgetName);
+		return false;
+	}
+
+	Target->SetWidthOverride(Width);
+	Target->SetHeightOverride(Height);
+
+	using namespace TabletDesigner;
+	const bool bSaved = SaveAndCompile(Blueprint);
+	UE_LOG(LogTemp, Display, TEXT("SET_SIZEBOX_OVERRIDE Result=%s Asset=%s Widget=%s Size=(%.0f,%.0f)"),
+		bSaved ? TEXT("Success") : TEXT("Failure"), *AssetPath, *WidgetName, Width, Height);
+	return bSaved;
+}
+
+bool UTabletWidgetBlueprintLibrary::AddTextButtonToCanvas(
+	const FString& AssetPath, const FString& ParentCanvasName, const FString& ButtonName,
+	const FString& Label, const float X, const float Y, const float Width, const float Height, const int32 FontSize)
+{
+	using namespace TabletDesigner;
+
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("AddTextButtonToCanvas failed: %s could not be loaded."), *AssetPath);
+		return false;
+	}
+
+	if (Blueprint->WidgetTree->FindWidget(FName(*ButtonName)))
+	{
+		UE_LOG(LogTemp, Display, TEXT("ADD_TEXT_BUTTON Result=Skipped Asset=%s (widget %s already exists)"),
+			*AssetPath, *ButtonName);
+		return true;
+	}
+
+	UCanvasPanel* ParentCanvas = Cast<UCanvasPanel>(Blueprint->WidgetTree->FindWidget(FName(*ParentCanvasName)));
+	if (!ParentCanvas)
+	{
+		UE_LOG(LogTemp, Error, TEXT("AddTextButtonToCanvas failed: %s has no CanvasPanel named %s."),
+			*AssetPath, *ParentCanvasName);
+		return false;
+	}
+
+	// Matches BTN_PopupClose/BTN_StatementSubmit's existing style: fully transparent button
+	// background (the popup panel behind it already supplies the fill color), warm-white text.
+	UButton* Button = Blueprint->WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), FName(*ButtonName));
+	Button->bIsVariable = true;
+	Blueprint->OnVariableAdded(Button->GetFName());
+	FSlateBrush InvisibleBrush;
+	InvisibleBrush.DrawAs = ESlateBrushDrawType::NoDrawType;
+	FButtonStyle Style;
+	Style.SetNormal(InvisibleBrush);
+	Style.SetHovered(InvisibleBrush);
+	Style.SetPressed(InvisibleBrush);
+	Style.SetDisabled(InvisibleBrush);
+	Style.SetNormalForeground(FSlateColor(WarmWhite));
+	Style.SetHoveredForeground(FSlateColor(FLinearColor::White));
+	Style.SetPressedForeground(FSlateColor(FLinearColor(0.72f, 0.68f, 0.62f, 1.0f)));
+	Style.SetNormalPadding(FMargin(0.0f));
+	Style.SetPressedPadding(FMargin(2.0f));
+	Button->SetStyle(Style);
+
+	UTextBlock* Text = Blueprint->WidgetTree->ConstructWidget<UTextBlock>(
+		UTextBlock::StaticClass(), FName(*(TEXT("TXT_") + ButtonName)));
+	// Every new widget needs an entry in WidgetVariableNameToGuidMap, not just bIsVariable ones
+	// (mirrors FBuilder::Make<T>) -- otherwise the compiler's ensure fires (harmlessly self-healed,
+	// but avoidable).
+	Blueprint->OnVariableAdded(Text->GetFName());
+	Text->SetText(FText::FromString(Label));
+	Text->SetColorAndOpacity(FSlateColor::UseForeground());
+	Text->SetShadowOffset(FVector2D(1.0f, 1.0f));
+	Text->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f));
+	FSlateFontInfo Font = Text->GetFont();
+	Font.Size = FontSize;
+	Text->SetFont(Font);
+	Text->SetJustification(ETextJustify::Center);
+	Button->SetContent(Text);
+
+	UCanvasPanelSlot* Slot = ParentCanvas->AddChildToCanvas(Button);
+	Slot->SetPosition(FVector2D(X, Y));
+	Slot->SetSize(FVector2D(Width, Height));
+
+	const bool bSaved = SaveAndCompile(Blueprint);
+	UE_LOG(LogTemp, Display, TEXT("ADD_TEXT_BUTTON Result=%s Asset=%s Button=%s Parent=%s Position=(%.0f,%.0f) Size=(%.0f,%.0f)"),
+		bSaved ? TEXT("Success") : TEXT("Failure"), *AssetPath, *ButtonName, *ParentCanvasName, X, Y, Width, Height);
+	return bSaved;
+}
+
+bool UTabletWidgetBlueprintLibrary::SetClassDefaultTexture(
+	const FString& AssetPath, const FString& PropertyName, const FString& TexturePath)
+{
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *AssetPath);
+	if (!Blueprint || !Blueprint->GeneratedClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetClassDefaultTexture failed: %s could not be loaded."), *AssetPath);
+		return false;
+	}
+
+	UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, *TexturePath);
+	if (!Texture)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetClassDefaultTexture failed: could not load texture %s."), *TexturePath);
+		return false;
+	}
+
+	UObject* DefaultObject = Blueprint->GeneratedClass->GetDefaultObject();
+	FObjectProperty* Property = CastField<FObjectProperty>(
+		Blueprint->GeneratedClass->FindPropertyByName(FName(*PropertyName)));
+	if (!DefaultObject || !Property || !Property->PropertyClass->IsChildOf(UTexture2D::StaticClass()))
+	{
+		UE_LOG(LogTemp, Error, TEXT("SetClassDefaultTexture failed: %s has no UTexture2D property named %s."),
+			*AssetPath, *PropertyName);
+		return false;
+	}
+	Property->SetObjectPropertyValue_InContainer(DefaultObject, Texture);
+
+	using namespace TabletDesigner;
+	const bool bSaved = SaveAndCompile(Blueprint);
+	UE_LOG(LogTemp, Display, TEXT("SET_CLASS_DEFAULT_TEXTURE Result=%s Asset=%s Property=%s Texture=%s"),
+		bSaved ? TEXT("Success") : TEXT("Failure"), *AssetPath, *PropertyName, *TexturePath);
+	return bSaved;
+}
+
 bool UTabletWidgetBlueprintLibrary::CreateTabletWidgetBlueprint()
 {
 	using namespace TabletDesigner;
 	if (!CreateMessengerDataAssetsInternal()
 		|| !BuildMessengerWidgetBlueprints(false)
-		|| !BuildInternetWidgetBlueprints(false))
+		|| !BuildInternetWidgetBlueprints(false)
+		|| !BuildWidgetBlueprint(
+			PersonFolderAssetName,
+			PersonFolderAssetPath,
+			UBalhwajeomTabletPersonFolderWidget::StaticClass(),
+			false,
+			[](const FBuilder& Builder) { Builder.BuildPersonFolderWidget(); }))
 	{
 		return false;
 	}
@@ -1923,7 +2372,13 @@ bool UTabletWidgetBlueprintLibrary::RedesignTabletWidgetBlueprint()
 	using namespace TabletDesigner;
 	if (!CreateMessengerDataAssetsInternal()
 		|| !BuildMessengerWidgetBlueprints(true)
-		|| !BuildInternetWidgetBlueprints(true))
+		|| !BuildInternetWidgetBlueprints(true)
+		|| !BuildWidgetBlueprint(
+			PersonFolderAssetName,
+			PersonFolderAssetPath,
+			UBalhwajeomTabletPersonFolderWidget::StaticClass(),
+			false,
+			[](const FBuilder& Builder) { Builder.BuildPersonFolderWidget(); }))
 	{
 		UE_LOG(LogTemp, Error, TEXT("Tablet child widget blueprints could not be generated."));
 		return false;
@@ -1958,21 +2413,29 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 	}
 	Tablet->InitializeForAutomatedTest();
 
-	auto FindButton = [Tablet](const TCHAR* Name)
-	{
-		return Cast<UButton>(Tablet->GetWidgetFromName(Name));
-	};
-	auto FindBorder = [Tablet](const TCHAR* Name)
-	{
-		return Cast<UBorder>(Tablet->GetWidgetFromName(Name));
-	};
-	auto FindText = [Tablet](const TCHAR* Name)
-	{
-		return Cast<UTextBlock>(Tablet->GetWidgetFromName(Name));
-	};
 	auto FindWidget = [Tablet](const TCHAR* Name)
 	{
-		return Tablet->GetWidgetFromName(Name);
+		if (UWidget* Widget = Tablet->GetWidgetFromName(Name))
+		{
+			return Widget;
+		}
+		if (UUserWidget* PersonFolder = Cast<UUserWidget>(Tablet->GetWidgetFromName(TEXT("WBP_PersonFolder"))))
+		{
+			return PersonFolder->GetWidgetFromName(Name);
+		}
+		return static_cast<UWidget*>(nullptr);
+	};
+	auto FindButton = [&FindWidget](const TCHAR* Name)
+	{
+		return Cast<UButton>(FindWidget(Name));
+	};
+	auto FindBorder = [&FindWidget](const TCHAR* Name)
+	{
+		return Cast<UBorder>(FindWidget(Name));
+	};
+	auto FindText = [&FindWidget](const TCHAR* Name)
+	{
+		return Cast<UTextBlock>(FindWidget(Name));
 	};
 	auto Click = [&FindButton](const TCHAR* Name)
 	{
@@ -2061,8 +2524,8 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 		bPassed &= Require(Internet->GetOpenTabCount() == 2, TEXT("Internet X preserves tabs"));
 		bPassed &= Require(!Internet->IsMaximized(), TEXT("Internet X restores normal mode"));
 		bPassed &= Require(
-			Internet->GetNormalWindowPosition().Equals(FVector2D(80, 60)),
-			TEXT("Internet X preserves normal position"));
+			Internet->GetNormalWindowPosition().IsNearlyZero(),
+			TEXT("fixed Internet window remains at the tablet origin"));
 		bPassed &= Require(Click(TEXT("BTN_Internet")), TEXT("Internet reopens from desktop"));
 		bPassed &= Require(
 			Internet->GetActivePage() == EBalhwajeomInternetPage::News1,
@@ -2260,10 +2723,8 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 		UE_LOG(LogTemp, Display, TEXT("TABLET_SMOKE: no GameInstance in this harness; ")
 			TEXT("skipping DT_Characters-driven folder navigation checks (validate in PIE instead)."));
 	}
-	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_EvidencePhotos"))) != nullptr,
-		TEXT("dynamic evidence photo list exists"));
-	bPassed &= Require(Cast<USizeBox>(FindWidget(TEXT("SB_StatementTile"))) != nullptr,
-		TEXT("statement tile slot exists"));
+	bPassed &= Require(Cast<UScrollBox>(FindWidget(TEXT("SB_EvidencePhotos"))) != nullptr,
+		TEXT("folder file list container exists"));
 	// Acquired keywords are shown inside the popup (WB_PuzzleWords) once a photo or the statement
 	// opens, not as a standing list on the folder page -- see UBalhwajeomTabletWidget::ShowPopup.
 	bPassed &= Require(Cast<UWrapBox>(FindWidget(TEXT("WB_PuzzleWords"))) != nullptr,
@@ -2293,6 +2754,459 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 
 	UE_LOG(LogTemp, Display, TEXT("TABLET_SMOKE Result=%s"), bPassed ? TEXT("Success") : TEXT("Failure"));
 	return bPassed;
+}
+
+bool UTabletWidgetBlueprintLibrary::RedesignPhotoWorldStoryWidget()
+{
+	using namespace TabletDesigner;
+	const TCHAR* PhotoStoryAssetPath =
+		TEXT("/Game/Balhwajeom/UI/PhotoStory/WBP_PhotoWorldStory.WBP_PhotoWorldStory");
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, PhotoStoryAssetPath);
+	if (!Blueprint || !Blueprint->ParentClass ||
+		!Blueprint->ParentClass->IsChildOf(UPhotoWorldStoryWidget::StaticClass()) ||
+		!ClearWidgetTree(Blueprint))
+	{
+		UE_LOG(LogTemp, Error, TEXT("PHOTO_STORY_WIDGET_REDESIGN could not prepare %s."),
+			PhotoStoryAssetPath);
+		return false;
+	}
+
+	FBuilder Builder(Blueprint);
+	UTextBlock* StoryText = Builder.MakeText(
+		TEXT("StoryText"),
+		TEXT("사진 스토리 텍스트"),
+		32,
+		FLinearColor::White,
+		true);
+	StoryText->SetJustification(ETextJustify::Center);
+	StoryText->SetAutoWrapText(false);
+	StoryText->SetWrapTextAt(0.0f);
+	StoryText->SetShadowOffset(FVector2D(2.0f, 2.0f));
+	StoryText->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f));
+	if (UFont* KoreanFont = LoadObject<UFont>(nullptr,
+		TEXT("/Game/Balhwajeom/UI/JE/Freesentation-4Regular_Font.Freesentation-4Regular_Font")))
+	{
+		FSlateFontInfo Font = StoryText->GetFont();
+		Font.FontObject = KoreanFont;
+		Font.Size = 32;
+		Font.OutlineSettings.OutlineSize = 2;
+		Font.OutlineSettings.OutlineColor = FLinearColor::Black;
+		StoryText->SetFont(Font);
+	}
+	Blueprint->WidgetTree->RootWidget = StoryText;
+
+	const bool bSaved = SaveAndCompile(Blueprint);
+	UE_LOG(LogTemp, Display, TEXT("PHOTO_STORY_WIDGET_REDESIGN Result=%s Asset=%s"),
+		bSaved ? TEXT("Success") : TEXT("Failure"), PhotoStoryAssetPath);
+	return bSaved;
+}
+
+bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
+{
+	const FString AssetFolderPath = TEXT("/Game/Balhwajeom/UI/Camera");
+	const FString CaptureAssetName = TEXT("WBP_CapturePhoto");
+	const FString CaptureAssetPath =
+		TEXT("/Game/Balhwajeom/UI/Camera/WBP_CapturePhoto.WBP_CapturePhoto");
+	if (UWidgetBlueprint* ExistingBlueprint = LoadObject<UWidgetBlueprint>(nullptr, *CaptureAssetPath))
+	{
+		if (ExistingBlueprint->WidgetTree &&
+			!ExistingBlueprint->WidgetTree->FindWidget(TEXT("ScreenDimmer")))
+		{
+			UCanvasPanel* ExistingRoot = Cast<UCanvasPanel>(
+				ExistingBlueprint->WidgetTree->RootWidget);
+			if (!ExistingRoot)
+			{
+				return false;
+			}
+
+			UBorder* Dimmer = ExistingBlueprint->WidgetTree->ConstructWidget<UBorder>(
+				UBorder::StaticClass(), TEXT("ScreenDimmer"));
+			Dimmer->bIsVariable = true;
+			Dimmer->SetBrushColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.52f));
+			UCanvasPanelSlot* DimmerSlot = ExistingRoot->AddChildToCanvas(Dimmer);
+			DimmerSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+			DimmerSlot->SetOffsets(FMargin(0.0f));
+			DimmerSlot->SetZOrder(0);
+			return TabletDesigner::SaveAndCompile(ExistingBlueprint);
+		}
+		return true;
+	}
+
+	FAssetToolsModule& AssetToolsModule =
+		FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+	UWidgetBlueprintFactory* Factory = NewObject<UWidgetBlueprintFactory>();
+	Factory->ParentClass = UBalhwajeomCapturePhotoWidget::StaticClass();
+	UWidgetBlueprint* Blueprint = Cast<UWidgetBlueprint>(
+		AssetToolsModule.Get().CreateAsset(
+			CaptureAssetName,
+			AssetFolderPath,
+			UWidgetBlueprint::StaticClass(),
+			Factory));
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		return false;
+	}
+
+	UWidgetTree* Tree = Blueprint->WidgetTree;
+	UCanvasPanel* Root = Tree->ConstructWidget<UCanvasPanel>(
+		UCanvasPanel::StaticClass(), TEXT("ViewportRoot"));
+	Tree->RootWidget = Root;
+
+	UBorder* Dimmer = Tree->ConstructWidget<UBorder>(
+		UBorder::StaticClass(), TEXT("ScreenDimmer"));
+	Dimmer->bIsVariable = true;
+	Dimmer->SetBrushColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.52f));
+	UCanvasPanelSlot* DimmerSlot = Root->AddChildToCanvas(Dimmer);
+	DimmerSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+	DimmerSlot->SetOffsets(FMargin(0.0f));
+	DimmerSlot->SetZOrder(0);
+
+	UCanvasPanel* Card = Tree->ConstructWidget<UCanvasPanel>(
+		UCanvasPanel::StaticClass(), TEXT("CardRoot"));
+	Card->bIsVariable = true;
+	UCanvasPanelSlot* CardSlot = Root->AddChildToCanvas(Card);
+	CardSlot->SetAnchors(FAnchors(0.5f, 0.5f));
+	CardSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+	CardSlot->SetPosition(FVector2D::ZeroVector);
+	CardSlot->SetSize(FVector2D(1000.0f, 650.0f));
+	CardSlot->SetZOrder(1);
+
+	UBorder* CardBackground = Tree->ConstructWidget<UBorder>(
+		UBorder::StaticClass(), TEXT("CardBackground"));
+	CardBackground->SetBrushColor(FLinearColor(0.018f, 0.018f, 0.018f, 0.98f));
+	UCanvasPanelSlot* BackgroundSlot = Card->AddChildToCanvas(CardBackground);
+	BackgroundSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+	BackgroundSlot->SetOffsets(FMargin(0.0f));
+	BackgroundSlot->SetZOrder(0);
+
+	UImage* Photo = Tree->ConstructWidget<UImage>(
+		UImage::StaticClass(), TEXT("CapturedPhotoImage"));
+	Photo->bIsVariable = true;
+	Photo->SetColorAndOpacity(FLinearColor::White);
+	UCanvasPanelSlot* PhotoSlot = Card->AddChildToCanvas(Photo);
+	PhotoSlot->SetPosition(FVector2D(42.0f, 42.0f));
+	PhotoSlot->SetSize(FVector2D(720.0f, 430.0f));
+	PhotoSlot->SetZOrder(1);
+
+	UBorder* SentenceBackground = Tree->ConstructWidget<UBorder>(
+		UBorder::StaticClass(), TEXT("SentenceBackground"));
+	SentenceBackground->SetBrushColor(FLinearColor(0.075f, 0.075f, 0.075f, 1.0f));
+	SentenceBackground->SetPadding(FMargin(24.0f, 15.0f));
+	UCanvasPanelSlot* SentenceSlot = Card->AddChildToCanvas(SentenceBackground);
+	SentenceSlot->SetPosition(FVector2D(42.0f, 492.0f));
+	SentenceSlot->SetSize(FVector2D(720.0f, 116.0f));
+	SentenceSlot->SetZOrder(1);
+
+	UTextBlock* Sentence = Tree->ConstructWidget<UTextBlock>(
+		UTextBlock::StaticClass(), TEXT("SentenceTextBlock"));
+	Sentence->bIsVariable = true;
+	Sentence->SetText(FText::FromString(TEXT("[]와/과 []이/가 사진 속에서 발견되었다.")));
+	Sentence->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	Sentence->SetJustification(ETextJustify::Center);
+	Sentence->SetAutoWrapText(true);
+	FSlateFontInfo SentenceFont = Sentence->GetFont();
+	SentenceFont.Size = 30;
+	Sentence->SetFont(SentenceFont);
+	SentenceBackground->SetContent(Sentence);
+
+	UVerticalBox* Keywords = Tree->ConstructWidget<UVerticalBox>(
+		UVerticalBox::StaticClass(), TEXT("KeywordList"));
+	Keywords->bIsVariable = true;
+	UCanvasPanelSlot* KeywordsSlot = Card->AddChildToCanvas(Keywords);
+	KeywordsSlot->SetPosition(FVector2D(792.0f, 42.0f));
+	KeywordsSlot->SetSize(FVector2D(170.0f, 430.0f));
+	KeywordsSlot->SetZOrder(2);
+
+	return TabletDesigner::SaveAndCompile(Blueprint);
+}
+
+bool UTabletWidgetBlueprintLibrary::CreateIntroFlowAssets()
+{
+	const FString Folder = TEXT("/Game/Balhwajeom/UI/Title");
+	IAssetTools& AssetTools =
+		FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+
+	auto MakeWidgetBlueprint = [&AssetTools, &Folder](
+		const TCHAR* Name, UClass* ParentClass) -> UWidgetBlueprint*
+	{
+		const FString Path = FString::Printf(TEXT("%s/%s.%s"), *Folder, Name, Name);
+		if (UWidgetBlueprint* Existing = LoadObject<UWidgetBlueprint>(nullptr, *Path))
+		{
+			return Existing;
+		}
+		UWidgetBlueprintFactory* Factory = NewObject<UWidgetBlueprintFactory>();
+		Factory->ParentClass = ParentClass;
+		return Cast<UWidgetBlueprint>(AssetTools.CreateAsset(
+			Name, Folder, UWidgetBlueprint::StaticClass(), Factory));
+	};
+
+	UWidgetBlueprint* Menu = MakeWidgetBlueprint(
+		TEXT("WBP_MainMenu"), UBalhwajeomMainMenuWidget::StaticClass());
+	if (!Menu || !Menu->WidgetTree)
+	{
+		return false;
+	}
+	if (!Menu->WidgetTree->RootWidget)
+	{
+		UWidgetTree* Tree = Menu->WidgetTree;
+		UScaleBox* Scale = Tree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("SB_ViewportScale"));
+		Scale->SetStretch(EStretch::ScaleToFit);
+		Scale->SetStretchDirection(EStretchDirection::Both);
+		Tree->RootWidget = Scale;
+
+		USizeBox* DesignSize = Tree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("SB_Design1920x1080"));
+		DesignSize->SetWidthOverride(1920.0f);
+		DesignSize->SetHeightOverride(1080.0f);
+		Scale->SetContent(DesignSize);
+
+		UCanvasPanel* Canvas = Tree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("Canvas_Design"));
+		DesignSize->SetContent(Canvas);
+
+		UBorder* Background = Tree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Background"));
+		Background->SetBrushColor(FLinearColor(0.012f, 0.016f, 0.018f, 1.0f));
+		UCanvasPanelSlot* BackgroundSlot = Canvas->AddChildToCanvas(Background);
+		BackgroundSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+		BackgroundSlot->SetOffsets(FMargin(0.0f));
+
+		UBorder* Accent = Tree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("AccentLine"));
+		Accent->SetBrushColor(FLinearColor(0.72f, 0.18f, 0.08f, 1.0f));
+		TabletDesigner::FBuilder::Place(Canvas, Accent, 745.0f, 644.0f, 430.0f, 3.0f, 1);
+
+		UTextBlock* Title = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TXT_Title"));
+		Title->SetText(FText::FromString(TEXT("발화점")));
+		Title->SetJustification(ETextJustify::Center);
+		Title->SetColorAndOpacity(FSlateColor(FLinearColor(0.96f, 0.93f, 0.86f, 1.0f)));
+		FSlateFontInfo TitleFont = Title->GetFont();
+		TitleFont.Size = 112;
+		TitleFont.LetterSpacing = 120;
+		if (UFont* KoreanFont = LoadObject<UFont>(nullptr,
+			TEXT("/Game/Balhwajeom/UI/JE/Freesentation-4Regular_Font.Freesentation-4Regular_Font")))
+		{
+			TitleFont.FontObject = KoreanFont;
+		}
+		Title->SetFont(TitleFont);
+		TabletDesigner::FBuilder::Place(Canvas, Title, 560.0f, 330.0f, 800.0f, 160.0f, 2);
+
+		UTextBlock* Subtitle = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TXT_Subtitle"));
+		Subtitle->SetText(FText::FromString(TEXT("잿더미 속에 남겨진 진실")));
+		Subtitle->SetJustification(ETextJustify::Center);
+		Subtitle->SetColorAndOpacity(FSlateColor(FLinearColor(0.63f, 0.61f, 0.56f, 1.0f)));
+		FSlateFontInfo SubtitleFont = Subtitle->GetFont();
+		SubtitleFont.Size = 28;
+		SubtitleFont.LetterSpacing = 80;
+		Subtitle->SetFont(SubtitleFont);
+		TabletDesigner::FBuilder::Place(Canvas, Subtitle, 660.0f, 505.0f, 600.0f, 55.0f, 2);
+
+		UButton* Start = Tree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("BTN_Start"));
+		Start->bIsVariable = true;
+		Menu->OnVariableAdded(Start->GetFName());
+		Start->SetBackgroundColor(FLinearColor(0.12f, 0.12f, 0.11f, 0.95f));
+		UTextBlock* StartText = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TXT_Start"));
+		StartText->SetText(FText::FromString(TEXT("시작하기")));
+		StartText->SetJustification(ETextJustify::Center);
+		StartText->SetColorAndOpacity(FSlateColor(FLinearColor(0.96f, 0.93f, 0.86f, 1.0f)));
+		FSlateFontInfo StartFont = StartText->GetFont();
+		StartFont.Size = 34;
+		StartFont.LetterSpacing = 50;
+		StartText->SetFont(StartFont);
+		Start->SetContent(StartText);
+		TabletDesigner::FBuilder::Place(Canvas, Start, 760.0f, 700.0f, 400.0f, 92.0f, 2);
+	}
+
+	UWidgetBlueprint* Fade = MakeWidgetBlueprint(
+		TEXT("WBP_ScreenFade"), UBalhwajeomScreenFadeWidget::StaticClass());
+	if (!Fade || !Fade->WidgetTree)
+	{
+		return false;
+	}
+	if (!Fade->WidgetTree->RootWidget)
+	{
+		UBorder* Black = Fade->WidgetTree->ConstructWidget<UBorder>(
+			UBorder::StaticClass(), TEXT("BlackOverlay"));
+		Black->SetBrushColor(FLinearColor::Black);
+		Black->SetVisibility(ESlateVisibility::HitTestInvisible);
+		Fade->WidgetTree->RootWidget = Black;
+	}
+
+	UWidgetBlueprint* Video = MakeWidgetBlueprint(
+		TEXT("WBP_CinematicVideo"), UBalhwajeomCinematicVideoWidget::StaticClass());
+	if (!Video || !Video->WidgetTree)
+	{
+		return false;
+	}
+	if (Video->WidgetTree->RootWidget && !TabletDesigner::ClearWidgetTree(Video))
+	{
+		return false;
+	}
+	if (!Video->WidgetTree->RootWidget)
+	{
+		UWidgetTree* Tree = Video->WidgetTree;
+		UCanvasPanel* Root = Tree->ConstructWidget<UCanvasPanel>(
+			UCanvasPanel::StaticClass(), TEXT("VideoRoot"));
+		Video->OnVariableAdded(Root->GetFName());
+		Tree->RootWidget = Root;
+
+		UBorder* Background = Tree->ConstructWidget<UBorder>(
+			UBorder::StaticClass(), TEXT("VideoBackground"));
+		Video->OnVariableAdded(Background->GetFName());
+		Background->SetBrushColor(FLinearColor::Black);
+		TabletDesigner::FBuilder::FillCanvas(Root, Background, 0);
+
+		UImage* Image = Tree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("IMG_Video"));
+		Image->bIsVariable = true;
+		Video->OnVariableAdded(Image->GetFName());
+		Image->SetColorAndOpacity(FLinearColor::White);
+		TabletDesigner::FBuilder::FillCanvas(Root, Image, 1);
+	}
+
+	const bool bWidgetsSaved = TabletDesigner::SaveAndCompile(Menu) &&
+		TabletDesigner::SaveAndCompile(Fade) && TabletDesigner::SaveAndCompile(Video);
+	if (!bWidgetsSaved)
+	{
+		return false;
+	}
+
+	const FString ActorPath = TEXT("/Game/Balhwajeom/Blueprints/Intro/BP_IntroFlowController.BP_IntroFlowController");
+	UBlueprint* ActorBlueprint = LoadObject<UBlueprint>(nullptr, *ActorPath);
+	if (!ActorBlueprint)
+	{
+		UBlueprintFactory* Factory = NewObject<UBlueprintFactory>();
+		Factory->ParentClass = ABalhwajeomIntroFlowActor::StaticClass();
+		ActorBlueprint = Cast<UBlueprint>(AssetTools.CreateAsset(
+			TEXT("BP_IntroFlowController"),
+			TEXT("/Game/Balhwajeom/Blueprints/Intro"),
+			UBlueprint::StaticClass(),
+			Factory));
+		if (!ActorBlueprint)
+		{
+			return false;
+		}
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(ActorBlueprint);
+		FKismetEditorUtilities::CompileBlueprint(ActorBlueprint);
+		UPackage* Package = ActorBlueprint->GetOutermost();
+		Package->MarkPackageDirty();
+		const FString Filename = FPackageName::LongPackageNameToFilename(
+			Package->GetName(), FPackageName::GetAssetPackageExtension());
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+		SaveArgs.SaveFlags = SAVE_NoError;
+		SaveArgs.bSlowTask = false;
+		if (!UPackage::SavePackage(Package, ActorBlueprint, *Filename, SaveArgs))
+		{
+			return false;
+		}
+	}
+
+	if (!ActorBlueprint || !ActorBlueprint->GeneratedClass)
+	{
+		return false;
+	}
+
+	const FString MapPath = TEXT("/Game/Balhwajeom/Maps/Prototype/L_InvestigationPrototype_Jung");
+	UWorld* World = UEditorLoadingAndSavingUtils::LoadMap(MapPath);
+	if (!World)
+	{
+		return false;
+	}
+
+	ABalhwajeomIntroFlowActor* FlowActor = nullptr;
+	int32 FlowActorCount = 0;
+	for (TActorIterator<ABalhwajeomIntroFlowActor> It(World); It; ++It)
+	{
+		if (IsValid(*It))
+		{
+			FlowActor = *It;
+			++FlowActorCount;
+		}
+	}
+	if (FlowActorCount == 0)
+	{
+		FActorSpawnParameters SpawnParameters;
+		SpawnParameters.Name = TEXT("BP_IntroFlowController");
+		SpawnParameters.OverrideLevel = World->GetCurrentLevel();
+		FlowActor = World->SpawnActor<ABalhwajeomIntroFlowActor>(
+			ActorBlueprint->GeneratedClass, FTransform::Identity, SpawnParameters);
+		if (!FlowActor)
+		{
+			return false;
+		}
+		FlowActor->SetActorLabel(TEXT("Intro Flow Controller"));
+		FlowActorCount = 1;
+	}
+	if (FlowActorCount != 1 || !UEditorLoadingAndSavingUtils::SaveMap(World, MapPath))
+	{
+		UE_LOG(LogTemp, Error, TEXT("INTRO_FLOW_ASSETS invalid actor count or map save failure: %d"), FlowActorCount);
+		return false;
+	}
+
+	UE_LOG(LogTemp, Display, TEXT("INTRO_FLOW_ASSETS Result=Success Actor=%s"), *GetNameSafe(FlowActor));
+	return true;
+}
+
+bool UTabletWidgetBlueprintLibrary::ConfigureRoom4IntroMedia()
+{
+	const FString MapPath = TEXT("/Game/Balhwajeom/Maps/Prototype/room4");
+	UWorld* World = UEditorLoadingAndSavingUtils::LoadMap(MapPath);
+	if (!World)
+	{
+		UE_LOG(LogTemp, Error, TEXT("ROOM4_INTRO_MEDIA failed to load %s"), *MapPath);
+		return false;
+	}
+
+	ABalhwajeomIntroFlowActor* FlowActor = nullptr;
+	for (TActorIterator<ABalhwajeomIntroFlowActor> It(World); It; ++It)
+	{
+		if (IsValid(*It))
+		{
+			FlowActor = *It;
+			break;
+		}
+	}
+
+	if (!FlowActor)
+	{
+		UBlueprint* FlowBlueprint = LoadObject<UBlueprint>(nullptr,
+			TEXT("/Game/Balhwajeom/Blueprints/Intro/BP_IntroFlowController.BP_IntroFlowController"));
+		if (!FlowBlueprint || !FlowBlueprint->GeneratedClass)
+		{
+			return false;
+		}
+		FActorSpawnParameters SpawnParameters;
+		SpawnParameters.Name = TEXT("BP_IntroFlowController");
+		SpawnParameters.OverrideLevel = World->GetCurrentLevel();
+		FlowActor = World->SpawnActor<ABalhwajeomIntroFlowActor>(
+			FlowBlueprint->GeneratedClass, FTransform::Identity, SpawnParameters);
+		if (!FlowActor)
+		{
+			return false;
+		}
+		FlowActor->SetActorLabel(TEXT("Intro Flow Controller"));
+	}
+
+	UMediaSource* Source = LoadObject<UMediaSource>(nullptr,
+		TEXT("/Game/Balhwajeom/Cinematics/Sequences/MS_Intro.MS_Intro"));
+	UMediaPlayer* Player = LoadObject<UMediaPlayer>(nullptr,
+		TEXT("/Game/Balhwajeom/Cinematics/Sequences/MP_Intro.MP_Intro"));
+	UMediaTexture* Texture = LoadObject<UMediaTexture>(nullptr,
+		TEXT("/Game/Balhwajeom/Cinematics/Sequences/MT_Intro.MT_Intro"));
+	if (!Source || !Player || !Texture)
+	{
+		UE_LOG(LogTemp, Error, TEXT("ROOM4_INTRO_MEDIA missing MS_Intro, MP_Intro, or MT_Intro"));
+		return false;
+	}
+
+	Texture->SetMediaPlayer(Player);
+	FlowActor->SetIntroMediaAssets(Source, Player, Texture);
+	FlowActor->Modify();
+	if (!UEditorLoadingAndSavingUtils::SaveMap(World, MapPath))
+	{
+		return false;
+	}
+
+	UE_LOG(LogTemp, Display,
+		TEXT("ROOM4_INTRO_MEDIA Result=Success Actor=%s Source=%s Player=%s Texture=%s"),
+		*GetNameSafe(FlowActor), *GetNameSafe(Source), *GetNameSafe(Player), *GetNameSafe(Texture));
+	return true;
 }
 
 bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
@@ -2479,7 +3393,8 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		MirrorPhoto.PhotoSentenceID = Analysis.SentenceID;
 		MirrorPhoto.CharacterID = SisterCharacterID;
 		MirrorPhoto.GrantedWordIDs.Add(TEXT("WORD_PIG"));
-		MirrorPhoto.WorldStoryLines.Add(FText::FromString(TEXT("불탄 거울 속에 돼지 장식의 실루엣이 남아 있다.")));
+		MirrorPhoto.WorldStoryCues.Add({
+			FText::FromString(TEXT("불탄 거울 속에 돼지 장식의 실루엣이 남아 있다.")), 0.0f});
 		Photos->AddRow(MirrorPhoto.PhotoID, MirrorPhoto);
 		++SeededRows;
 
@@ -2490,7 +3405,8 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		StoryPhoto.CustomDescription = FText::FromString(TEXT("그을린 유리 안에서 작은 눈송이가 흔들린다."));
 		StoryPhoto.CharacterID = SisterCharacterID;
 		StoryPhoto.GrantedWordIDs.Add(TEXT("WORD_SNOW_GLOBE"));
-		StoryPhoto.WorldStoryLines.Add(FText::FromString(TEXT("가족의 대화가 잠시 귓가에 되살아난다.")));
+		StoryPhoto.WorldStoryCues.Add({
+			FText::FromString(TEXT("가족의 대화가 잠시 귓가에 되살아난다.")), 0.0f});
 		Photos->AddRow(StoryPhoto.PhotoID, StoryPhoto);
 		++SeededRows;
 

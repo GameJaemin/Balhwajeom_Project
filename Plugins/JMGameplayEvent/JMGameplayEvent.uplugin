@@ -1,0 +1,24 @@
+{
+  "FileVersion": 3,
+  "Version": 2,
+  "VersionName": "1.1.0",
+  "FriendlyName": "JM Gameplay Event",
+  "Description": "Reusable Gameplay Tag based local event bus for decoupled runtime systems.",
+  "Category": "JM Plugins",
+  "CreatedBy": "JM",
+  "CanContainContent": true,
+  "EnabledByDefault": true,
+  "Modules": [
+    {
+      "Name": "JMGameplayEvent",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    },
+    {
+      "Name": "JMGameplayEventTests",
+      "Type": "Editor",
+      "LoadingPhase": "PostEngineInit",
+      "TargetAllowList": ["Editor"]
+    }
+  ]
+}

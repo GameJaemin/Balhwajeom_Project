@@ -2,19 +2,24 @@
 
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
+#include "Animation/AnimSingleNodeInstance.h"
+#include "Animation/AnimationAsset.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Blueprint/UserWidget.h"
 #include "Camera/CameraComponent.h"
 #include "CameraSystem/BalhwajeomCameraCharacter.h"
+#include "CameraSystem/BalhwajeomCameraPlayerController.h"
 #include "CameraSystem/BalhwajeomEvidenceActor.h"
 #include "CameraSystem/BalhwajeomPhotoCameraComponent.h"
 #include "Components/AudioComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/Image.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/AssetManager.h"
+#include "Engine/CollisionProfile.h"
 #include "Engine/GameInstance.h"
 #include "Engine/StreamableManager.h"
 #include "EngineUtils.h"
@@ -36,8 +41,6 @@
 namespace BedMemory
 {
 constexpr double ExitInputGuardSeconds = 0.25;
-constexpr float SitPoseHoldLeadSeconds = 0.02f;
-constexpr float SitPoseEndOffsetSeconds = 0.001f;
 
 float RandomInRange(const FVector2D& Range)
 {
@@ -56,7 +59,12 @@ ABedMemoryActor::ABedMemoryActor()
 
 	BedMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BedMesh"));
 	BedMesh->SetupAttachment(SceneRoot);
-	BedMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// The mesh is the solid body of the bed. InteractionCollision remains a
+	// query-only trigger, while the assigned bed mesh blocks the player.
+	BedMesh->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+	BedMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	BedMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+	BedMesh->CanCharacterStepUpOn = ECB_No;
 	BedMesh->SetStaticMesh(nullptr);
 
 	InteractionCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("InteractionCollision"));
@@ -320,6 +328,11 @@ bool ABedMemoryActor::BeginRest(APawn* InteractingPawn)
 		bSavedHUDVisible = HUD->bShowHUD;
 		HUD->bShowHUD = false;
 	}
+	if (ABalhwajeomCameraPlayerController* CameraPlayerController =
+		Cast<ABalhwajeomCameraPlayerController>(PlayerController))
+	{
+		CameraPlayerController->SetBedMemoryHUDActive(true);
+	}
 	SetInspectionLabelSuppressed(true);
 	SetWorldEvidenceLabelsSuppressed(true);
 
@@ -403,39 +416,16 @@ void ABedMemoryActor::BeginEntering()
 		return;
 	}
 
+	SavePlayerAnimationState();
 	State = EBedMemoryState::Entering;
-	float EnterDuration = 0.0f;
-	ActiveSitMontage = nullptr;
-	if (SitAnimation)
-	{
-		if (UAnimMontage* AssignedMontage = Cast<UAnimMontage>(SitAnimation))
-		{
-			ActiveSitMontage = AssignedMontage;
-			EnterDuration = RestingCharacter->PlayAnimMontage(AssignedMontage);
-		}
-		else if (UAnimInstance* AnimInstance = RestingCharacter->GetMesh()
-			? RestingCharacter->GetMesh()->GetAnimInstance()
-			: nullptr)
-		{
-			ActiveSitMontage = AnimInstance->PlaySlotAnimationAsDynamicMontage(
-				SitAnimation,
-				SitAnimationSlotName,
-				0.1f,
-				0.1f,
-				1.0f,
-				1,
-				-1.0f,
-				0.0f);
-			EnterDuration = ActiveSitMontage ? ActiveSitMontage->GetPlayLength() : 0.0f;
-		}
-	}
+	const float EnterDuration = PlayBedAnimation(SitAnimation, false, 1.0f, 0.0f);
 	if (EnterDuration > 0.0f)
 	{
 		GetWorldTimerManager().SetTimer(
 			TransitionTimer,
 			this,
 			&ABedMemoryActor::FinishEntering,
-			FMath::Max(EnterDuration - BedMemory::SitPoseHoldLeadSeconds, 0.001f),
+			EnterDuration,
 			false);
 	}
 	else
@@ -451,28 +441,10 @@ void ABedMemoryActor::FinishEntering()
 		return;
 	}
 
-	if (ActiveSitMontage)
-	{
-		if (UAnimInstance* AnimInstance = RestingCharacter->GetMesh()
-			? RestingCharacter->GetMesh()->GetAnimInstance()
-			: nullptr)
-		{
-			if (AnimInstance->Montage_IsActive(ActiveSitMontage))
-			{
-				AnimInstance->Montage_SetPosition(
-					ActiveSitMontage,
-					FMath::Max(
-						ActiveSitMontage->GetPlayLength() - BedMemory::SitPoseEndOffsetSeconds,
-						0.0f));
-				AnimInstance->Montage_Pause(ActiveSitMontage);
-			}
-		}
-	}
-
 	State = EBedMemoryState::Seated;
 	if (SeatedIdleMontage)
 	{
-		RestingCharacter->PlayAnimMontage(SeatedIdleMontage);
+		PlayBedAnimation(SeatedIdleMontage, true, 1.0f, 0.0f);
 	}
 	BeginPreparingAudio();
 }
@@ -783,38 +755,21 @@ void ABedMemoryActor::EndRest()
 	}
 
 	float ExitDuration = 0.0f;
-	if (RestingCharacter)
+	if (RestingCharacter && SitAnimation)
 	{
-		if (SeatedIdleMontage)
+		float ReverseStartPosition = SitAnimation->GetPlayLength();
+		if (USkeletalMeshComponent* Mesh = RestingCharacter->GetMesh())
 		{
-			RestingCharacter->StopAnimMontage(SeatedIdleMontage);
-		}
-		if (ActiveSitMontage)
-		{
-			if (UAnimInstance* AnimInstance = RestingCharacter->GetMesh()
-				? RestingCharacter->GetMesh()->GetAnimInstance()
-				: nullptr)
+			if (UAnimSingleNodeInstance* SingleNode = Mesh->GetSingleNodeInstance())
 			{
-				float ReverseStartPosition = ActiveSitMontage->GetPlayLength();
-				if (AnimInstance->Montage_IsActive(ActiveSitMontage))
+				if (SingleNode->GetCurrentAsset() == SitAnimation)
 				{
-					ReverseStartPosition = AnimInstance->Montage_GetPosition(ActiveSitMontage);
-				}
-				const float PlayedDuration = AnimInstance->Montage_Play(
-					ActiveSitMontage,
-					-1.0f,
-					EMontagePlayReturnType::Duration,
-					ReverseStartPosition);
-				if (!FMath::IsNearlyZero(PlayedDuration))
-				{
-					const float FullDuration = FMath::Abs(PlayedDuration);
-					const float MontageLength = ActiveSitMontage->GetPlayLength();
-					ExitDuration = MontageLength > UE_KINDA_SMALL_NUMBER
-						? FullDuration * (ReverseStartPosition / MontageLength)
-						: 0.0f;
+					ReverseStartPosition = SingleNode->GetCurrentTime();
 				}
 			}
 		}
+		ExitDuration = PlayBedAnimation(
+			SitAnimation, false, -1.0f, ReverseStartPosition);
 	}
 	if (ExitDuration > 0.0f)
 	{
@@ -837,13 +792,26 @@ void ABedMemoryActor::FinishExiting()
 
 	if (RestingCharacter && ExitAnchor)
 	{
+		const FRotator ExitFacingRotation(
+			0.0f, ExitAnchor->GetComponentRotation().Yaw, 0.0f);
 		FHitResult IgnoredHit;
 		RestingCharacter->SetActorLocationAndRotation(
 			ExitAnchor->GetComponentLocation(),
-			ExitAnchor->GetComponentRotation(),
+			ExitFacingRotation,
 			false,
 			&IgnoredHit,
 			ETeleportType::TeleportPhysics);
+
+		// A completed exit uses ExitAnchor as the authoritative facing direction.
+		// Preserve the player's previous camera pitch while replacing its yaw so
+		// controller-driven characters do not turn back toward the bed next frame.
+		SavedControlRotation.Yaw = ExitFacingRotation.Yaw;
+		if (RestingPlayerController)
+		{
+			FRotator ExitControlRotation = SavedControlRotation;
+			ExitControlRotation.Yaw = ExitFacingRotation.Yaw;
+			RestingPlayerController->SetControlRotation(ExitControlRotation);
+		}
 	}
 
 	if (ABalhwajeomCameraCharacter* CameraCharacter = Cast<ABalhwajeomCameraCharacter>(RestingCharacter))
@@ -861,10 +829,113 @@ void ABedMemoryActor::FinishExiting()
 	ApplyInspectionDistanceState(LastInspectionDistanceState);
 }
 
+void ABedMemoryActor::SavePlayerAnimationState()
+{
+	if (bHasSavedAnimationState || !RestingCharacter || !RestingCharacter->GetMesh())
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* Mesh = RestingCharacter->GetMesh();
+	SavedAnimationMode = static_cast<uint8>(Mesh->GetAnimationMode());
+	SavedAnimInstanceClass = Mesh->GetAnimClass();
+	SavedAnimationAsset = nullptr;
+	SavedAnimationPosition = 0.0f;
+	SavedAnimationPlayRate = 1.0f;
+	bSavedAnimationLooping = false;
+	bSavedAnimationPlaying = false;
+	if (UAnimSingleNodeInstance* SingleNode = Mesh->GetSingleNodeInstance())
+	{
+		SavedAnimationAsset = SingleNode->GetCurrentAsset();
+		SavedAnimationPosition = SingleNode->GetCurrentTime();
+		SavedAnimationPlayRate = SingleNode->GetPlayRate();
+		bSavedAnimationLooping = SingleNode->IsLooping();
+		bSavedAnimationPlaying = SingleNode->IsPlaying();
+	}
+	bHasSavedAnimationState = true;
+}
+
+float ABedMemoryActor::PlayBedAnimation(
+	UAnimationAsset* Animation,
+	bool bLooping,
+	float PlayRate,
+	float StartPosition)
+{
+	if (!Animation || !RestingCharacter || !RestingCharacter->GetMesh() ||
+		FMath::IsNearlyZero(PlayRate))
+	{
+		return 0.0f;
+	}
+
+	USkeletalMeshComponent* Mesh = RestingCharacter->GetMesh();
+	Mesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+	Mesh->SetAnimation(Animation);
+	UAnimSingleNodeInstance* SingleNode = Mesh->GetSingleNodeInstance();
+	if (!SingleNode)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s could not create a single-node animation instance."), *GetName());
+		return 0.0f;
+	}
+
+	const float Length = Animation->GetPlayLength();
+	const float ClampedStart = FMath::Clamp(StartPosition, 0.0f, Length);
+	SingleNode->SetLooping(bLooping);
+	SingleNode->SetPlayRate(PlayRate);
+	SingleNode->SetPosition(ClampedStart, false);
+	SingleNode->SetPlaying(true);
+
+	if (bLooping)
+	{
+		return 0.0f;
+	}
+	const float DistanceToTravel = PlayRate < 0.0f
+		? ClampedStart
+		: Length - ClampedStart;
+	return DistanceToTravel / FMath::Abs(PlayRate);
+}
+
+void ABedMemoryActor::RestorePlayerAnimationState()
+{
+	if (!bHasSavedAnimationState || !RestingCharacter || !RestingCharacter->GetMesh())
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* Mesh = RestingCharacter->GetMesh();
+	const EAnimationMode::Type AnimationMode =
+		static_cast<EAnimationMode::Type>(SavedAnimationMode);
+	Mesh->SetAnimationMode(AnimationMode);
+	if (AnimationMode == EAnimationMode::AnimationBlueprint)
+	{
+		Mesh->SetAnimInstanceClass(SavedAnimInstanceClass);
+	}
+	else if (AnimationMode == EAnimationMode::AnimationSingleNode && SavedAnimationAsset)
+	{
+		Mesh->SetAnimation(SavedAnimationAsset);
+		if (UAnimSingleNodeInstance* SingleNode = Mesh->GetSingleNodeInstance())
+		{
+			SingleNode->SetLooping(bSavedAnimationLooping);
+			SingleNode->SetPlayRate(SavedAnimationPlayRate);
+			SingleNode->SetPosition(SavedAnimationPosition, false);
+			SingleNode->SetPlaying(bSavedAnimationPlaying);
+		}
+	}
+
+	SavedAnimationAsset = nullptr;
+	SavedAnimInstanceClass = nullptr;
+	bHasSavedAnimationState = false;
+}
+
 void ABedMemoryActor::RestorePlayerState()
 {
+	RestorePlayerAnimationState();
 	if (RestingPlayerController)
 	{
+		if (ABalhwajeomCameraPlayerController* CameraPlayerController =
+			Cast<ABalhwajeomCameraPlayerController>(RestingPlayerController))
+		{
+			CameraPlayerController->SetBedMemoryHUDActive(false);
+		}
 		RestingPlayerController->SetIgnoreMoveInput(false);
 		RestingPlayerController->SetIgnoreLookInput(false);
 		if (bHasSavedControlRotation)
@@ -902,7 +973,6 @@ void ABedMemoryActor::RestorePlayerState()
 	}
 	VoiceCandidates.Reset();
 	ShuffleBag.Reset();
-	ActiveSitMontage = nullptr;
 	RestingCharacter = nullptr;
 	RestingPlayerController = nullptr;
 	bHasSavedControlRotation = false;
@@ -1015,6 +1085,14 @@ void ABedMemoryActor::SetInspectionLabel(const FText& LabelText, bool bVisible)
 	};
 	FSetLabelTextParameters Parameters{LabelText};
 	Widget->ProcessEvent(Function, &Parameters);
+
+	// WBP_ObjectLabel is shared with photographic evidence, where UseCamera
+	// conveys capture status. A bed prompt is a plain interaction and must not
+	// inherit that evidence-camera icon.
+	if (UImage* CameraIcon = Cast<UImage>(Widget->GetWidgetFromName(TEXT("UseCamera"))))
+	{
+		CameraIcon->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 void ABedMemoryActor::SetWorldEvidenceLabelsSuppressed(bool bSuppressed) const

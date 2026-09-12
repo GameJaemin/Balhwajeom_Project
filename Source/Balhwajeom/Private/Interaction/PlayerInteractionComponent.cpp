@@ -1,7 +1,11 @@
 #include "Interaction/PlayerInteractionComponent.h"
 
+#include "Interaction/DoorInteractionComponent.h"
+#include "Interaction/ItemInspectionIntegration.h"
+
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
@@ -12,6 +16,9 @@
 #include "Interaction/InspectionComponent.h"
 #include "Interaction/WorldInteractable.h"
 #include "CameraSystem/BalhwajeomEvidenceActor.h"
+#include "CameraSystem/BalhwajeomPhotoCameraComponent.h"
+#include "Story/StoryStateSubsystem.h"
+#include "Story/StoryStateTags.h"
 
 
 UPlayerInteractionComponent::UPlayerInteractionComponent()
@@ -142,6 +149,43 @@ void UPlayerInteractionComponent::BeginPlay()
 
 	RefreshInspectableObjects();
 	SetupInteractionInput();
+
+	if (UWorld* World = GetWorld())
+	{
+		if (UGameInstance* GameInstance = World->GetGameInstance())
+		{
+			if (UStoryStateSubsystem* StoryState =
+				GameInstance->GetSubsystem<UStoryStateSubsystem>())
+			{
+				StoryState->OnStateTagAdded.AddUniqueDynamic(
+					this,
+					&ThisClass::HandleStoryStateTagAdded
+				);
+			}
+		}
+	}
+}
+
+void UPlayerInteractionComponent::EndPlay(
+	const EEndPlayReason::Type EndPlayReason
+)
+{
+	if (UWorld* World = GetWorld())
+	{
+		if (UGameInstance* GameInstance = World->GetGameInstance())
+		{
+			if (UStoryStateSubsystem* StoryState =
+				GameInstance->GetSubsystem<UStoryStateSubsystem>())
+			{
+				StoryState->OnStateTagAdded.RemoveDynamic(
+					this,
+					&ThisClass::HandleStoryStateTagAdded
+				);
+			}
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 
@@ -156,6 +200,13 @@ void UPlayerInteractionComponent::TickComponent(
 	if (!bInteractionInputInitialized)
 	{
 		SetupInteractionInput();
+	}
+
+	if (IsInteractionSuppressedByPhotoCamera())
+	{
+		SetFocusedInspection(nullptr);
+		FocusedItemActor.Reset();
+		return;
 	}
 
 	AActor* PlayerActor = GetOwner();
@@ -241,9 +292,14 @@ void UPlayerInteractionComponent::TickComponent(
 	);
 
 	UInspectionComponent* NewFocusedInspection = nullptr;
+	FocusedItemActor.Reset();
 
 	if (bHit && IsValid(HitResult.GetActor()))
 	{
+		if (HitResult.Distance <= ItemInspectionDistance && BalhwajeomItemInspection::CanInspect(HitResult.GetActor(), Cast<APawn>(PlayerActor)))
+		{
+			FocusedItemActor = HitResult.GetActor();
+		}
 		UInspectionComponent* HitInspection =
 			HitResult.GetActor()->FindComponentByClass<UInspectionComponent>();
 
@@ -332,6 +388,10 @@ bool UPlayerInteractionComponent::TryInspect(
 ) 
 {
 	OutInspectionText = FText::GetEmpty();
+	if (IsInteractionSuppressedByPhotoCamera())
+	{
+		return false;
+	}
 
 	if (!IsValid(FocusedInspection))
 	{
@@ -360,10 +420,40 @@ bool UPlayerInteractionComponent::TryInspect(
 
 bool UPlayerInteractionComponent::RequestInspect()
 {
+	if (IsInteractionSuppressedByPhotoCamera())
+	{
+		return false;
+	}
+
+	if (HasFocusedItemInspection())
+	{
+		if (Cast<ABalhwajeomEvidenceActor>(FocusedItemActor.Get()) && IsValid(FocusedInspection))
+		{
+			FText InspectionText;
+			if (TryInspect(InspectionText))
+			{
+				OnInspectionSucceeded.Broadcast(InspectionText);
+				BalhwajeomItemInspection::TryInspect(FocusedItemActor.Get(), Cast<APawn>(GetOwner()));
+				return true;
+			}
+		}
+		return BalhwajeomItemInspection::TryInspect(FocusedItemActor.Get(), Cast<APawn>(GetOwner()));
+	}
+
 	if (IsValid(FocusedInspection))
 	{
 		AActor* FocusedActor = FocusedInspection->GetOwner();
 		APawn* InteractingPawn = Cast<APawn>(GetOwner());
+		if (IsValid(FocusedActor) && IsValid(InteractingPawn))
+		{
+			if (UDoorInteractionComponent* DoorInteraction =
+				FocusedActor->FindComponentByClass<UDoorInteractionComponent>())
+			{
+				return DoorInteraction->CanInteract() &&
+					DoorInteraction->RequestInteraction();
+			}
+		}
+
 		if (IsValid(FocusedActor) && IsValid(InteractingPawn) &&
 			FocusedActor->Implements<UWorldInteractable>())
 		{
@@ -470,4 +560,37 @@ void UPlayerInteractionComponent::SetupInteractionInput()
 void UPlayerInteractionComponent::OnInteractActionStarted()
 {
 	HandleInteractStarted();
+}
+
+void UPlayerInteractionComponent::HandleStoryStateTagAdded(
+	FGameplayTag StateTag
+)
+{
+	if (StateTag != BalhwajeomGameplayTags::Runtime_Player_Mode_PhotoCamera &&
+		StateTag != BalhwajeomGameplayTags::Runtime_Player_Mode_Tablet)
+	{
+		return;
+	}
+
+	SetFocusedInspection(nullptr);
+	FocusedItemActor.Reset();
+	OnInspectionDismissRequested.Broadcast();
+	ReceiveInspectionDismissRequested();
+}
+
+bool UPlayerInteractionComponent::HasFocusedItemInspection() const
+{
+	return BalhwajeomItemInspection::CanInspect(FocusedItemActor.Get(), Cast<APawn>(GetOwner()));
+}
+
+bool UPlayerInteractionComponent::IsInteractionSuppressedByPhotoCamera() const
+{
+	if (BalhwajeomItemInspection::IsOpen(GetOwner()) || BalhwajeomItemInspection::IsOtherModalOpen(GetOwner())) return true;
+	const AActor* OwnerActor = GetOwner();
+	const UBalhwajeomPhotoCameraComponent* PhotoCamera = IsValid(OwnerActor)
+		? OwnerActor->FindComponentByClass<UBalhwajeomPhotoCameraComponent>()
+		: nullptr;
+
+	return IsValid(PhotoCamera) &&
+		(PhotoCamera->IsInCameraMode() || PhotoCamera->IsCameraTransitioning());
 }

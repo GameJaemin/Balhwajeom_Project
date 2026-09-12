@@ -4,12 +4,17 @@
 
 #include "CoreMinimal.h"
 #include "BalhwajeomEvidenceTypes.h"
+#include "BalhwajeomCameraFocusModel.h"
 #include "Components/ActorComponent.h"
 #include "Engine/Scene.h"
 #include "BalhwajeomPhotoCameraComponent.generated.h"
 
 class UCameraComponent;
 class UBalhwajeomInvestigationSubsystem;
+class APhotoWorldStoryActor;
+class UMaterialInstanceDynamic;
+class UMaterialInterface;
+class UTexture2D;
 
 enum class EBalhwajeomPhotoCaptureResult : uint8
 {
@@ -32,9 +37,16 @@ struct FBalhwajeomResolvedPhotoTarget
     FName StateID = NAME_None;
     FName PhotoID = NAME_None;
     bool bCanCapture = false;
-    float PreferredFocusDistance = 700.0f;
-    float FocusDistanceTolerance = 300.0f;
-    bool bScaleFocusDistanceWithZoom = true;
+    float MinimumFocusDistanceOffset = 0.0f;
+    float MaximumFocusDistanceOffset = 0.0f;
+};
+
+struct FBalhwajeomStrictFocusTarget
+{
+    TWeakObjectPtr<AActor> Target;
+    FBalhwajeomCameraTargetInfo TargetInfo;
+    FVector FocusLocation = FVector::ZeroVector;
+    float FocusDistance = 0.0f;
 };
 
 struct FBalhwajeomPendingPhotoCapture
@@ -44,6 +56,8 @@ struct FBalhwajeomPendingPhotoCapture
     FDateTime RequestedTime;
     FString RelativePath;
     FString AbsolutePath;
+    FTransform StorySpawnTransform = FTransform::Identity;
+    bool bHasStorySpawnTransform = false;
 };
 
 DECLARE_MULTICAST_DELEGATE(FOnCameraModeExited);
@@ -142,6 +156,7 @@ protected:
     void PanCamera(const FVector& ScreenDirection, float Value);
     void ShowPhotoFeedback(const FString& Message, const FColor& Color) const;
     void TriggerPhotoFlash() const;
+	void SetCameraUIHiddenForScreenshot(bool bHidden) const;
     void UpdateEvidenceFocus(float DeltaTime);
     void RefreshDisplayedGuideSnapshot();
     bool IsDisplayedGuideSurfaceVisible() const;
@@ -149,7 +164,9 @@ protected:
     bool TraceViewportCenter(FHitResult& OutHit) const;
     bool IsViewportCenterOverTarget(const AActor* Target) const;
     bool CalculateTargetFrameCoverage(const AActor* Target, float& OutCoverageRatio) const;
-    void ApplyDepthOfField(float DeltaTime, float DesiredFocalDistance, bool bHasFocusedTarget);
+    bool FindStrictFocusTarget(FBalhwajeomStrictFocusTarget& OutTarget) const;
+    void ApplyFocusBlur(float DeltaTime, const FBalhwajeomFocusRegion& DesiredRegion);
+    void InitializeFocusBlurMaterials();
     void ResetEvidenceFocus();
     bool TryCaptureActiveFocusTarget();
     bool ResolveInvestigationTarget(
@@ -162,6 +179,10 @@ protected:
     void CompleteImageSave(FGuid RequestID, bool bSucceeded, const FString& AbsolutePath);
     void ClearScreenshotDelegates();
     void SetWorldInspectionLabelsSuppressed(bool bSuppressed) const;
+    bool CalculateStorySpawnTransform(FTransform& OutTransform) const;
+    void StartPhotoWorldStory(
+        const struct FPhotoDefinition& PhotoDefinition,
+        const FTransform& SpawnTransform);
 
     UPROPERTY(Transient)
     TObjectPtr<UCameraComponent> PhotoCamera;
@@ -180,8 +201,35 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus")
     bool bEnableEvidenceFocusSystem = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus", meta = (ClampMin = "100.0"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Legacy", meta = (ClampMin = "100.0", DeprecatedProperty, DeprecationMessage = "The exact center ray now uses world range; MinimumFocusDistance and MaximumFocusDistance own eligibility."))
     float FocusTargetScanDistance = 5000.0f;
+
+    /** Global inclusive minimum camera-to-CameraFocusPoint distance for focus and capture. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Distance", meta = (ClampMin = "0.0", Units = "cm"))
+    float MinimumFocusDistance = 400.0f;
+
+    /** Global inclusive maximum camera-to-CameraFocusPoint distance for focus and capture. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Distance", meta = (ClampMin = "0.0", Units = "cm"))
+    float MaximumFocusDistance = 1000.0f;
+
+    /** Half-width of the sharp region on either side of a focused target. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Blur", meta = (ClampMin = "0.0", Units = "cm"))
+    float BlurStartDistance = 100.0f;
+
+    /** Distance over which blur eases quadratically from zero to MaximumBlurStrength. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Blur", meta = (ClampMin = "0.0", Units = "cm"))
+    float BlurTransitionDistance = 500.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Blur", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MaximumBlurStrength = 0.6f;
+
+    /** Interpolation speed shared by focal distance, sharp range, and blur strength. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Blur", meta = (ClampMin = "0.0"))
+    float FocusApplicationSpeed = 8.0f;
+
+    /** Visual-only target retention after the exact center ray loses its target. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus", meta = (ClampMin = "0.0", Units = "s"))
+    float FocusTargetGracePeriod = 0.1f;
 
     /** Moves the edge guide slightly from the traced silhouette edge toward the authored focus point. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Silhouette", meta = (ClampMin = "0.0", ClampMax = "0.5"))
@@ -212,23 +260,59 @@ protected:
     float GuideFacingDotThreshold = 0.0f;
 
     /** Fraction of the target's projected framing bounds that must be inside the viewport. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Framing", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Legacy", meta = (ClampMin = "0.0", ClampMax = "1.0", DeprecatedProperty, DeprecationMessage = "Capture no longer requires projected frame coverage."))
     float MinimumCaptureCoverageRatio = 0.7f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Depth Of Field")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Legacy", meta = (DeprecatedProperty, DeprecationMessage = "Use bEnableEvidenceFocusBlur."))
     bool bEnableEvidenceDepthOfField = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Depth Of Field", meta = (ClampMin = "0.0"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Blur")
+    bool bEnableEvidenceFocusBlur = true;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Evidence Focus|Blur")
+    TSoftObjectPtr<UMaterialInterface> FocusPrefilterMaterial;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Evidence Focus|Blur")
+    TSoftObjectPtr<UMaterialInterface> FocusBlurMaterial;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Evidence Focus|Blur")
+    TSoftObjectPtr<UMaterialInterface> FocusNearHorizontalMaterial;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Evidence Focus|Blur")
+    TSoftObjectPtr<UMaterialInterface> FocusNearVerticalMaterial;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Evidence Focus|Blur")
+    TSoftObjectPtr<UMaterialInterface> FocusCompositeMaterial;
+
+    /** Full-resolution blur radius represented by strength 1.0 at 1080p. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Blur", meta = (ClampMin = "0.0"))
+    float MaximumBlurRadiusPixels = 12.0f;
+
+    /** Foreground silhouette radius relative to MaximumBlurRadiusPixels. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Blur", meta = (ClampMin = "0.0"))
+    float NearBlurRadiusScale = 1.25f;
+
+    /** Background blur radius relative to MaximumBlurRadiusPixels. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Blur", meta = (ClampMin = "0.0"))
+    float FarBlurRadiusScale = 1.0f;
+
+    /** Retained only so existing Blueprint instances keep their serialized value. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Legacy",
+        meta = (ClampMin = "0.1", Units = "cm", DeprecatedProperty,
+            DeprecationMessage = "The layered focus blur no longer preserves depth edges with bilateral rejection."))
+    float DepthRejectionDistance = 100.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Legacy", meta = (ClampMin = "0.0", DeprecatedProperty, DeprecationMessage = "The unfocused sharp region now uses MinimumFocusDistance and MaximumFocusDistance."))
     float UnfocusedFocalDistance = 300.0f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Depth Of Field", meta = (ClampMin = "0.1", ClampMax = "32.0"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Legacy", meta = (ClampMin = "0.1", ClampMax = "32.0", DeprecatedProperty, DeprecationMessage = "Focus blur now uses MaximumBlurStrength."))
     float EvidenceFocusFStop = 4.0f;
 
     /** Higher F-stop keeps the unfocused view readable instead of heavily blurred. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Depth Of Field", meta = (ClampMin = "0.1", ClampMax = "32.0"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Legacy", meta = (ClampMin = "0.1", ClampMax = "32.0", DeprecatedProperty, DeprecationMessage = "Focus blur now uses MaximumBlurStrength."))
     float UnfocusedFStop = 5.6f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Depth Of Field", meta = (ClampMin = "0.0"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Legacy", meta = (ClampMin = "0.0", DeprecatedProperty, DeprecationMessage = "Use FocusApplicationSpeed."))
     float FocusInterpolationSpeed = 8.0f;
 
     /** Total fade-out + fade-in time for a camera mode change. */
@@ -264,6 +348,25 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "100.0"))
     float PhotoTraceDistance = 3000.0f;
 
+    /** World-space presentation spawned after a registered photo capture. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Photo Story")
+    TSubclassOf<APhotoWorldStoryActor> PhotoWorldStoryClass;
+
+    /** Depth along the deprojected lower-center screen ray, in centimetres. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Photo Story",
+        meta = (ClampMin = "10.0", UIMin = "10.0", Units = "cm"))
+    float PhotoStoryDisplayDistance = 200.0f;
+
+    /** Normalized viewport width at which the story initially appears. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Photo Story",
+        meta = (ClampMin = "0.05", ClampMax = "0.95", UIMin = "0.05", UIMax = "0.95"))
+    float PhotoStoryScreenXRatio = 0.5f;
+
+    /** Normalized viewport height at which the story initially appears. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Photo Story",
+        meta = (ClampMin = "0.05", ClampMax = "0.95", UIMin = "0.05", UIMax = "0.95"))
+    float PhotoStoryScreenYRatio = 0.72f;
+
     /** Hook for a future SceneCapture/thumbnail record without changing the collection API. */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Evidence")
     TArray<FBalhwajeomEvidenceData> CollectedEvidence;
@@ -271,14 +374,36 @@ protected:
     FTimerHandle CameraSwitchTimerHandle;
     FTimerHandle CameraTransitionTimerHandle;
     FTransform SavedFirstPersonRelativeTransform;
+    FRotator SavedExplorationControlRotation = FRotator::ZeroRotator;
     FVector CameraModeEntryWorldLocation = FVector::ZeroVector;
     FVector CameraPanWorldOffset = FVector::ZeroVector;
     FVector CameraPanRightDirection = FVector::RightVector;
     float SavedFirstPersonFieldOfView = 90.0f;
+    bool bHasSavedExplorationControlRotation = false;
 
     FPostProcessSettings SavedPhotoPostProcessSettings;
     float SavedPostProcessBlendWeight = 1.0f;
-    float CurrentFocalDistance = 300.0f;
+    FBalhwajeomFocusRegion CurrentFocusRegion;
+    float CurrentMaximumBlurStrength = 0.0f;
+    FBalhwajeomFocusGraceState FocusGraceState;
+    bool bHasStrictFocusTarget = false;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UMaterialInstanceDynamic> FocusPrefilterMaterialInstance;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UMaterialInstanceDynamic> FocusBlurMaterialInstance;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UMaterialInstanceDynamic> FocusNearHorizontalMaterialInstance;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UMaterialInstanceDynamic> FocusNearVerticalMaterialInstance;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UMaterialInstanceDynamic> FocusCompositeMaterialInstance;
+
+    bool bFocusBlurInitializationFailed = false;
     float FocusGuideTraceElapsed = 0.0f;
     float EarlyGuideRescanElapsed = 0.0f;
 
@@ -305,9 +430,14 @@ protected:
 
     /** Temporary compatibility storage. New investigation captures never write to this array. */
     TOptional<FBalhwajeomPendingPhotoCapture> PendingCapture;
+
+	/** Transient full-resolution preview retained until async PNG registration completes. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> PendingCapturePreviewTexture;
     FDelegateHandle ScreenshotCapturedHandle;
     FDelegateHandle ScreenshotProcessedHandle;
     bool bReceivedScreenshotPixels = false;
+    TWeakObjectPtr<APhotoWorldStoryActor> ActivePhotoWorldStory;
 
 private:
 

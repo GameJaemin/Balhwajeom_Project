@@ -14,6 +14,7 @@ class UBalhwajeomMessengerWidget;
 class UButton;
 class UImage;
 class UOverlay;
+class UScrollBox;
 class USizeBox;
 class UTextBlock;
 class UTexture2D;
@@ -21,6 +22,7 @@ class UWrapBox;
 class UWidgetSwitcher;
 class UWidgetAnimation;
 class UBalhwajeomInvestigationSubsystem;
+class USoundBase;
 
 UENUM(BlueprintType)
 enum class ETabletPage : uint8
@@ -34,9 +36,11 @@ enum class ETabletPage : uint8
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPhotoSelected, FName, PhotoID);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletFolderSelected, FName, CharacterID);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTabletBlankDropped, int32, SlotIndex, FName, WordID);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletBlankPickedUp, int32, SlotIndex);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnTabletPersonFolderBackRequested);
+/** OriginSlotIndex is the sentence blank the word was dragged out of (INDEX_NONE if it came from the acquired-keyword list instead). */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnTabletBlankDropped, int32, SlotIndex, FName, WordID, int32, OriginSlotIndex);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTabletPhotoSlotDropped, int32, SlotIndex, FName, PhotoID);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPhotoSlotClicked, int32, SlotIndex);
 
 /** Runtime-created photo entry shared by the folder grid and the statement tile. */
 UCLASS()
@@ -65,7 +69,11 @@ class BALHWAJEOM_API UBalhwajeomTabletFolderButton : public UButton
 	GENERATED_BODY()
 
 public:
-	void Configure(FName InCharacterID, const FText& InLabel, UTexture2D* IconTexture);
+	void Configure(
+		FName InCharacterID,
+		const FText& InLabel,
+		UTexture2D* IconTexture,
+		const FSlateFontInfo& InLabelFont);
 
 	UPROPERTY()
 	FOnTabletFolderSelected OnFolderSelected;
@@ -77,6 +85,84 @@ private:
 	FName CharacterID = NAME_None;
 };
 
+/**
+ * Collapsible group header for the folder page's file list (like Windows Explorer's date groups):
+ * a clickable title row ("{Title} ({Count})" with a ▼/▶ fold arrow) above a WrapBox of file tiles.
+ * Built entirely at runtime; RefreshFolderContents() clears and rebuilds one of these per bucket
+ * (진술서/분석 문장/완성 문장) every time a folder is opened.
+ */
+UCLASS()
+class BALHWAJEOM_API UBalhwajeomTabletFolderSection : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	void Configure(const FText& InTitle, bool bStartExpanded = true);
+	void AddTile(UWidget* Tile);
+	void ClearTiles();
+	bool IsEmpty() const { return TileCount == 0; }
+
+private:
+	UFUNCTION()
+	void HandleHeaderClicked();
+
+	void RefreshHeaderText();
+
+	FText Title;
+	int32 TileCount = 0;
+	bool bExpanded = true;
+
+	UPROPERTY()
+	TObjectPtr<UButton> HeaderButton;
+
+	UPROPERTY()
+	TObjectPtr<UTextBlock> ArrowText;
+
+	UPROPERTY()
+	TObjectPtr<UTextBlock> TitleText;
+
+	UPROPERTY()
+	TObjectPtr<UWrapBox> ContentWrapBox;
+};
+
+/**
+ * Designer-owned full folder screen shown after a home-page folder is selected.
+ * WBP_TabletPersonFolder owns the window chrome and list placement; the parent tablet
+ * supplies the selected character's title and the runtime-created section widgets.
+ */
+UCLASS()
+class BALHWAJEOM_API UBalhwajeomTabletPersonFolderWidget : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	void SetFolderHeader(const FText& FolderName, UTexture2D* FolderIcon);
+	void ClearFolderSections();
+	void AddFolderSection(UWidget* Section);
+
+	UPROPERTY(BlueprintAssignable, Category = "Tablet|Folder")
+	FOnTabletPersonFolderBackRequested OnBackRequested;
+
+protected:
+	virtual void NativeOnInitialized() override;
+
+private:
+	UFUNCTION()
+	void HandleCloseClicked();
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TXT_FolderTitle;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> IMG_FolderTitleIcon;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BTN_FolderClose;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UScrollBox> SB_EvidencePhotos;
+};
+
 /** Drag payload: which acquired keyword is being dragged onto a sentence blank. */
 UCLASS()
 class BALHWAJEOM_API UBalhwajeomWordDragDropOperation : public UDragDropOperation
@@ -86,6 +172,10 @@ class BALHWAJEOM_API UBalhwajeomWordDragDropOperation : public UDragDropOperatio
 public:
 	UPROPERTY(BlueprintReadWrite, Category = "Tablet")
 	FName WordID = NAME_None;
+
+	/** Set only when dragged out of a UBalhwajeomTabletSentenceBlank; INDEX_NONE when it came from the acquired-keyword list. */
+	UPROPERTY(BlueprintReadWrite, Category = "Tablet")
+	int32 OriginSlotIndex = INDEX_NONE;
 };
 
 /**
@@ -114,9 +204,9 @@ private:
 
 /**
  * One droppable blank ("[]") inside the interactive sentence-builder row. Once filled, it is
- * also itself a drag source: picking a filled blank back up empties it and carries the word
- * onward, so a placed keyword can be freely moved to a different blank instead of staying locked
- * in place.
+ * also itself a drag source: picking a filled blank back up carries its word onward (tagged with
+ * this blank's own slot index as the drag's origin) so a placed keyword can be freely moved to a
+ * different blank, swapping with whatever is already there, instead of staying locked in place.
  */
 UCLASS()
 class BALHWAJEOM_API UBalhwajeomTabletSentenceBlank : public UUserWidget
@@ -131,10 +221,6 @@ public:
 
 	UPROPERTY()
 	FOnTabletBlankDropped OnBlankDropped;
-
-	/** Broadcast right before this blank empties itself because its filled word is being dragged back out. */
-	UPROPERTY()
-	FOnTabletBlankPickedUp OnBlankPickedUp;
 
 protected:
 	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
@@ -170,7 +256,7 @@ class BALHWAJEOM_API UBalhwajeomTabletPhotoChip : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void Configure(FName InPhotoID, const FText& InLabel);
+	void Configure(FName InPhotoID, const FText& InLabel, UTexture2D* Thumbnail = nullptr);
 	FName GetPhotoID() const { return PhotoID; }
 
 protected:
@@ -180,6 +266,9 @@ protected:
 private:
 	FName PhotoID = NAME_None;
 	FText DisplayLabel;
+
+	UPROPERTY()
+	TObjectPtr<UTexture2D> Thumbnail;
 };
 
 /** One droppable photo-evidence slot (FSentencePhotoSlot) inside the active sentence's photo evidence row. */
@@ -190,21 +279,34 @@ class BALHWAJEOM_API UBalhwajeomTabletPhotoSlot : public UUserWidget
 
 public:
 	void Configure(int32 InSlotIndex);
-	void SetFilled(const FText& PhotoLabel);
+	void SetFilled(const FText& PhotoLabel, UTexture2D* Thumbnail = nullptr);
 	void SetEmpty();
 	int32 GetSlotIndex() const { return SlotIndex; }
 
 	UPROPERTY()
 	FOnTabletPhotoSlotDropped OnPhotoSlotDropped;
 
+	/** Broadcast on a left-click while this slot is empty, so the owning tablet can open a
+	 * candidate-picker popup instead of requiring a drag-and-drop. */
+	UPROPERTY()
+	FOnTabletPhotoSlotClicked OnPhotoSlotClicked;
+
 protected:
 	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
 private:
 	int32 SlotIndex = 0;
+	bool bFilled = false;
 
 	UPROPERTY()
 	TObjectPtr<UTextBlock> DisplayText;
+
+	UPROPERTY()
+	TObjectPtr<USizeBox> ThumbnailBox;
+
+	UPROPERTY()
+	TObjectPtr<UImage> ThumbnailImage;
 };
 
 /** Navigation/state logic for the designer-owned WBP_Tablet visual tree. */
@@ -273,6 +375,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Home")
 	TObjectPtr<UTexture2D> DefaultFolderIcon;
 
+	/** Font used by runtime-created home-page folder labels. Assign in the WBP_Tablet class defaults. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Home")
+	FSlateFontInfo FolderLabelFont;
+
+	/** Icon shown on the folder page's 진술서 tile, so it reads as a document like the photo tiles next to it. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Family")
+	TObjectPtr<UTexture2D> StatementFileIcon;
+
 private:
 	void SetTabletPage(ETabletPage NewPage, bool bAddToHistory = true);
 	void NavigateBack();
@@ -294,6 +404,10 @@ private:
 	void ShowPopup(const FText& Title, const FText& Body, UTexture2D* PhotoTexture = nullptr);
 	void HidePopup();
 	void UpdateUnreadBadge();
+
+	/** Reveals WB_PuzzlePhotos, listing every eligible evidence photo as a draggable candidate. */
+	void OpenPhotoPicker(int32 SlotIndex);
+	void ClosePhotoPicker();
 
 	/** Populates WB_PuzzleWords with the active folder's acquired keywords. Called whenever a photo or
 	 * statement popup opens, so keywords stay visible whether or not there's an active puzzle to solve;
@@ -338,17 +452,19 @@ private:
 	UFUNCTION()
 	void HandleFolderPhotoSelected(FName PhotoID);
 
-	/** Bound to a UBalhwajeomTabletSentenceBlank's OnBlankDropped; fills that word slot (correctness is judged once the whole puzzle is filled in). */
+	/** Bound to a UBalhwajeomTabletSentenceBlank's OnBlankDropped; fills that word slot, swapping with
+	 * whatever the drag's OriginSlotIndex blank held if it came from another blank (correctness is
+	 * judged once the whole puzzle is filled in). */
 	UFUNCTION()
-	void HandleSentenceBlankDropped(int32 SlotIndex, FName WordID);
-
-	/** Bound to a UBalhwajeomTabletSentenceBlank's OnBlankPickedUp; clears that slot's submission so the puzzle no longer counts it as filled. */
-	UFUNCTION()
-	void HandleSentenceBlankPickedUp(int32 SlotIndex);
+	void HandleSentenceBlankDropped(int32 SlotIndex, FName WordID, int32 OriginSlotIndex);
 
 	/** Bound to a UBalhwajeomTabletPhotoSlot's OnPhotoSlotDropped; fills that photo evidence slot. */
 	UFUNCTION()
 	void HandlePhotoSlotDropped(int32 SlotIndex, FName PhotoID);
+
+	/** Bound to a UBalhwajeomTabletPhotoSlot's OnPhotoSlotClicked; reveals the candidate photo row. */
+	UFUNCTION()
+	void HandlePhotoSlotClicked(int32 SlotIndex);
 
 	/** Bound to the folder grid's statement tile (reuses UBalhwajeomTabletPhotoButton; the broadcast FName is a SentenceID here, not a PhotoID). */
 	UFUNCTION()
@@ -360,6 +476,10 @@ private:
 	UFUNCTION()
 	void HandleStatementSubmitClicked();
 
+	/** Bound to BTN_PlayStoryVoice; replays the currently open photo's StoryVoice on demand. */
+	UFUNCTION()
+	void HandlePlayStoryVoiceClicked();
+
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWidgetSwitcher> WidgetSwitcher_TabletPage;
 
@@ -368,6 +488,10 @@ private:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UBalhwajeomInternetWidget> WBP_Internet;
+
+	/** Full folder page embedded in Page_PersonFolder. Its Designer controls all folder-screen geometry. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UBalhwajeomTabletPersonFolderWidget> WBP_PersonFolder;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UOverlay> PopupLayer;
@@ -388,6 +512,14 @@ private:
 	/** Shows the captured PNG for the photo currently open in the popup. Collapsed for non-photo popups (e.g. the statement). */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UImage> IMG_PopupPhoto;
+
+	/** Shows the active Statement's fixed Illustration, regardless of progress. Collapsed for every other popup. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> IMG_StatementIllustration;
+
+	/** On-demand narration replay button. Shown only while a photo with a set StoryVoice is open. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BTN_PlayStoryVoice;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> BRD_MessengerBadge;
@@ -421,12 +553,11 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_PhysicalHome;
 
+	/** Folder file list container. RefreshFolderContents() clears it and adds up to three
+	 * UBalhwajeomTabletFolderSection children (진술서/분석 문장/완성 문장), each holding its own tiles --
+	 * replaces the old single flat WB_EvidencePhotos WrapBox + separate SB_StatementTile slot. */
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UWrapBox> WB_EvidencePhotos;
-
-	/** Single-slot container pinned at the bottom-center of the folder window, holding the statement tile. */
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<USizeBox> SB_StatementTile;
+	TObjectPtr<UScrollBox> SB_EvidencePhotos;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_PopupClose;
@@ -444,8 +575,14 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TXT_PuzzleFeedback;
 
+	/** "증거 사진" label above WB_PuzzlePhotos/WB_PhotoSlots. Only shown alongside them, when the
+	 * active sentence actually requires photo evidence (Sentence.PhotoSlots non-empty) -- never for
+	 * a plain photo popup. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TXT_PuzzlePhotoLabel;
+
 	/** Draggable photo-evidence candidates: captured photos whose own analysis sentence is solved.
-	 * Only populated/shown while the active sentence has PhotoSlots. */
+	 * Hidden until an empty WB_PhotoSlots slot is clicked (see OpenPhotoPicker) instead of always shown. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWrapBox> WB_PuzzlePhotos;
 
@@ -459,6 +596,8 @@ private:
 	TArray<ETabletPage> PageHistory;
 	TArray<FName> VisiblePhotoIDs;
 	TArray<FName> VisibleStatementIDs;
+	/** PhotoID currently shown in the popup (NAME_None for the statement popup or when closed); drives BTN_PlayStoryVoice. */
+	FName ActivePhotoID = NAME_None;
 	FName ActiveSentenceID = NAME_None;
 	FSentenceSubmission ActiveSubmission;
 	TArray<FName> AvailablePuzzleWordIDs;

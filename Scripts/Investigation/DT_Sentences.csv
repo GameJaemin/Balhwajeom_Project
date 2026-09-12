@@ -1,17 +1,50 @@
-Name,SentenceID,SentenceType,CharacterID,LieText,SentenceTemplate,WordSlots,PhotoSlots,RequiredPhotoCount,ResultText,DesignerNote
-SENT_01_PHOTO_001,SENT_01_PHOTO_001,PhotoAnalysis,CHARACTER_SISTER,,[]와/과 []이/가 자신이 불을 지른 범인이라며 []을/를 하였다.,"((SlotIndex=0,CorrectWordID=WORD_01_001,OrderGroup=1), (SlotIndex=1,CorrectWordID=WORD_01_002,OrderGroup=1), (SlotIndex=2,CorrectWordID=WORD_01_003,OrderGroup=0))",,0,형과 여동생이 자신이 불을 지른 범인이라며 자백을 하였다.,튜토리얼 문제 문장
-SENT_01_PHOTO_002,SENT_01_PHOTO_002,PhotoAnalysis,CHARACTER_SISTER,,[]와/과 []이/가 심하게 []했다는 내용.,"((SlotIndex=0,CorrectWordID=WORD_01_001,OrderGroup=1), (SlotIndex=1,CorrectWordID=WORD_01_004,OrderGroup=1), (SlotIndex=2,CorrectWordID=WORD_01_005,OrderGroup=0))",,0,형과 어머니가 심하게 다투었다는 내용.,일기장 문제 문장
-SENT_01_PHOTO_003,SENT_01_PHOTO_003,PhotoAnalysis,CHARACTER_SISTER,,[] 주변에 []이/가 심하다.,"((SlotIndex=0,CorrectWordID=WORD_01_007,OrderGroup=0), (SlotIndex=1,CorrectWordID=WORD_01_006,OrderGroup=0))",,0,고데기 주변에 탄 자국이 심하다.,고데기 문제 문장
-SENT_01_PHOTO_004,SENT_01_PHOTO_004,PhotoAnalysis,CHARACTER_SISTER,,[]이/가 크고 넓어서 []이/가 들어오기 좋다.,"((SlotIndex=0,CorrectWordID=WORD_01_008,OrderGroup=0), (SlotIndex=1,CorrectWordID=WORD_01_009,OrderGroup=0))",,0,창문이 크고 넓어서 햇빛이 들어오기 좋다.,창문 문제 문장
-SENT_01_PHOTO_005,SENT_01_PHOTO_005,PhotoAnalysis,CHARACTER_SISTER,,[] 앞에서 검게 탄 []이/가 있다,"((SlotIndex=0,CorrectWordID=WORD_01_008,OrderGroup=0), (SlotIndex=1,CorrectWordID=WORD_01_010,OrderGroup=0))",,0,창문 앞에서 검게 탄 커튼이 있다,커튼 문제 문장 (창문에서 단어를 얻어야 풀이 가능)
-SENT_01_PHOTO_006,SENT_01_PHOTO_006,PhotoAnalysis,CHARACTER_SISTER,,[]에 의해 []이/가 []있다.,"((SlotIndex=0,CorrectWordID=WORD_01_010,OrderGroup=0), (SlotIndex=1,CorrectWordID=WORD_01_026,OrderGroup=0), (SlotIndex=2,CorrectWordID=WORD_01_011,OrderGroup=0))",,0,커튼의 무게와 열기로 인해 커튼봉이 녹아 변형되어 있다.,커튼 봉 문제 문장 (커튼에서 단어를 얻어야 풀이 가능)
-SENT_01_PHOTO_007,SENT_01_PHOTO_007,PhotoAnalysis,CHARACTER_SISTER,,[]이/가 [] 주변과 바닥에 찍혀있다.,"((SlotIndex=0,CorrectWordID=WORD_01_012,OrderGroup=0), (SlotIndex=1,CorrectWordID=WORD_01_008,OrderGroup=0))",,0,발자국이 창문 주변과 바닥에 찍혀있다.,발자국 문제 문장 (창문에서 단어를 얻어야 풀이 가능)
-SENT_01_PHOTO_008,SENT_01_PHOTO_008,PhotoAnalysis,CHARACTER_SISTER,,[]이/가 []이/가 잘 닿는 선반 위에 놓여 있다.,"((SlotIndex=0,CorrectWordID=WORD_01_013,OrderGroup=0), (SlotIndex=1,CorrectWordID=WORD_01_009,OrderGroup=0))",,0,스노우글로브가 햇빛이 잘 닿는 선반 위에 놓여 있다.,스노우글로브 문제 문장 (창문에서 단어를 얻어야 풀이 가능)
-SENT_01_STATEMENT_01,SENT_01_STATEMENT_01,Statement,CHARACTER_SISTER,,[]이/가 [] 있어 []에 []이/가 닿았을 가능성은 [].,"((SlotIndex=0,CorrectWordID=WORD_01_010,OrderGroup=0), (SlotIndex=1,CorrectWordID=WORD_01_025,OrderGroup=0), (SlotIndex=2,CorrectWordID=WORD_01_013,OrderGroup=0), (SlotIndex=3,CorrectWordID=WORD_01_009,OrderGroup=0), (SlotIndex=4,CorrectWordID=WORD_01_024,OrderGroup=0))",,0,커튼이 닫혀 있어 스노우글로브에 햇빛이 닿았을 가능성은 없다.,진술서 반증 문제 문장 (커튼)
-SENT_01_STATEMENT_02,SENT_01_STATEMENT_02,Statement,CHARACTER_SISTER,,우리 가족의 가족 사진이다. []의 반증 증거는 될 수 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0))",,0,우리 가족의 가족 사진이다. 자백의 반증 증거는 될 수 없다.,진술서 반증 문제 문장 (가족사진)
-SENT_01_STATEMENT_03,SENT_01_STATEMENT_03,Statement,CHARACTER_SISTER,,여동생의 일기장이다. []의 반증 증거는 될 수 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0))",,0,여동생의 일기장이다. 자백의 반증 증거는 될 수 없다.,진술서 반증 문제 문장 (일기장)
-SENT_01_STATEMENT_04,SENT_01_STATEMENT_04,Statement,CHARACTER_SISTER,,불타서 파손된 고데기다. []의 반증 증거는 될 수 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0))",,0,불타서 파손된 고데기다. 자백의 반증 증거는 될 수 없다.,진술서 반증 문제 문장 (고데기)
-SENT_01_STATEMENT_05,SENT_01_STATEMENT_05,Statement,CHARACTER_SISTER,,깨져 있는 창문이다. []의 반증 증거는 될 수 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0))",,0,깨져 있는 창문이다. 자백의 반증 증거는 될 수 없다.,진술서 반증 문제 문장 (창문)
-SENT_01_STATEMENT_06,SENT_01_STATEMENT_06,Statement,CHARACTER_SISTER,,녹아내린 커튼 봉이다. []의 반증 증거는 될 수 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0))",,0,녹아내린 커튼 봉이다. 자백의 반증 증거는 될 수 없다.,진술서 반증 문제 문장 (커튼 봉)
-SENT_01_STATEMENT_07,SENT_01_STATEMENT_07,Statement,CHARACTER_SISTER,,소방관의 작업화 발자국이다. []의 반증 증거는 될 수 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0))",,0,소방관의 작업화 발자국이다. 자백의 반증 증거는 될 수 없다.,진술서 반증 문제 문장 (발자국)
-SENT_01_STATEMENT_08,SENT_01_STATEMENT_08,Statement,CHARACTER_SISTER,,깨져버린 스노우글로브이다. []의 반증 증거는 될 수 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0))",,0,깨져버린 스노우글로브이다. 자백의 반증 증거는 될 수 없다.,진술서 반증 문제 문장 (스노우 글로브)
+Name,SentenceID,SentenceTemplate,ResultText,WordSlots,RequiredPhotoCount,PhotoSlots,SentenceType,DesignerNote,CharacterID,bIsFolderStatement
+SENT_01_PHOTO_001,SENT_01_PHOTO_001,[]와/과 []이/가 자신이 불을 지른 범인이라며 []을/를 하였다.,"출장에 다녀온 사이, 집에 불이 났다.
+
+어머니가 입원했다는 소식도 아직 믿기지 않는데,
+형과 막내는 각자 자신이 화재의 원인이라고 자백했다. ","((SlotIndex=0,CorrectWordID=WORD_01_001,OrderGroup=1),(SlotIndex=1,CorrectWordID=WORD_01_002,OrderGroup=1),(SlotIndex=2,CorrectWordID=WORD_01_003,OrderGroup=0))",0,,PhotoAnalysis,튜토리얼 문제 문장,CHARACTER_SISTER,FALSE
+SENT_01_PHOTO_002,SENT_01_PHOTO_002,"[]과 []의 []이 반복되었다.
+이 정보는 []에게 화재를 일으킬 []가 존재했을 가능성이 [].","형과 어머니가 이렇게 자주 다퉜을 줄은 몰랐다.
+가족인데도, 나만 모르고 있었다.
+
+……형의 자백, 정말 실수였던 걸까.
+
+다른 사람이 이 사실을 알게 된다면, 형이 일부러 그런 거라고 의심할지도 모른다.","((SlotIndex=0,CorrectWordID=WORD_01_001,OrderGroup=1),(SlotIndex=1,CorrectWordID=WORD_01_004,OrderGroup=1),(SlotIndex=2,CorrectWordID=WORD_01_005,OrderGroup=0),
+(SlotIndex=3,CorrectWordID=WORD_01_001,OrderGroup=0),(SlotIndex=4,CorrectWordID=WORD_01_028,OrderGroup=0),(SlotIndex=5,CorrectWordID=WORD_01_023,OrderGroup=0))",0,,PhotoAnalysis,일기장 문제 문장,CHARACTER_SISTER,FALSE
+SENT_01_PHOTO_003,SENT_01_PHOTO_003,"고데기 주변에 []이/가 [].
+고데기에 [] 기능이 [] 때문에, 고데기는 발화 원인으로 볼 수 [].","고데기 주변이 심하게 타 있어서, 혹시 이것도 네가 원인이었을까 걱정했다.
+
+다행히 네가 쓰던 건 화재 방지 기능이 있는 제품이었다.
+한 가지 가능성은 지웠지만, 네 자백은 아직 남아 있다.","((SlotIndex=0,CorrectWordID=WORD_01_006,OrderGroup=0),(SlotIndex=1,CorrectWordID=WORD_01_023,OrderGroup=0),
+(SlotIndex=2,CorrectWordID=WORD_01_027,OrderGroup=0),(SlotIndex=3,CorrectWordID=WORD_01_023,OrderGroup=0),(SlotIndex=4,CorrectWordID=WORD_01_024,OrderGroup=0))",0,,PhotoAnalysis,고데기 문제 문장,CHARACTER_SISTER,FALSE
+SENT_01_PHOTO_004,SENT_01_PHOTO_004,[]이/가 크고 넓어서 []이/가 들어오기 좋다.,창문이 크고 넓어서 햇빛이 들어오기 좋다.,"((SlotIndex=0,CorrectWordID=WORD_01_008,OrderGroup=0),(SlotIndex=1,CorrectWordID=WORD_01_009,OrderGroup=0))",0,,PhotoAnalysis,창문 문제 문장,CHARACTER_SISTER,FALSE
+SENT_01_PHOTO_005,SENT_01_PHOTO_005,[] 앞에 검게 탄 []이/가 있다,창문 앞에 검게 탄 커튼이 있다,"((SlotIndex=0,CorrectWordID=WORD_01_008,OrderGroup=0),(SlotIndex=1,CorrectWordID=WORD_01_010,OrderGroup=0))",0,,PhotoAnalysis,커튼 문제 문장 (창문에서 단어를 얻어야 풀이 가능),CHARACTER_SISTER,FALSE
+SENT_01_PHOTO_006,SENT_01_PHOTO_006,[]에 의해 []이/가 []있다.,커튼의 무게와 열기로 인해 커튼봉이 녹아 변형되어 있다.,"((SlotIndex=0,CorrectWordID=WORD_01_010,OrderGroup=0),(SlotIndex=1,CorrectWordID=WORD_01_026,OrderGroup=0),(SlotIndex=2,CorrectWordID=WORD_01_011,OrderGroup=0))",0,,PhotoAnalysis,커튼 봉 문제 문장 (커튼에서 단어를 얻어야 풀이 가능),CHARACTER_SISTER,FALSE
+SENT_01_PHOTO_007,SENT_01_PHOTO_007,[]이/가 [] 주변과 바닥에 찍혀있다.,발자국이 창문 주변과 바닥에 찍혀있다.,"((SlotIndex=0,CorrectWordID=WORD_01_012,OrderGroup=0),(SlotIndex=1,CorrectWordID=WORD_01_008,OrderGroup=0))",0,,PhotoAnalysis,발자국 문제 문장 (창문에서 단어를 얻어야 풀이 가능),CHARACTER_SISTER,FALSE
+SENT_01_PHOTO_008,SENT_01_PHOTO_008,[]이/가 []이/가 잘 닿는 선반 위에 놓여 있다.,스노우글로브가 햇빛이 잘 닿는 선반 위에 놓여 있다.,"((SlotIndex=0,CorrectWordID=WORD_01_013,OrderGroup=0),(SlotIndex=1,CorrectWordID=WORD_01_009,OrderGroup=0))",0,,PhotoAnalysis,스노우글로브 문제 문장 (창문에서 단어를 얻어야 풀이 가능),CHARACTER_SISTER,FALSE
+SENT_01_PHOTO_009,SENT_01_PHOTO_009,"보조배터리 주변에 []가 [].
+그렇기에 보조배터리는 발화 원인으로 볼 수 [].","보조배터리 화재 얘기를 자주 봐서, 차라리 이쪽이었으면 했다.
+그런데 보조배터리 주변엔 탄 흔적조차 없다.
+
+막내야, 정말 네가 낸 불이 맞는 걸까.","((SlotIndex=0,CorrectWordID=WORD_01_006,OrderGroup=0),(SlotIndex=1,CorrectWordID=WORD_01_024,OrderGroup=0),
+(SlotIndex=2,CorrectWordID=WORD_01_024,OrderGroup=0))",0,,PhotoAnalysis,보조배터리 문제 문장,CHARACTER_SISTER,FALSE
+SENT_01_PHOTO_010,SENT_01_PHOTO_010,"[]이/가 디퓨저를 [].
+영수증에 적힌 [] 때문에, 디퓨저의 발화 가능성이 [].","어머니가 디퓨저를 껐다는 메모를 발견했다.
+이번에도 영수증 뒷면이었다.
+
+찍힌 시각을 보니, 화재가 나기 바로 직전.
+그렇다면 불이 났을 때, 디퓨저는 이미 꺼져 있었던 거다.
+
+……다행이다.
+적어도, 막내 때문에 난 불은 아니었다.","((SlotIndex=0,CorrectWordID=WORD_01_004,OrderGroup=0),(SlotIndex=1,CorrectWordID=WORD_01_030,OrderGroup=0),
+(SlotIndex=2,CorrectWordID=WORD_01_031,OrderGroup=0),(SlotIndex=3,CorrectWordID=WORD_01_024,OrderGroup=0))",0,,PhotoAnalysis,쪽지 문제 문장,CHARACTER_SISTER,FALSE
+SENT_01_STATEMENT_01,SENT_01_STATEMENT_01,[]이/가 [] 있어 []에 []이/가 닿았을 가능성은 [].,커튼이 닫혀 있어 스노우글로브에 햇빛이 닿았을 가능성은 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_010,OrderGroup=0),(SlotIndex=1,CorrectWordID=WORD_01_025,OrderGroup=0),(SlotIndex=2,CorrectWordID=WORD_01_013,OrderGroup=0),(SlotIndex=3,CorrectWordID=WORD_01_009,OrderGroup=0),(SlotIndex=4,CorrectWordID=WORD_01_024,OrderGroup=0))",1,"((SlotIndex=0,CorrectPhotoID=PHOTO_01_007))",Statement,진술서 반증 문제 문장 (커튼),CHARACTER_SISTER,TRUE
+SENT_01_STATEMENT_02,SENT_01_STATEMENT_02,우리 가족의 가족 사진이다. []의 반증 증거가 될 수 [].,우리 가족의 가족 사진이다. 자백의 반증 증거는 될 수 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0))",1,"((SlotIndex=0,CorrectPhotoID=PHOTO_01_003))",Statement,진술서 반증 문제 문장 (가족사진),CHARACTER_SISTER,FALSE
+SENT_01_STATEMENT_03,SENT_01_STATEMENT_03,여동생의 일기장이다. []의 반증 증거가 될 수 [].,여동생의 일기장이다. 자백의 반증 증거는 될 수 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0))",1,"((SlotIndex=0,CorrectPhotoID=PHOTO_01_004))",Statement,진술서 반증 문제 문장 (일기장),CHARACTER_SISTER,FALSE
+SENT_01_STATEMENT_04,SENT_01_STATEMENT_04,불타서 파손된 고데기다. []의 반증 증거가 될 수 [].,불타서 파손된 고데기다. 자백의 반증 증거는 될 수 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0))",1,"((SlotIndex=0,CorrectPhotoID=PHOTO_01_005))",Statement,진술서 반증 문제 문장 (고데기),CHARACTER_SISTER,FALSE
+SENT_01_STATEMENT_05,SENT_01_STATEMENT_05,깨져 있는 창문이다. []의 반증 증거가 될 수 [].,깨져 있는 창문이다. 자백의 반증 증거는 될 수 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0))",1,"((SlotIndex=0,CorrectPhotoID=PHOTO_01_006))",Statement,진술서 반증 문제 문장 (창문),CHARACTER_SISTER,FALSE
+SENT_01_STATEMENT_06,SENT_01_STATEMENT_06,녹아내린 커튼 봉이다. []의 반증 증거가 될 수 [].,녹아내린 커튼 봉이다. 자백의 반증 증거는 될 수 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0))",1,"((SlotIndex=0,CorrectPhotoID=PHOTO_01_008))",Statement,진술서 반증 문제 문장 (커튼 봉),CHARACTER_SISTER,FALSE
+SENT_01_STATEMENT_07,SENT_01_STATEMENT_07,소방관의 작업화 발자국이다. []의 반증 증거가 될 수 [].,소방관의 작업화 발자국이다. 자백의 반증 증거는 될 수 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0))",1,"((SlotIndex=0,CorrectPhotoID=PHOTO_01_009))",Statement,진술서 반증 문제 문장 (발자국),CHARACTER_SISTER,FALSE
+SENT_01_STATEMENT_08,SENT_01_STATEMENT_08,깨져버린 스노우글로브이다. []의 반증 증거가 될 수 [].,깨져버린 스노우글로브이다. 자백의 반증 증거는 될 수 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0))",1,"((SlotIndex=0,CorrectPhotoID=PHOTO_01_010))",Statement,진술서 반증 문제 문장 (스노우 글로브),CHARACTER_SISTER,FALSE
+SENT_01_STATEMENT_09,SENT_01_STATEMENT_09,그을린 보조배터리이다. []의 반증 증거가 될 수 [].,그을린 보조배터리이다. 자백의 반증 증거는 될 수 없다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0))",1,"((SlotIndex=0,CorrectPhotoID=PHOTO_01_015))",Statement,진술서 반증 문제 문장 (보조배터리),CHARACTER_SISTER,FALSE
+SENT_01_STATEMENT_10,SENT_01_STATEMENT_10,"쪽지는 []와/과 []때문에, []의 반증 증거가 될 수 [].",어머니가 쓴 쪽지이다. 자백의 반증 증거로서 사용할 수 있다.,"((SlotIndex=0,CorrectWordID=WORD_01_003,OrderGroup=0),(SlotIndex=1,CorrectWordID=WORD_01_023,OrderGroup=0))",1,"((SlotIndex=0,CorrectPhotoID=PHOTO_01_016))",Statement,진술서 반증 문제 문장 (쪽지),CHARACTER_SISTER,FALSE

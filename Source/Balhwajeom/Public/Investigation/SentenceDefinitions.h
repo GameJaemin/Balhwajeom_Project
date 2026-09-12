@@ -10,7 +10,7 @@ struct BALHWAJEOM_API FSentenceWordSlot
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (ClampMin = "0", ClampMax = "4"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (ClampMin = "0", ClampMax = "9"))
 	int32 SlotIndex = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
@@ -47,6 +47,12 @@ struct BALHWAJEOM_API FSentenceDefinition : public FTableRowBase
 	/** The person this Statement-type sentence belongs to, for tablet folder placement. Empty for PhotoAnalysis rows. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
 	FName CharacterID = NAME_None;
+
+	/** Marks the single Statement row shown as CharacterID's fixed tablet folder file. Every other
+	 * Statement row for that character is a photo-declaration entry only reached via a Photo's
+	 * EvidenceSentenceID -- exactly one row per character should have this set to true. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")
+	bool bIsFolderStatement = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (MultiLine = "true"))
 	FText LieText;

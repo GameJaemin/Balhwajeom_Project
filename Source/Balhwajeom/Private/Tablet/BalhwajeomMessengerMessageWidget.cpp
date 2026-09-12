@@ -164,7 +164,18 @@ void UBalhwajeomMessengerMessageWidget::AddTextSegment(const FString& Segment)
 	Text->SetAutoWrapText(false);
 	Text->SetWrapTextAt(580.0f);
 	FSlateFontInfo Font = Text->GetFont();
-	Font.Size = 22;
+	if (MessageTextFont.FontObject)
+	{
+		Font = MessageTextFont;
+	}
+	else if (MessageTextFont.Size > 0)
+	{
+		Font.Size = MessageTextFont.Size;
+	}
+	if (Font.Size <= 0)
+	{
+		Font.Size = 22;
+	}
 	Text->SetFont(Font);
 	WB_MessageContent->AddChild(Text);
 }

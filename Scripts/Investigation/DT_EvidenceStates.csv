@@ -1,21 +1,33 @@
-Name,StateID,ObjectID,StateName,InteractionBehavior,InteractionPresentation,NextStateID,InteractionText,KeywordDocumentID,FarLabel,MidLabel,NearLabel,bCanCapture,PhotoID
-STATE_01_001_DUST,STATE_01_001_DUST,OBJ_01_001,먼지 쌓인 형의 돌 사진,ChangeState,SimpleText,STATE_01_001_CLEAR,사진의 먼지를 닦았다.,,,사진,먼지 덮인 사진,FALSE,
-STATE_01_001_CLEAR,STATE_01_001_CLEAR,OBJ_01_001,깨끗한 형의 돌 사진,Once,SimpleText,,첫째 형의 돌 때 사진이다.,,,사진,첫째 형의 돌 사진,TRUE,PHOTO_01_001
-STATE_01_002_DUST,STATE_01_002_DUST,OBJ_01_002,먼지 쌓인 일상 사진,ChangeState,SimpleText,STATE_01_002_CLEAR,사진의 먼지를 닦았다.,,,사진,먼지로 더럽혀진 사진,FALSE,
-STATE_01_002_CLEAR,STATE_01_002_CLEAR,OBJ_01_002,깨끗한 일상 사진,Once,SimpleText,,가족 여행 중 여동생과 놀 때 찍은 사진이다.,,,사진,여동생과 노는 사진,TRUE,PHOTO_01_002
-STATE_01_003_DUST,STATE_01_003_DUST,OBJ_01_003,먼지 쌓인 가족 사진,ChangeState,SimpleText,STATE_01_003_CLEAR,사진의 먼지를 닦았다.,,,사진,더러워서 보이지 않는 사진,FALSE,
-STATE_01_003_CLEAR,STATE_01_003_CLEAR,OBJ_01_003,깨끗한 가족 사진,Once,SimpleText,,2주 전 촬영한 가족 사진이다.,,,사진,최근에 찍은 가족 사진,TRUE,PHOTO_01_003
-STATE_01_004_CLOSED,STATE_01_004_CLOSED,OBJ_01_004,닫혀 있는 일기장,ChangeState,SimpleText,STATE_01_004_OPEN,일기장을 열어보았다.,,,일기장,여동생의 일기장,FALSE,
-STATE_01_004_OPEN,STATE_01_004_OPEN,OBJ_01_004,열려 있는 일기장,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_001,,열린 일기장,열린 여동생의 일기장,TRUE,PHOTO_01_004
-STATE_01_005_FRONT,STATE_01_005_FRONT,OBJ_01_005,고데기,ChangeState,SimpleText,STATE_01_005_BACK,고데기를 뒤집었다.,,,고데기,파손된 고데기,FALSE,
-STATE_01_005_BACK,STATE_01_005_BACK,OBJ_01_005,고데기 뒷면,None,None,,,,,고데기,파손된 고데기,TRUE,PHOTO_01_005
-STATE_01_006_NORMAL,STATE_01_006_NORMAL,OBJ_01_006,창문,None,None,,,,,창문,깨져 있는 창문,TRUE,PHOTO_01_006
-STATE_01_007_NORMAL,STATE_01_007_NORMAL,OBJ_01_007,커튼,None,None,,,,,커튼,검게 타버린 커튼,TRUE,PHOTO_01_007
-STATE_01_008_NORMAL,STATE_01_008_NORMAL,OBJ_01_008,커튼 봉,None,None,,,,,커튼 봉,녹아내린 커튼 봉,TRUE,PHOTO_01_008
-STATE_01_009_NORMAL,STATE_01_009_NORMAL,OBJ_01_009,발자국,None,None,,,,,발자국,작업화 발자국,TRUE,PHOTO_01_009
-STATE_01_010_NORMAL,STATE_01_010_NORMAL,OBJ_01_010,스노우그로브,None,None,,,,,유리 장식,깨진 스노우글로브,TRUE,PHOTO_01_010
-STATE_01_011_NORMAL,STATE_01_011_NORMAL,OBJ_01_011,화장품,None,None,,,,,화장품,녹아내린 화장품,TRUE,PHOTO_01_011
-STATE_01_012_NORMAL,STATE_01_012_NORMAL,OBJ_01_012,책,None,None,,,,,책,소설책,TRUE,PHOTO_01_012
-STATE_01_013_NORMAL,STATE_01_013_NORMAL,OBJ_01_013,베개,None,None,,,,,베개,검게 타버린 배개,TRUE,PHOTO_01_013
-STATE_01_014_CLOSED,STATE_01_014_CLOSED,OBJ_01_014,닫혀 있는 방문,ChangeState,SimpleText,STATE_01_014_OPEN,방문을 열었다.,,,방문,여동생의 방문,TRUE,PHOTO_01_014
-STATE_01_014_OPEN,STATE_01_014_OPEN,OBJ_01_014,열려 있는 방문,None,None,,,,,방문,여동생의 방문,TRUE,PHOTO_01_014
+Name,StateID,ObjectID,StateName,InteractionBehavior,InteractionPresentation,NextStateID,InteractionText,KeywordDocumentID,FarLabel,MidLabel,NearLabel,bCanCapture,PhotoID,MinimumFocusDistanceOffset,MaximumFocusDistanceOffset
+STATE_01_001_DUST,STATE_01_001_DUST,OBJ_01_001,먼지 쌓인 형의 돌 사진,ChangeState,SimpleText,STATE_01_001_CLEAR,사진의 먼지를 닦았다.,,,사진,먼지 덮인 사진,FALSE,,50,50
+STATE_01_001_CLEAR,STATE_01_001_CLEAR,OBJ_01_001,깨끗한 형의 돌 사진,None,SimpleText,,,,,사진,첫째 형의 돌 사진,TRUE,PHOTO_01_001,50,50
+STATE_01_002_DUST,STATE_01_002_DUST,OBJ_01_002,먼지 쌓인 일상 사진,ChangeState,SimpleText,STATE_01_002_CLEAR,사진의 먼지를 닦았다.,,,사진,먼지로 더럽혀진 사진,FALSE,,50,50
+STATE_01_002_CLEAR,STATE_01_002_CLEAR,OBJ_01_002,깨끗한 일상 사진,None,SimpleText,,,,,사진,여동생과 노는 사진,TRUE,PHOTO_01_002,50,50
+STATE_01_003_DUST,STATE_01_003_DUST,OBJ_01_003,먼지 쌓인 가족 사진,ChangeState,SimpleText,STATE_01_003_CLEAR,사진의 먼지를 닦았다.,,,사진,더러워서 보이지 않는 사진,FALSE,,50,50
+STATE_01_003_CLEAR,STATE_01_003_CLEAR,OBJ_01_003,깨끗한 가족 사진,None,SimpleText,,,,,사진,최근에 찍은 가족 사진,TRUE,PHOTO_01_003,50,50
+STATE_01_004_CLOSED,STATE_01_004_CLOSED,OBJ_01_004,닫혀 있는 일기장,ChangeState,SimpleText,STATE_01_004_OPEN,일기장을 열어보았다.,,,일기장,여동생의 일기장,FALSE,,50,50
+STATE_01_004_OPEN,STATE_01_004_OPEN,OBJ_01_004,열려 있는 일기장,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_001,,열린 일기장,열린 여동생의 일기장,TRUE,PHOTO_01_004,50,50
+STATE_01_005_FRONT,STATE_01_005_FRONT,OBJ_01_005,고데기,ChangeState,SimpleText,STATE_01_005_BACK,고데기를 뒤집었다.,,,고데기,파손된 고데기,FALSE,,50,50
+STATE_01_005_BACK,STATE_01_005_BACK,OBJ_01_005,고데기 뒷면,None,None,,,,,고데기,파손된 고데기,TRUE,PHOTO_01_005,50,50
+STATE_01_006_NORMAL,STATE_01_006_NORMAL,OBJ_01_006,창문,None,None,,,,,창문,깨져 있는 창문,TRUE,PHOTO_01_006,50,50
+STATE_01_007_NORMAL,STATE_01_007_NORMAL,OBJ_01_007,커튼,None,None,,,,,커튼,검게 타버린 커튼,TRUE,PHOTO_01_007,50,50
+STATE_01_008_NORMAL,STATE_01_008_NORMAL,OBJ_01_008,커튼 봉,None,None,,,,,커튼 봉,녹아내린 커튼 봉,TRUE,PHOTO_01_008,50,50
+STATE_01_009_NORMAL,STATE_01_009_NORMAL,OBJ_01_009,발자국,None,None,,,,,발자국,작업화 발자국,TRUE,PHOTO_01_009,50,50
+STATE_01_010_NORMAL,STATE_01_010_NORMAL,OBJ_01_010,스노우글로브,None,None,,,,,유리 장식,깨진 스노우글로브,TRUE,PHOTO_01_010,50,50
+STATE_01_011_NORMAL,STATE_01_011_NORMAL,OBJ_01_011,화장품,None,None,,,,,화장품,녹아내린 화장품,TRUE,PHOTO_01_011,50,50
+STATE_01_012_NORMAL,STATE_01_012_NORMAL,OBJ_01_012,책,None,None,,,,,책,소설책,TRUE,PHOTO_01_012,50,50
+STATE_01_013_NORMAL,STATE_01_013_NORMAL,OBJ_01_013,베개,None,None,,,,,베개,검게 타버린 배개,TRUE,PHOTO_01_013,50,50
+STATE_01_014_CLOSED,STATE_01_014_CLOSED,OBJ_01_014,닫혀 있는 방문,ChangeState,SimpleText,STATE_01_014_OPEN,방문을 열었다.,,,방문,여동생의 방문,TRUE,PHOTO_01_014,50,50
+STATE_01_014_OPEN,STATE_01_014_OPEN,OBJ_01_014,열려 있는 방문,None,None,,,,,방문,여동생의 방문,TRUE,PHOTO_01_014,50,50
+STATE_01_015_NORMAL,STATE_01_015_NORMAL,OBJ_01_015,보조배터리,None,None,,,,,보조 배터리,그을린 보조배터리,TRUE,PHOTO_01_015,50,50
+STATE_01_016_NORMAL,STATE_01_016_NORMAL,OBJ_01_016,쪽지,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_009,,쪽지,누군가 남긴 쪽지,TRUE,PHOTO_01_016,50,50
+STATE_01_017_NORMAL,STATE_01_017_NORMAL,OBJ_01_017,디퓨저,None,None,,,,,디퓨저,녹아 있는 디퓨저,TRUE,PHOTO_01_017,50,50
+STATE_01_018_NORMAL,STATE_01_018_NORMAL,OBJ_01_018,시계,None,None,,,,,시계,작동하지 않는 시계,TRUE,PHOTO_01_018,50,50
+STATE_01_019_NORMAL,STATE_01_019_NORMAL,OBJ_01_019,장롱,None,None,,,,,장롱,넘어져 있는 장롱,TRUE,PHOTO_01_019,50,50
+STATE_01_020_NORMAL,STATE_01_020_NORMAL,OBJ_01_020,장롱 쪽지,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_010,,쪽지,장롱에 붙어 있는 쪽지,TRUE,PHOTO_01_020,50,50
+STATE_01_021_NORMAL,STATE_01_021_NORMAL,OBJ_01_021,책상,None,None,,,,,책상,그을린 책상,TRUE,PHOTO_01_021,50,50
+STATE_01_022_NORMAL,STATE_01_022_NORMAL,OBJ_01_022,자격증 책,None,None,,,,,자격증 책,타버린 자격증 책,TRUE,PHOTO_01_022,50,50
+STATE_01_023_NORMAL,STATE_01_023_NORMAL,OBJ_01_023,거울,None,None,,,,,거울,깨져버린 거울,TRUE,PHOTO_01_023,50,50
+STATE_01_024_NORMAL,STATE_01_024_NORMAL,OBJ_01_024,바닥 쪽지,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_011,,쪽지,바닥에 떨어진 쪽지,TRUE,PHOTO_01_024,50,50
+STATE_01_025_NORMAL,STATE_01_025_NORMAL,OBJ_01_025,책장 쪽지,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_012,,쪽지,책장에 붙어 있는 쪽지,TRUE,PHOTO_01_025,50,50
+STATE_01_026_NORMAL,STATE_01_026_NORMAL,OBJ_01_026,침대,Repeatable,None,,,,,침대,타버린 침대,FALSE,,50,50

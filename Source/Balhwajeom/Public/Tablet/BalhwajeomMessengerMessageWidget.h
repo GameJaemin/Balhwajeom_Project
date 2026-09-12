@@ -60,6 +60,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Messenger")
 	TSubclassOf<UBalhwajeomMessengerKeywordWidget> KeywordWidgetClass;
 
+	/** Font and size used by runtime-created message body text segments. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Messenger|Style")
+	FSlateFontInfo MessageTextFont;
+
 private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TXT_TimeLeft;

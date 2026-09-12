@@ -25,6 +25,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Story State")
 	bool RemoveStateTag(FGameplayTag StateTag);
 
+	/**
+	 * Replaces every active tag below StateRootTag with StateTag.
+	 * StateTag must be a child of StateRootTag, and the resulting group
+	 * contains at most one exact tag before change events are broadcast.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Story State")
+	bool SetExclusiveStateTag(
+		FGameplayTag StateRootTag,
+		FGameplayTag StateTag
+	);
+
+	/** Selects exactly one tag below Runtime.Player.Mode. */
+	UFUNCTION(BlueprintCallable, Category = "Story State|Player Mode")
+	bool SetPlayerModeTag(FGameplayTag PlayerModeTag);
+
 	UFUNCTION(BlueprintPure, Category = "Story State")
 	bool HasStateTag(FGameplayTag StateTag) const;
 
