@@ -1,0 +1,34 @@
+{
+	"FileVersion": 3,
+	"Version": 6,
+	"VersionName": "0.5.0",
+	"FriendlyName": "Item Inspector",
+	"Description": "Reusable runtime gameplay systems for interaction and item inspection.",
+	"Category": "JM Plugins",
+	"CreatedBy": "JM",
+	"CanContainContent": true,
+	"EnabledByDefault": true,
+	"Plugins": [
+		{
+			"Name": "JMInteraction",
+			"Enabled": true
+		},
+		{
+			"Name": "JMGameplayEvent",
+			"Enabled": true
+		}
+	],
+	"Modules": [
+		{
+			"Name": "ItemInspectorRuntime",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "ItemInspectorTests",
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit",
+			"TargetAllowList": ["Editor"]
+		}
+	]
+}

@@ -8,6 +8,8 @@
 #include "Components/Image.h"
 #include "Components/WidgetComponent.h"
 #include "Interaction/InspectionComponent.h"
+#include "ItemInspection/JMInspectableComponent.h"
+#include "ItemInspection/JMItemInspectionData.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
@@ -32,6 +34,10 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 	CameraTargetBounds->CanCharacterStepUpOn = ECB_No;
 
 	InspectionComponent = CreateDefaultSubobject<UInspectionComponent>(TEXT("InspectionComponent"));
+	ItemInspectionComponent = CreateDefaultSubobject<UJMInspectableComponent>(TEXT("ItemInspectionComponent"));
+	ItemInspectionComponent->bInspectionEnabled = false;
+	ItemInspectionComponent->bBlockPlayerInputDuringInspection = true;
+	ItemInspectionComponent->bHideSourceActorDuringInspection = true;
 
 	ObjectLabelWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("ObjectLabelWidget"));
 	ObjectLabelWidget->SetupAttachment(EvidenceMesh);
@@ -127,6 +133,55 @@ void ABalhwajeomEvidenceActor::BeginPlay()
 	}
 
 	RegisterWithInvestigationSystem();
+	ConfigureItemInspection();
+}
+
+void ABalhwajeomEvidenceActor::ConfigureItemInspection()
+{
+	if (!ItemInspectionComponent)
+	{
+		return;
+	}
+
+	ItemInspectionComponent->bInspectionEnabled = bEnable3DInspection;
+	ItemInspectionComponent->InspectionData = nullptr;
+	RuntimeItemInspectionData = nullptr;
+	if (!bEnable3DInspection || !EvidenceMesh || !EvidenceMesh->GetStaticMesh())
+	{
+		return;
+	}
+
+	RuntimeItemInspectionData = ItemInspectionData
+		? DuplicateObject<UJMItemInspectionData>(ItemInspectionData, this)
+		: NewObject<UJMItemInspectionData>(this);
+	if (!RuntimeItemInspectionData)
+	{
+		ItemInspectionComponent->bInspectionEnabled = false;
+		return;
+	}
+
+	if (RuntimeItemInspectionData->ItemId.IsNone())
+	{
+		RuntimeItemInspectionData->ItemId = ObjectID.IsNone() ? EvidenceData.EvidenceID : ObjectID;
+	}
+	if (RuntimeItemInspectionData->DisplayName.IsEmpty())
+	{
+		RuntimeItemInspectionData->DisplayName = EvidenceData.EvidenceName;
+	}
+	if (RuntimeItemInspectionData->DisplayCategory.IsEmpty())
+	{
+		RuntimeItemInspectionData->DisplayCategory = NSLOCTEXT("Balhwajeom", "EvidenceInspectionCategory", "Evidence");
+	}
+	if (RuntimeItemInspectionData->Description.IsEmpty() && InspectionComponent)
+	{
+		RuntimeItemInspectionData->Description = InspectionComponent->InspectionText;
+	}
+	if (RuntimeItemInspectionData->PreviewMesh.IsNull())
+	{
+		RuntimeItemInspectionData->PreviewMesh = EvidenceMesh->GetStaticMesh();
+	}
+
+	ItemInspectionComponent->InspectionData = RuntimeItemInspectionData;
 }
 
 void ABalhwajeomEvidenceActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -260,6 +315,7 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID)
 		EvidenceData.EvidenceID = ObjectID;
 		EvidenceData.EvidenceName = ObjectDefinition.ObjectName;
 	}
+	ConfigureItemInspection();
 }
 
 void ABalhwajeomEvidenceActor::HandlePlayerDistanceStateChanged(

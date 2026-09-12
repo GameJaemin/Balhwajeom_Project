@@ -1,4 +1,5 @@
 #include "Tablet/BalhwajeomTabletComponent.h"
+#include "Interaction/ItemInspectionIntegration.h"
 
 #include "CameraSystem/BalhwajeomPhotoCameraComponent.h"
 #include "EnhancedInputComponent.h"
@@ -270,6 +271,7 @@ void UBalhwajeomTabletComponent::ToggleTablet()
 
 void UBalhwajeomTabletComponent::RequestOpenTablet()
 {
+	if (BalhwajeomItemInspection::IsOpen(GetOwner())) return;
 	if (bTabletOpen || bPendingOpenAfterPhotoMode)
 	{
 		return;

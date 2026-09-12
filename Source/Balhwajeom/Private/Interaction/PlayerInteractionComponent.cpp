@@ -1,4 +1,5 @@
 #include "Interaction/PlayerInteractionComponent.h"
+#include "Interaction/ItemInspectionIntegration.h"
 
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -162,6 +163,7 @@ void UPlayerInteractionComponent::TickComponent(
 	if (IsInteractionSuppressedByPhotoCamera())
 	{
 		SetFocusedInspection(nullptr);
+		FocusedItemActor.Reset();
 		return;
 	}
 
@@ -248,9 +250,14 @@ void UPlayerInteractionComponent::TickComponent(
 	);
 
 	UInspectionComponent* NewFocusedInspection = nullptr;
+	FocusedItemActor.Reset();
 
 	if (bHit && IsValid(HitResult.GetActor()))
 	{
+		if (HitResult.Distance <= ItemInspectionDistance && BalhwajeomItemInspection::CanInspect(HitResult.GetActor(), Cast<APawn>(PlayerActor)))
+		{
+			FocusedItemActor = HitResult.GetActor();
+		}
 		UInspectionComponent* HitInspection =
 			HitResult.GetActor()->FindComponentByClass<UInspectionComponent>();
 
@@ -376,6 +383,21 @@ bool UPlayerInteractionComponent::RequestInspect()
 		return false;
 	}
 
+	if (HasFocusedItemInspection())
+	{
+		if (Cast<ABalhwajeomEvidenceActor>(FocusedItemActor.Get()) && IsValid(FocusedInspection))
+		{
+			FText InspectionText;
+			if (TryInspect(InspectionText))
+			{
+				OnInspectionSucceeded.Broadcast(InspectionText);
+				BalhwajeomItemInspection::TryInspect(FocusedItemActor.Get(), Cast<APawn>(GetOwner()));
+				return true;
+			}
+		}
+		return BalhwajeomItemInspection::TryInspect(FocusedItemActor.Get(), Cast<APawn>(GetOwner()));
+	}
+
 	if (IsValid(FocusedInspection))
 	{
 		AActor* FocusedActor = FocusedInspection->GetOwner();
@@ -488,8 +510,14 @@ void UPlayerInteractionComponent::OnInteractActionStarted()
 	HandleInteractStarted();
 }
 
+bool UPlayerInteractionComponent::HasFocusedItemInspection() const
+{
+	return BalhwajeomItemInspection::CanInspect(FocusedItemActor.Get(), Cast<APawn>(GetOwner()));
+}
+
 bool UPlayerInteractionComponent::IsInteractionSuppressedByPhotoCamera() const
 {
+	if (BalhwajeomItemInspection::IsOpen(GetOwner()) || BalhwajeomItemInspection::IsOtherModalOpen(GetOwner())) return true;
 	const AActor* OwnerActor = GetOwner();
 	const UBalhwajeomPhotoCameraComponent* PhotoCamera = IsValid(OwnerActor)
 		? OwnerActor->FindComponentByClass<UBalhwajeomPhotoCameraComponent>()

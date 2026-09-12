@@ -1,0 +1,27 @@
+{
+  "FileVersion": 3,
+  "Version": 3,
+  "VersionName": "1.1.1",
+  "FriendlyName": "JM Interaction",
+  "Description": "Reusable, project-independent interaction detection, focus, prompt UI, and execution runtime.",
+  "Category": "JM Plugins",
+  "CreatedBy": "JM",
+  "CanContainContent": true,
+  "EnabledByDefault": true,
+  "Plugins": [
+    { "Name": "JMGameplayEvent", "Enabled": true }
+  ],
+  "Modules": [
+    {
+      "Name": "JMInteraction",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    },
+    {
+      "Name": "JMInteractionTests",
+      "Type": "Editor",
+      "LoadingPhase": "PostEngineInit",
+      "TargetAllowList": ["Editor"]
+    }
+  ]
+}

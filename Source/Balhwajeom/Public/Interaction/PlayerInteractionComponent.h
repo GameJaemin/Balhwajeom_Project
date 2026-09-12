@@ -78,6 +78,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Player Interaction")
 	bool RequestInspect();
 
+	UFUNCTION(BlueprintPure, Category = "Player Interaction")
+	bool HasFocusedItemInspection() const;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Interaction|Item Inspection", meta = (ClampMin = "0.0", Units = "cm"))
+	float ItemInspectionDistance = 500.0f;
+
 	UPROPERTY(BlueprintAssignable, Category = "Player Interaction|Events")
 	FOnInspectionSucceeded OnInspectionSucceeded;
 
@@ -131,4 +137,5 @@ private:
 	bool IsInteractionSuppressedByPhotoCamera() const;
 
 	bool bInteractionInputInitialized = false;
+	TWeakObjectPtr<AActor> FocusedItemActor;
 };

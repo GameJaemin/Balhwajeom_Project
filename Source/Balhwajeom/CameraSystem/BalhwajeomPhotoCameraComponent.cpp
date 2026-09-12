@@ -1,6 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "BalhwajeomPhotoCameraComponent.h"
+#include "Interaction/ItemInspectionIntegration.h"
 
 #include "Async/Async.h"
 #include "CameraSystem/BalhwajeomCameraFocusModel.h"
@@ -380,6 +381,7 @@ void UBalhwajeomPhotoCameraComponent::SetNormalCamera(UCameraComponent* Camera)
 
 void UBalhwajeomPhotoCameraComponent::ToggleCameraMode()
 {
+	if (BalhwajeomItemInspection::IsOpen(GetOwner())) return;
 	// Ignore rapid presses until the current fade-out/switch/fade-in sequence ends.
 	if (bIsCameraTransitioning || !PhotoCamera || !NormalCamera || !GetWorld())
 	{

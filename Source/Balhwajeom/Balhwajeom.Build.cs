@@ -21,10 +21,11 @@ public class Balhwajeom : ModuleRules
 			"UMG",
 			"Slate",
 			"SlateCore",
-			"DeveloperSettings"
+			"DeveloperSettings",
+			"ItemInspectorRuntime"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[] { "JMInteraction" });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"Balhwajeom",

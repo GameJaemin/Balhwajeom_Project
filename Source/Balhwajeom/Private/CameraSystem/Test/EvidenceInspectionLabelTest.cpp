@@ -5,18 +5,25 @@
 #include "Blueprint/UserWidget.h"
 #include "CameraSystem/BalhwajeomEvidenceActor.h"
 #include "Components/Image.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
+#include "ItemInspection/JMInspectableComponent.h"
+#include "ItemInspection/JMItemInspectionData.h"
 #include "Kismet/GameplayStatics.h"
 #include "UObject/Script.h"
 
 
 struct FEvidenceActorTestAccessor
 {
+	static void Enable3DInspection(ABalhwajeomEvidenceActor* Evidence)
+	{
+		Evidence->bEnable3DInspection = true;
+	}
 	static void SetEvidenceInstanceID(
 		ABalhwajeomEvidenceActor* Evidence,
 		const FGuid InstanceID)
@@ -221,6 +228,7 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 
 	const FGuid EvidenceInstanceID = FGuid::NewGuid();
 	FEvidenceActorTestAccessor::SetEvidenceInstanceID(Evidence, EvidenceInstanceID);
+	FEvidenceActorTestAccessor::Enable3DInspection(Evidence);
 	Evidence->ConfigureInvestigationObject(TEXT("OBJ_01_001"));
 	UGameplayStatics::FinishSpawningActor(Evidence, FTransform::Identity);
 	if (!World->HasBegunPlay())
@@ -230,6 +238,20 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 	if (!Evidence->HasActorBegunPlay())
 	{
 		Evidence->DispatchBeginPlay();
+	}
+	UJMInspectableComponent* ItemInspection = Evidence->GetItemInspectionComponent();
+	TestNotNull(TEXT("Evidence should own the 3D inspection adapter"), ItemInspection);
+	if (ItemInspection)
+	{
+		TestTrue(TEXT("Enabled Evidence should expose 3D inspection"), ItemInspection->bInspectionEnabled);
+		TestNotNull(TEXT("Evidence should build runtime inspection data"), ItemInspection->InspectionData.Get());
+		if (ItemInspection->InspectionData)
+		{
+			const UStaticMeshComponent* EvidenceMesh = Evidence->FindComponentByClass<UStaticMeshComponent>();
+			TestNotNull(TEXT("Evidence mesh should exist"), EvidenceMesh);
+			TestTrue(TEXT("Evidence mesh should become the fallback preview mesh"),
+				ItemInspection->InspectionData->PreviewMesh.Get() == (EvidenceMesh ? EvidenceMesh->GetStaticMesh().Get() : nullptr));
+		}
 	}
 
 	FEvidenceActorTestAccessor::SetDistanceState(
