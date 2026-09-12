@@ -77,6 +77,37 @@ bool FStoryStateInitialStateTest::RunTest(const FString& Parameters)
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FStoryStatePlayerModeTagsRegisteredTest,
+	"Balhwajeom.StoryState.PlayerMode.TagsRegistered",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FStoryStatePlayerModeTagsRegisteredTest::RunTest(
+	const FString& Parameters
+)
+{
+	const TArray<FName> RequiredTagNames = {
+		TEXT("Runtime.Player.Mode"),
+		TEXT("Runtime.Player.Mode.Exploration"),
+		TEXT("Runtime.Player.Mode.PhotoCamera"),
+		TEXT("Runtime.Player.Mode.Tablet")
+	};
+
+	for (const FName TagName : RequiredTagNames)
+	{
+		TestTrue(
+			FString::Printf(TEXT("%s should be registered"), *TagName.ToString()),
+			FGameplayTag::RequestGameplayTag(TagName, false).IsValid()
+		);
+	}
+
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FStoryStateAddAndDuplicateTest,
 	"Balhwajeom.StoryState.AddAndDuplicate",
 	EAutomationTestFlags::EditorContext |
@@ -181,6 +212,96 @@ bool FStoryStateHierarchyTest::RunTest(const FString& Parameters)
 	TestTrue(
 		TEXT("Exact lookup should match the exact active tag"),
 		Fixture.Subsystem->HasStateTagExact(Fixture.FoundTag)
+	);
+
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FStoryStateExclusiveGroupReplacementTest,
+	"Balhwajeom.StoryState.ExclusiveGroup.Replacement",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FStoryStateExclusiveGroupReplacementTest::RunTest(
+	const FString& Parameters
+)
+{
+	const StoryStateSubsystemTests::FFixture Fixture;
+
+	Fixture.Subsystem->AddStateTag(Fixture.FoundTag);
+
+	TestTrue(
+		TEXT("Selecting another tag in the same group should change state"),
+		Fixture.Subsystem->SetExclusiveStateTag(
+			Fixture.BloodstainParentTag,
+			Fixture.PhotographedTag
+		)
+	);
+
+	TestFalse(
+		TEXT("The previously active group tag should be removed"),
+		Fixture.Subsystem->HasStateTagExact(Fixture.FoundTag)
+	);
+
+	TestTrue(
+		TEXT("The selected group tag should be active"),
+		Fixture.Subsystem->HasStateTagExact(Fixture.PhotographedTag)
+	);
+
+	TestEqual(
+		TEXT("An exclusive group should retain exactly one active tag"),
+		Fixture.Subsystem->GetCurrentStateTags().Num(),
+		1
+	);
+
+	TestFalse(
+		TEXT("Selecting the already exclusive tag should report no change"),
+		Fixture.Subsystem->SetExclusiveStateTag(
+			Fixture.BloodstainParentTag,
+			Fixture.PhotographedTag
+		)
+	);
+
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FStoryStateExclusiveGroupValidationTest,
+	"Balhwajeom.StoryState.ExclusiveGroup.Validation",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FStoryStateExclusiveGroupValidationTest::RunTest(
+	const FString& Parameters
+)
+{
+	const StoryStateSubsystemTests::FFixture Fixture;
+
+	Fixture.Subsystem->AddStateTag(Fixture.FoundTag);
+
+	TestFalse(
+		TEXT("A tag outside the requested group should be rejected"),
+		Fixture.Subsystem->SetExclusiveStateTag(
+			Fixture.BloodstainParentTag,
+			Fixture.SearchTag
+		)
+	);
+
+	TestTrue(
+		TEXT("Rejecting an outside tag should preserve the previous state"),
+		Fixture.Subsystem->HasStateTagExact(Fixture.FoundTag)
+	);
+
+	TestFalse(
+		TEXT("Rejecting an outside tag should not add it"),
+		Fixture.Subsystem->HasStateTagExact(Fixture.SearchTag)
 	);
 
 	return true;
