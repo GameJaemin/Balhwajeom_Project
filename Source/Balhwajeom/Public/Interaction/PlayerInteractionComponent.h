@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "GameplayTagContainer.h"
 #include "Interaction/PlayerInteractionTypes.h"
 #include "PlayerInteractionComponent.generated.h"
 
@@ -14,6 +15,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FText,
 	InspectionText
 );
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInspectionDismissRequested);
 
 UCLASS(
 	Blueprintable,
@@ -67,6 +70,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	virtual void TickComponent(
 		float DeltaTime,
@@ -78,8 +82,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Player Interaction")
 	bool RequestInspect();
 
+	UFUNCTION(BlueprintPure, Category = "Player Interaction")
+	bool HasFocusedItemInspection() const;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Player Interaction|Item Inspection", meta = (ClampMin = "0.0", Units = "cm"))
+	float ItemInspectionDistance = 500.0f;
+
 	UPROPERTY(BlueprintAssignable, Category = "Player Interaction|Events")
 	FOnInspectionSucceeded OnInspectionSucceeded;
+
+	/** Requests that Blueprint presentation close any visible inspection text. */
+	UPROPERTY(BlueprintAssignable, Category = "Player Interaction|Events")
+	FOnInspectionDismissRequested OnInspectionDismissRequested;
+
+	/** Blueprint presentation hook for closing the inspection message. */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Player Interaction|Events")
+	void ReceiveInspectionDismissRequested();
 
 	UFUNCTION(BlueprintCallable, Category = "Player Interaction")
 	void RefreshInspectableObjects();
@@ -117,6 +135,9 @@ public:
 	bool HandleInteractStarted();
 
 private:
+	UFUNCTION()
+	void HandleStoryStateTagAdded(FGameplayTag StateTag);
+
 	UPROPERTY()
 	TArray<TObjectPtr<UInspectionComponent>> InspectableObjects;
 
@@ -131,4 +152,5 @@ private:
 	bool IsInteractionSuppressedByPhotoCamera() const;
 
 	bool bInteractionInputInitialized = false;
+	TWeakObjectPtr<AActor> FocusedItemActor;
 };

@@ -1,13 +1,17 @@
 #include "Tablet/BalhwajeomTabletComponent.h"
+#include "Interaction/ItemInspectionIntegration.h"
 
 #include "CameraSystem/BalhwajeomPhotoCameraComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
+#include "Story/StoryStateSubsystem.h"
+#include "Story/StoryStateTags.h"
 #include "Tablet/BalhwajeomTabletWidget.h"
 
 UBalhwajeomTabletComponent::UBalhwajeomTabletComponent()
@@ -285,6 +289,7 @@ void UBalhwajeomTabletComponent::SetTabletInteractionEnabled(bool bEnabled)
 
 void UBalhwajeomTabletComponent::RequestOpenTablet()
 {
+	if (BalhwajeomItemInspection::IsOpen(GetOwner())) return;
 	if (bTabletOpen || bPendingOpenAfterPhotoMode)
 	{
 		return;
@@ -384,6 +389,19 @@ void UBalhwajeomTabletComponent::OpenTabletNow()
 
 	bPendingOpenAfterPhotoMode = false;
 	bTabletOpen = true;
+	if (UWorld* World = GetWorld())
+	{
+		if (UGameInstance* GameInstance = World->GetGameInstance())
+		{
+			if (UStoryStateSubsystem* StoryState =
+				GameInstance->GetSubsystem<UStoryStateSubsystem>())
+			{
+				StoryState->SetPlayerModeTag(
+					BalhwajeomGameplayTags::Runtime_Player_Mode_Tablet
+				);
+			}
+		}
+	}
 	SetGameplayInputBlocked(true);
 
 	TabletWidget->SetVisibility(ESlateVisibility::Visible);
@@ -420,6 +438,7 @@ void UBalhwajeomTabletComponent::CloseTablet()
 
 void UBalhwajeomTabletComponent::FinishCloseTablet()
 {
+	const bool bWasTabletOpen = bTabletOpen;
 	bTabletClosing = false;
 
 	APlayerController* PlayerController = InitializedPlayerController.Get();
@@ -428,7 +447,7 @@ void UBalhwajeomTabletComponent::FinishCloseTablet()
 		TabletWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
-	if (IsValid(PlayerController) && bTabletOpen)
+	if (IsValid(PlayerController) && bWasTabletOpen)
 	{
 		PlayerController->bShowMouseCursor = bSavedShowMouseCursor;
 		PlayerController->bEnableClickEvents = bSavedEnableClickEvents;
@@ -440,6 +459,22 @@ void UBalhwajeomTabletComponent::FinishCloseTablet()
 	}
 
 	bTabletOpen = false;
+	if (bWasTabletOpen)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			if (UGameInstance* GameInstance = World->GetGameInstance())
+			{
+				if (UStoryStateSubsystem* StoryState =
+					GameInstance->GetSubsystem<UStoryStateSubsystem>())
+				{
+					StoryState->SetPlayerModeTag(
+						BalhwajeomGameplayTags::Runtime_Player_Mode_Exploration
+					);
+				}
+			}
+		}
+	}
 	SetGameplayInputBlocked(false);
 }
 

@@ -1,5 +1,7 @@
 #include "Story/StoryStateSubsystem.h"
 
+#include "Story/StoryStateTags.h"
+
 
 bool UStoryStateSubsystem::AddStateTag(FGameplayTag StateTag)
 {
@@ -26,6 +28,70 @@ bool UStoryStateSubsystem::RemoveStateTag(FGameplayTag StateTag)
 	OnStateTagRemoved.Broadcast(StateTag);
 
 	return true;
+}
+
+
+bool UStoryStateSubsystem::SetExclusiveStateTag(
+	FGameplayTag StateRootTag,
+	FGameplayTag StateTag
+)
+{
+	if (!StateRootTag.IsValid() ||
+		!StateTag.IsValid() ||
+		StateTag == StateRootTag ||
+		!StateTag.MatchesTag(StateRootTag))
+	{
+		return false;
+	}
+
+	TArray<FGameplayTag> ActiveTags;
+	CurrentStateTags.GetGameplayTagArray(ActiveTags);
+
+	TArray<FGameplayTag> RemovedTags;
+	for (const FGameplayTag& ActiveTag : ActiveTags)
+	{
+		if (ActiveTag != StateTag && ActiveTag.MatchesTag(StateRootTag))
+		{
+			RemovedTags.Add(ActiveTag);
+		}
+	}
+
+	const bool bNeedsAdd = !CurrentStateTags.HasTagExact(StateTag);
+	if (RemovedTags.IsEmpty() && !bNeedsAdd)
+	{
+		return false;
+	}
+
+	for (const FGameplayTag& RemovedTag : RemovedTags)
+	{
+		CurrentStateTags.RemoveTag(RemovedTag);
+	}
+	if (bNeedsAdd)
+	{
+		CurrentStateTags.AddTag(StateTag);
+	}
+
+	// Broadcast only after the complete replacement so listeners never observe
+	// an empty or multiply-active exclusive group during the transition.
+	for (const FGameplayTag& RemovedTag : RemovedTags)
+	{
+		OnStateTagRemoved.Broadcast(RemovedTag);
+	}
+	if (bNeedsAdd)
+	{
+		OnStateTagAdded.Broadcast(StateTag);
+	}
+
+	return true;
+}
+
+
+bool UStoryStateSubsystem::SetPlayerModeTag(FGameplayTag PlayerModeTag)
+{
+	return SetExclusiveStateTag(
+		BalhwajeomGameplayTags::Runtime_Player_Mode,
+		PlayerModeTag
+	);
 }
 
 

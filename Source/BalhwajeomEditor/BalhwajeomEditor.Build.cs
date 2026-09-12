@@ -10,7 +10,9 @@ public class BalhwajeomEditor : ModuleRules
 		{
 			"Core",
 			"CoreUObject",
-			"Engine"
+			"Engine",
+			"EnhancedInput",
+			"InputCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new[]
@@ -19,6 +21,7 @@ public class BalhwajeomEditor : ModuleRules
 			"AssetTools",
 			"AnimGraph",
 			"Balhwajeom",
+			"ItemInspectorRuntime",
 			"BlueprintGraph",
 			"ImageCore",
 			"MediaAssets",

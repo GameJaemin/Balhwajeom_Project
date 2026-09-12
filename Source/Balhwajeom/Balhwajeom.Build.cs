@@ -22,12 +22,10 @@ public class Balhwajeom : ModuleRules
 			"Slate",
 			"SlateCore",
 			"DeveloperSettings",
-			"LevelSequence",
-			"MovieScene",
-			"MediaAssets"
+			"ItemInspectorRuntime"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[] { "JMInteraction" });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"Balhwajeom",

@@ -6,6 +6,7 @@
 #include "BalhwajeomEvidenceActor.h"
 #include "BalhwajeomPhotoCameraComponent.h"
 #include "Blueprint/UserWidget.h"
+#include "Interaction/ItemInspectionIntegration.h"
 #include "Components/Widget.h"
 #include "Interaction/InspectionComponent.h"
 #include "Interaction/PlayerInteractionComponent.h"
@@ -253,6 +254,7 @@ bool ABalhwajeomCameraPlayerController::ShouldShowInteractionPrompt() const
 		return false;
 	}
 
+	if (InteractionComponent->HasFocusedItemInspection()) return true;
 	UInspectionComponent* FocusedInspection = InteractionComponent->GetFocusedInspection();
 	if (!IsValid(FocusedInspection) ||
 		InteractionComponent->GetDistanceStateForInspectable(FocusedInspection) !=
@@ -304,7 +306,7 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 		return;
 	}
 
-	if (IsInteractionPromptSuppressedByTablet() ||
+	if (BalhwajeomItemInspection::IsOpen(this) || IsInteractionPromptSuppressedByTablet() ||
 		IsInteractionPromptSuppressedByPhotoCamera())
 	{
 		// Full-screen modes own this layer: hide both the center dot and text.

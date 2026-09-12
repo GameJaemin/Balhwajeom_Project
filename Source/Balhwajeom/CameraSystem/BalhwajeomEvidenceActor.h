@@ -15,6 +15,8 @@ class UBoxComponent;
 class UPrimitiveComponent;
 class USceneComponent;
 class UInspectionComponent;
+class UJMInspectableComponent;
+class UJMItemInspectionData;
 class UTexture2D;
 class UWidgetComponent;
 class UBalhwajeomInvestigationSubsystem;
@@ -68,6 +70,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inspection")
 	UInspectionComponent* GetInspectionComponent() const { return InspectionComponent; }
 
+	UFUNCTION(BlueprintPure, Category = "Inspection|3D")
+	UJMInspectableComponent* GetItemInspectionComponent() const { return ItemInspectionComponent; }
+
 	virtual bool RequestCameraTargetInfo_Implementation(FBalhwajeomCameraTargetInfo& OutInfo) const override;
 	virtual FVector RequestCameraFocusLocation_Implementation() const override;
 	virtual UPrimitiveComponent* RequestCameraFramingComponent_Implementation() const override;
@@ -96,6 +101,7 @@ protected:
 	void ApplyInspectionDistanceState(EPlayerInspectionDistanceState DistanceState);
 	void RegisterWithInvestigationSystem();
 	void ApplyInvestigationState(FName StateID);
+	void ConfigureItemInspection();
 	UBalhwajeomInvestigationSubsystem* GetInvestigationSubsystem() const;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Evidence")
@@ -115,6 +121,21 @@ protected:
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inspection")
 	TObjectPtr<UInspectionComponent> InspectionComponent;
+
+	/** Enables the rotating SceneCapture inspector for this Evidence Actor. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inspection|3D")
+	bool bEnable3DInspection = false;
+
+	/** Optional authored settings. Missing mesh/text fields are filled from this Evidence Actor at runtime. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inspection|3D", meta = (EditCondition = "bEnable3DInspection"))
+	TObjectPtr<UJMItemInspectionData> ItemInspectionData;
+
+	/** Runtime bridge consumed by the existing F-key interaction trace. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inspection|3D")
+	TObjectPtr<UJMInspectableComponent> ItemInspectionComponent;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UJMItemInspectionData> RuntimeItemInspectionData;
 
 	/** Screen-space label that follows this object in the normal third-person view. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inspection")
