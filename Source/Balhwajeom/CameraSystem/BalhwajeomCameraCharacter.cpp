@@ -14,7 +14,10 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "Engine/Engine.h"
+#include "Engine/GameInstance.h"
 #include "Animation/AnimationAsset.h"
+#include "Story/StoryStateSubsystem.h"
+#include "Story/StoryStateTags.h"
 
 ABalhwajeomCameraCharacter::ABalhwajeomCameraCharacter()
 {
@@ -116,6 +119,17 @@ void ABalhwajeomCameraCharacter::Tick(float DeltaSeconds)
 void ABalhwajeomCameraCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (UStoryStateSubsystem* StoryState =
+			GameInstance->GetSubsystem<UStoryStateSubsystem>())
+		{
+			StoryState->SetPlayerModeTag(
+				BalhwajeomGameplayTags::Runtime_Player_Mode_Exploration
+			);
+		}
+	}
 
 	// Blueprint child assets can retain the old quarter-view component values even after the
 	// native constructor changes. Normalize the exploration camera at runtime so every child
