@@ -47,8 +47,10 @@ struct BALHWAJEOM_API FPhotoDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo")
 	FName CharacterID = NAME_None;
 
-	/** Optional extra fill-in-blank sentence (usually SentenceType=PhotoAnalysis) that must also be
-	 * solved before this photo counts as valid evidence in any statement's photo slot. Empty = none required. */
+	/** Declaration sentence (SentenceType=Statement) explaining whether this specific completed photo
+	 * is valid evidence. When this photo is submitted to a statement's photo slot but isn't the
+	 * correct evidence, this sentence's ResultText is shown to explain why -- and this sentence
+	 * itself is marked solved. Empty = no per-photo explanation is shown on a wrong submission. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo")
 	FName EvidenceSentenceID = NAME_None;
 

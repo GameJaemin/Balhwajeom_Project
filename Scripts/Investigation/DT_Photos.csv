@@ -1,15 +1,39 @@
-Name,PhotoID,PhotoName,DescriptionSource,CustomDescription,PhotoSentenceID,CharacterID,GrantedWordIDs,WorldStoryLines,WorldStoryCues,StoryVoice
-PHOTO_01_001,PHOTO_01_001,첫째 형 돌 사진,Custom,첫째 형이 돌때 찍은 사진이다.,,CHARACTER_SISTER,(WORD_01_001),,,
-PHOTO_01_002,PHOTO_01_002,여동생과 노는 사진,Custom,어린 시절 여동생과 함께 놀 때 찍은 사진이다.,,CHARACTER_SISTER,(WORD_01_002),,,
-PHOTO_01_003,PHOTO_01_003,최근 촬영한 가족 사진,Custom,,SENT_01_PHOTO_001,CHARACTER_SISTER,(WORD_01_003),,,
-PHOTO_01_004,PHOTO_01_004,여동생의 일기장,Custom,,SENT_01_PHOTO_002,CHARACTER_SISTER,(),,,
-PHOTO_01_005,PHOTO_01_005,파손된 고데기,Custom,,SENT_01_PHOTO_003,CHARACTER_SISTER,"(WORD_01_006,WORD_01_007)",,,
-PHOTO_01_006,PHOTO_01_006,깨진 창문,Custom,,SENT_01_PHOTO_004,CHARACTER_SISTER,"(WORD_01_008,WORD_01_009)",,,
-PHOTO_01_007,PHOTO_01_007,불탄 커튼,Custom,,SENT_01_PHOTO_005,CHARACTER_SISTER,(WORD_01_010),,,
-PHOTO_01_008,PHOTO_01_008,녹아내린 커튼 봉,Custom,,SENT_01_PHOTO_006,CHARACTER_SISTER,"(WORD_01_011,WORD_01_026)",,,
-PHOTO_01_009,PHOTO_01_009,작업화 발자국,Custom,,SENT_01_PHOTO_007,CHARACTER_SISTER,(WORD_01_012),,,
-PHOTO_01_010,PHOTO_01_010,스노우글로브 장식,Custom,,SENT_01_PHOTO_008,CHARACTER_SISTER,(WORD_01_013),,,
-PHOTO_01_011,PHOTO_01_011,여동생의 화장품,Custom,동생이 부모님 몰래 샀던 화장품이다.,,CHARACTER_SISTER,(),,,
-PHOTO_01_012,PHOTO_01_012,내가 사준 소설 책,Custom,형이 동생의 생일 선물로 사준 소설책이다.,,CHARACTER_SISTER,(),,,
-PHOTO_01_013,PHOTO_01_013,탄 베개,Custom,불이 붙어 검게 타버린 여동생의 베개이다.,,CHARACTER_SISTER,(),,"((Text=""아 진짜!! 베개를 두 개 드는 건 반칙이잖아!! 반칙이라고!!"",StartTimeSeconds=0.0),(Text=""여동생이 짜증을 낸다."",StartTimeSeconds=4.0))",/Game/Balhwajeom/Audio/Voice/SISTER_PILLOW_SOUND.SISTER_PILLOW_SOUND
-PHOTO_01_014,PHOTO_01_014,여동생의 방문,Custom,"‘닫힘, 들어오지 마시오’ 표지판이 붙어있던 방문이다.",,CHARACTER_SISTER,(WORD_01_025),,,
+Name,PhotoID,PhotoName,PhotoType,DescriptionSource,CustomDescription,PhotoSentenceID,WorldStoryText,WorldStoryCues ,StoryVoice,GrantedWordIDs,CharacterID,EvidenceSentenceID
+PHOTO_01_001,PHOTO_01_001,첫째 형 돌 사진,Story,Custom,불에 그을린 흔적이 남아 있는 형의 돌사진,,,"((Text=""""여기 봐야지~"""",StartTimeSeconds=0.0),(Text=""""우리 아들~ 이쪽 보세요~"""",StartTimeSeconds=1.3))",,(WORD_01_001),CHARACTER_SISTER,
+PHOTO_01_002,PHOTO_01_002,여동생과 노는 일상사진,Story,Custom,"불에 그을린 흔적이 남아 있는 막내가 태어난 지 얼마 안 되었을 때, 아버지가 찍어준 사진",,,"((Text=""""이제 오빠 다 됐네"""",StartTimeSeconds=0.0),(Text=""""안 무거워?"""",StartTimeSeconds=1.0),(Text=""""응 괜찮아."""",StartTimeSeconds=2.3))",,(WORD_01_002),CHARACTER_SISTER,
+PHOTO_01_003,PHOTO_01_003,가족 사진,Investigation ,Custom,,SENT_01_PHOTO_001,,"((Text=""""다들 좀 붙어봐라."""",StartTimeSeconds=0.0),(Text=""""우리 공주! 이리와~"""",StartTimeSeconds=1.5),(Text=""""아. 징그러워!"""",StartTimeSeconds=3.0))",,(WORD_01_003),CHARACTER_SISTER,SENT_01_STATEMENT_02
+PHOTO_01_004,PHOTO_01_004,여동생의 일기장,Investigation ,Custom,,SENT_01_PHOTO_002,,"((Text=""""3월 5일 월요일. 같은 반 남자애가~"""",StartTimeSeconds=0.0),(Text=""""야아! 내놔!"""",StartTimeSeconds=2.0),
+(Text=""""엄마! 얘 좋아하는 남자 생겼나봐!"""",StartTimeSeconds=3.4))",,(WORD_01_028),CHARACTER_SISTER,SENT_01_STATEMENT_03
+PHOTO_01_005,PHOTO_01_005,파손된 고데기,Investigation ,Custom,,SENT_01_PHOTO_003,,"((Text=""""앗 뜨거!"""",StartTimeSeconds=0.0),(Text=""""아빠가 조심하랬잖아."""",StartTimeSeconds=1.2),(Text=""""아들 얼음 좀 가져와."""",StartTimeSeconds=3.5))",,(WORD_01_006),CHARACTER_SISTER,SENT_01_STATEMENT_04
+PHOTO_01_006,PHOTO_01_006,깨진 창문,Investigation ,Custom,,SENT_01_PHOTO_004,,,,"(WORD_01_008,WORD_01_009)",CHARACTER_SISTER,SENT_01_STATEMENT_05
+PHOTO_01_007,PHOTO_01_007,불탄 커튼,Investigation ,Custom,,SENT_01_PHOTO_005,,,,(WORD_01_010),CHARACTER_SISTER,SENT_01_STATEMENT_01
+PHOTO_01_008,PHOTO_01_008,녹아내린 커튼 봉,Investigation ,Custom,,SENT_01_PHOTO_006,,,,"(WORD_01_011,WORD_01_026)",CHARACTER_SISTER,SENT_01_STATEMENT_06
+PHOTO_01_009,PHOTO_01_009,작업화 발자국,Investigation ,Custom,,SENT_01_PHOTO_007,,,,(WORD_01_012),CHARACTER_SISTER,SENT_01_STATEMENT_07
+PHOTO_01_010,PHOTO_01_010,스노우글로브 장식,Investigation ,Custom,깨져있는 스노우글로브.,,,"((Text=""""우리 공주! 생일 축하드려요~"""",StartTimeSeconds=0.0),(Text=""""아~아! 이거 내 방에 있던거잖아!"""",StartTimeSeconds=1.8))",,(),CHARACTER_SISTER,
+PHOTO_01_011,PHOTO_01_011,여동생의 화장품,Story,Custom,겉이 녹은 화장품.,,,"((Text=""""무슨 중학생이 벌써 화장을 하니?"""",StartTimeSeconds=0.0),(Text=""""맨 얼굴이 제일 예쁠 나이야~"""",StartTimeSeconds=1.8),
+(Text=""""아. 애들 다해!"""",StartTimeSeconds=3.6),(Text=""""여보~ 냅둬. 어차피 못 생겼어."""",StartTimeSeconds=5.5),(Text=""""나 아빠 닮았거든?"""",StartTimeSeconds=7))",,(),CHARACTER_SISTER,
+PHOTO_01_012,PHOTO_01_012,내가 사준 소설 책,Story,Custom,형이 동생의 생일 선물로 사준 소설책이다.,,,,,(),CHARACTER_SISTER,
+PHOTO_01_013,PHOTO_01_013,탄 베개,Story,Custom,검게 탄 베개.,,,"((Text=""""베개 두개는 반칙이지!"""",StartTimeSeconds=0.0),(Text=""""어~ 뺏어봐. 뺏어봐~"""",StartTimeSeconds=1.6))",SISTER_PILLOW_SOUND,(),CHARACTER_SISTER,
+PHOTO_01_014,PHOTO_01_014,여동생의 방문,Story,Custom,불에 탄 막내 방 문.,,,"((Text=""""야. 뭐하냐."""",StartTimeSeconds=0.0),(Text=""""응. 나가."""",StartTimeSeconds=1.3),(Text=""""아 나가라고!"""",StartTimeSeconds=2.6))",,(WORD_01_025),CHARACTER_SISTER,
+PHOTO_01_015,PHOTO_01_015,그을린 보조배터리,Investigation ,Custom,,SENT_01_PHOTO_009,,"((Text=""""지 팔뚝만한걸 들고 다녀. 폰 꺼지면 죽냐?"""",StartTimeSeconds=0.0))",,(),CHARACTER_SISTER,SENT_01_STATEMENT_09
+PHOTO_01_016,PHOTO_01_016,쪽지,Investigation ,Custom,,SENT_01_PHOTO_010,,"((Text=""""맨날 안 끄고 다녀. 엄마 없이 어쩌려고."""",StartTimeSeconds=0.0))",,(WORD_01_030),CHARACTER_SISTER,SENT_01_STATEMENT_10
+PHOTO_01_017,PHOTO_01_017,디퓨저,Story,Custom,"화재가 발생한 날, 제 방의 디퓨저를 켜둔 채 집을 나갔습니다.
+불이 난 뒤 확인해보니, 디퓨저가 있던 쪽 벽이 심하게 타 있었습니다.
+그래서 제가 켜두고 간 디퓨저가 화재의 원인이라고 생각합니다.
+
+평소에도 방에 향이 오래 남았으면 해서, 디퓨저를 하루 종일 켜두곤 했습니다.
+엄마는 외출할 때마다 꼭 끄라고 당부했지만, 저는 그게 괜한 걱정이라고만 생각했습니다.
+그날도, 끄지 않고 나갔습니다.
+
+제가 잘못했습니다.",,,"((Text=""""이게 그렇게 좋아? 비싸기만 하던데."""",StartTimeSeconds=0.0),(Text=""""아냐~ 이거 되게 오래 쓸 수 있어."""",StartTimeSeconds=2.0),
+(Text=""""뭐… 냄새는 좋네."""",StartTimeSeconds=4.0))",,(WORD_01_029),CHARACTER_SISTER,
+PHOTO_01_018,PHOTO_01_018,시계,Story,Custom,고장난 전자 시계.,,,"((Text=""""내 시계 왜 네 방에 있냐?"""",StartTimeSeconds=0.0),(Text=""""어차피 안 쓰잖아~"""",StartTimeSeconds=1.9))",,(WORD_01_031),CHARACTER_SISTER,
+PHOTO_01_019,PHOTO_01_019,장롱,Story,Custom,막내의 두번째 옷장.,,,"((Text=""""무슨 중학생이 옷장이 두개나 필요해?"""",StartTimeSeconds=0.0))",,(),CHARACTER_SISTER,
+PHOTO_01_020,PHOTO_01_020,장롱 쪽지,Story,Custom,영수증으로 만든 쪽지.,,,"((Text=""""엄마는 꼭 버리기 아깝다고 영수증을 메모장으로 쓴다니까…"""",StartTimeSeconds=0.0))",,(),CHARACTER_SISTER,
+PHOTO_01_021,PHOTO_01_021,책상,Story,Custom,검게 탄 학생용 책상.,,,"((Text=""""앉아있어서 공부하는 줄 알았는데...?"""",StartTimeSeconds=0.0),(Text=""""쉿! 나가. 나가."""",StartTimeSeconds=1.8),
+(Text=""""쯔쯔… 학생이 하라는 공부는 안하고."""",StartTimeSeconds=3.3))",,(),CHARACTER_SISTER,
+PHOTO_01_022,PHOTO_01_022,자격증 책,Story,Custom,겉이 많이 탄 자격증 책.,,,"((Text=""""이거 엄마가 오빠 선물로 준거잖아."""",StartTimeSeconds=0.0),(Text=""""하… 갖다 버리던가."""",StartTimeSeconds=1.9))",,(),CHARACTER_SISTER,
+PHOTO_01_023,PHOTO_01_023,거울,Story,Custom,산산조각이 난 전신거울.,,,"((Text=""""하라는 공부는 안하고~ 거울만 하루 종일~"""",StartTimeSeconds=0.0))",,(),CHARACTER_SISTER,
+PHOTO_01_024,PHOTO_01_024,바닥 쪽지,Story,Custom,영수증으로 만든 쪽지.,,,"((Text=""""여기 또 있네. 엄마 전용 메모지."""",StartTimeSeconds=0.0))",,(),CHARACTER_SISTER,
+PHOTO_01_025,PHOTO_01_025,책장 쪽지,Story,Custom,영수증으로 만든 쪽지.,,,"((Text=""""엄마가 두고 간 쪽지 읽어 봤어?"""",StartTimeSeconds=0.0),(Text=""""엄마... 그냥 메세지를 보내..."""",StartTimeSeconds=1.9),
+(Text=""""엄마는 이게 더 좋아."""",StartTimeSeconds=3.6))",,(),CHARACTER_SISTER,

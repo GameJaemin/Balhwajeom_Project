@@ -479,7 +479,7 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 		{
 			const FSentenceDefinition* EvidenceSentence = SentencesTable->FindRow<FSentenceDefinition>(
 				Photo->EvidenceSentenceID, Context, false);
-			if (EvidenceSentence == nullptr || EvidenceSentence->SentenceType != ESentenceType::PhotoAnalysis)
+			if (EvidenceSentence == nullptr || EvidenceSentence->SentenceType != ESentenceType::Statement)
 			{
 				ReportInvalidReference(
 					TEXT("PhotoDefinition"), Photo->PhotoID, TEXT("EvidenceSentenceID"), Photo->EvidenceSentenceID);
@@ -561,7 +561,7 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 		TSet<int32> WordSlotIndices;
 		for (const FSentenceWordSlot& Slot : Sentence->WordSlots)
 		{
-			if (Slot.SlotIndex < 0 || Slot.SlotIndex > 4 || WordSlotIndices.Contains(Slot.SlotIndex))
+			if (Slot.SlotIndex < 0 || Slot.SlotIndex > 9 || WordSlotIndices.Contains(Slot.SlotIndex))
 			{
 				ReportInvalidReference(
 					TEXT("Sentence"), Sentence->SentenceID, TEXT("WordSlotIndex"), FName(*FString::FromInt(Slot.SlotIndex)));
@@ -619,6 +619,39 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 				Error,
 				TEXT("Sentence '%s' has an empty ResultText."),
 				*Sentence->SentenceID.ToString());
+			bIsValid = false;
+		}
+	}
+
+	// Exactly one Statement row per character (among characters that have any Statement rows at
+	// all) should be flagged as that character's fixed tablet folder file; every other Statement
+	// row is a photo-declaration entry only reached via a Photo's EvidenceSentenceID.
+	TMap<FName, int32> StatementCountsByCharacter;
+	TMap<FName, int32> FolderStatementCountsByCharacter;
+	for (const TPair<FName, uint8*>& Pair : SentencesTable->GetRowMap())
+	{
+		const FSentenceDefinition* Sentence = reinterpret_cast<const FSentenceDefinition*>(Pair.Value);
+		if (Sentence->SentenceType != ESentenceType::Statement)
+		{
+			continue;
+		}
+		++StatementCountsByCharacter.FindOrAdd(Sentence->CharacterID);
+		if (Sentence->bIsFolderStatement)
+		{
+			++FolderStatementCountsByCharacter.FindOrAdd(Sentence->CharacterID);
+		}
+	}
+	for (const TPair<FName, int32>& Pair : StatementCountsByCharacter)
+	{
+		const int32 FolderStatementCount = FolderStatementCountsByCharacter.FindRef(Pair.Key);
+		if (FolderStatementCount != 1)
+		{
+			UE_LOG(
+				LogBalhwajeomInvestigation,
+				Error,
+				TEXT("Character '%s' has %d Statement rows with bIsFolderStatement set (expected exactly 1)."),
+				*Pair.Key.ToString(),
+				FolderStatementCount);
 			bIsValid = false;
 		}
 	}
@@ -1249,9 +1282,7 @@ bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 				return Candidate.SlotIndex == CorrectSlot.SlotIndex;
 			});
 
-		if (SubmittedSlot == nullptr ||
-			SubmittedSlot->PhotoID != CorrectSlot.CorrectPhotoID ||
-			!CapturedPhotos.Contains(SubmittedSlot->PhotoID))
+		if (SubmittedSlot == nullptr || !CapturedPhotos.Contains(SubmittedSlot->PhotoID))
 		{
 			continue;
 		}
@@ -1267,16 +1298,24 @@ bool UBalhwajeomInvestigationSubsystem::ValidateSentence(
 			continue;
 		}
 
-		// If this photo requires an extra evidence-specific sentence (e.g. "why does this photo
-		// disprove the statement"), that must be solved too before the photo counts as evidence here.
-		if (SubmittedPhoto != nullptr && !SubmittedPhoto->EvidenceSentenceID.IsNone())
+		if (SubmittedSlot->PhotoID != CorrectSlot.CorrectPhotoID)
 		{
-			const FSentenceRuntimeProgress* EvidenceProgress =
-				SentenceProgress.Find(SubmittedPhoto->EvidenceSentenceID);
-			if (EvidenceProgress == nullptr || !EvidenceProgress->bSolved)
+			// Wrong-but-completed evidence photo: surface that photo's own declaration sentence
+			// (EvidenceSentenceID) so the player learns why it can't be used here, instead of a
+			// generic failure. This does not solve the active Statement.
+			if (SubmittedPhoto != nullptr && !SubmittedPhoto->EvidenceSentenceID.IsNone())
 			{
-				continue;
+				if (const FSentenceDefinition* Declaration =
+						FindSentenceDefinition(SubmittedPhoto->EvidenceSentenceID))
+				{
+					FSentenceRuntimeProgress& DeclarationProgress =
+						SentenceProgress.FindOrAdd(Declaration->SentenceID);
+					DeclarationProgress.SentenceID = Declaration->SentenceID;
+					DeclarationProgress.bSolved = true;
+					OutResultText = Declaration->ResultText;
+				}
 			}
+			return false;
 		}
 
 		++CorrectPhotoCount;
@@ -1320,7 +1359,8 @@ void UBalhwajeomInvestigationSubsystem::GetStatementSentencesForCharacter(
 	for (const TPair<FName, uint8*>& Pair : SentencesTable->GetRowMap())
 	{
 		const FSentenceDefinition* Sentence = reinterpret_cast<const FSentenceDefinition*>(Pair.Value);
-		if (Sentence->SentenceType == ESentenceType::Statement && Sentence->CharacterID == CharacterID)
+		if (Sentence->SentenceType == ESentenceType::Statement && Sentence->CharacterID == CharacterID &&
+			Sentence->bIsFolderStatement)
 		{
 			OutSentences.Add(*Sentence);
 		}

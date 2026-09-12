@@ -40,6 +40,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnTabletPersonFolderBackRequested);
 /** OriginSlotIndex is the sentence blank the word was dragged out of (INDEX_NONE if it came from the acquired-keyword list instead). */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnTabletBlankDropped, int32, SlotIndex, FName, WordID, int32, OriginSlotIndex);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTabletPhotoSlotDropped, int32, SlotIndex, FName, PhotoID);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPhotoSlotClicked, int32, SlotIndex);
 
 /** Runtime-created photo entry shared by the folder grid and the statement tile. */
 UCLASS()
@@ -255,7 +256,7 @@ class BALHWAJEOM_API UBalhwajeomTabletPhotoChip : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void Configure(FName InPhotoID, const FText& InLabel);
+	void Configure(FName InPhotoID, const FText& InLabel, UTexture2D* Thumbnail = nullptr);
 	FName GetPhotoID() const { return PhotoID; }
 
 protected:
@@ -265,6 +266,9 @@ protected:
 private:
 	FName PhotoID = NAME_None;
 	FText DisplayLabel;
+
+	UPROPERTY()
+	TObjectPtr<UTexture2D> Thumbnail;
 };
 
 /** One droppable photo-evidence slot (FSentencePhotoSlot) inside the active sentence's photo evidence row. */
@@ -275,21 +279,34 @@ class BALHWAJEOM_API UBalhwajeomTabletPhotoSlot : public UUserWidget
 
 public:
 	void Configure(int32 InSlotIndex);
-	void SetFilled(const FText& PhotoLabel);
+	void SetFilled(const FText& PhotoLabel, UTexture2D* Thumbnail = nullptr);
 	void SetEmpty();
 	int32 GetSlotIndex() const { return SlotIndex; }
 
 	UPROPERTY()
 	FOnTabletPhotoSlotDropped OnPhotoSlotDropped;
 
+	/** Broadcast on a left-click while this slot is empty, so the owning tablet can open a
+	 * candidate-picker popup instead of requiring a drag-and-drop. */
+	UPROPERTY()
+	FOnTabletPhotoSlotClicked OnPhotoSlotClicked;
+
 protected:
 	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
 private:
 	int32 SlotIndex = 0;
+	bool bFilled = false;
 
 	UPROPERTY()
 	TObjectPtr<UTextBlock> DisplayText;
+
+	UPROPERTY()
+	TObjectPtr<USizeBox> ThumbnailBox;
+
+	UPROPERTY()
+	TObjectPtr<UImage> ThumbnailImage;
 };
 
 /** Navigation/state logic for the designer-owned WBP_Tablet visual tree. */
@@ -388,6 +405,10 @@ private:
 	void HidePopup();
 	void UpdateUnreadBadge();
 
+	/** Reveals WB_PuzzlePhotos, listing every eligible evidence photo as a draggable candidate. */
+	void OpenPhotoPicker(int32 SlotIndex);
+	void ClosePhotoPicker();
+
 	/** Populates WB_PuzzleWords with the active folder's acquired keywords. Called whenever a photo or
 	 * statement popup opens, so keywords stay visible whether or not there's an active puzzle to solve;
 	 * PreparePuzzle/RefreshPuzzleControls overwrites this with the interactive candidate list when one applies. */
@@ -441,6 +462,10 @@ private:
 	UFUNCTION()
 	void HandlePhotoSlotDropped(int32 SlotIndex, FName PhotoID);
 
+	/** Bound to a UBalhwajeomTabletPhotoSlot's OnPhotoSlotClicked; reveals the candidate photo row. */
+	UFUNCTION()
+	void HandlePhotoSlotClicked(int32 SlotIndex);
+
 	/** Bound to the folder grid's statement tile (reuses UBalhwajeomTabletPhotoButton; the broadcast FName is a SentenceID here, not a PhotoID). */
 	UFUNCTION()
 	void HandleStatementTileSelected(FName SentenceID);
@@ -487,6 +512,10 @@ private:
 	/** Shows the captured PNG for the photo currently open in the popup. Collapsed for non-photo popups (e.g. the statement). */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UImage> IMG_PopupPhoto;
+
+	/** Shows the active Statement's fixed Illustration, regardless of progress. Collapsed for every other popup. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> IMG_StatementIllustration;
 
 	/** On-demand narration replay button. Shown only while a photo with a set StoryVoice is open. */
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -553,7 +582,7 @@ private:
 	TObjectPtr<UTextBlock> TXT_PuzzlePhotoLabel;
 
 	/** Draggable photo-evidence candidates: captured photos whose own analysis sentence is solved.
-	 * Only populated/shown while the active sentence has PhotoSlots. */
+	 * Hidden until an empty WB_PhotoSlots slot is clicked (see OpenPhotoPicker) instead of always shown. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWrapBox> WB_PuzzlePhotos;
 

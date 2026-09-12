@@ -618,38 +618,15 @@ void UBalhwajeomTabletWidget::RefreshPuzzleControls()
 	// Interactive sentence (draggable blanks) replaces the raw "[]" template text; see BuildSentenceBuilder.
 	BuildSentenceBuilder(Sentence);
 
-	// Photo-evidence drop slots only exist when this sentence requires photo evidence (e.g. a
-	// Statement disproving a confession). Candidates are captured photos whose own analysis
-	// sentence is already solved -- a photo that's merely captured isn't valid evidence yet.
-	if (WB_PuzzlePhotos && WidgetTree && !Sentence.PhotoSlots.IsEmpty())
+	// Photo evidence candidates (WB_PuzzlePhotos) start hidden; clicking an empty WB_PhotoSlots slot
+	// reveals them (see OpenPhotoPicker) instead of always showing the row.
+	if (WB_PuzzlePhotos)
 	{
-		if (TXT_PuzzlePhotoLabel)
-		{
-			TXT_PuzzlePhotoLabel->SetVisibility(ESlateVisibility::Visible);
-		}
-		TArray<FCapturedPhotoRecord> CapturedPhotoRecords;
-		Investigation->GetCapturedPhotos(CapturedPhotoRecords);
-		bool bAnyEligiblePhoto = false;
-		for (const FCapturedPhotoRecord& Record : CapturedPhotoRecords)
-		{
-			FPhotoDefinition PhotoDef;
-			if (!Investigation->GetPhotoDefinition(Record.PhotoID, PhotoDef) ||
-				PhotoDef.PhotoSentenceID.IsNone() ||
-				!Investigation->IsSentenceSolved(PhotoDef.PhotoSentenceID))
-			{
-				continue;
-			}
-			UBalhwajeomTabletPhotoChip* Chip = Cast<UBalhwajeomTabletPhotoChip>(
-				UUserWidget::CreateWidgetInstance(*WidgetTree, UBalhwajeomTabletPhotoChip::StaticClass(), NAME_None));
-			if (!Chip)
-			{
-				continue;
-			}
-			Chip->Configure(PhotoDef.PhotoID, PhotoDef.PhotoName);
-			WB_PuzzlePhotos->AddChild(Chip);
-			bAnyEligiblePhoto = true;
-		}
-		WB_PuzzlePhotos->SetVisibility(bAnyEligiblePhoto ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		WB_PuzzlePhotos->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	if (TXT_PuzzlePhotoLabel)
+	{
+		TXT_PuzzlePhotoLabel->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	BuildPhotoSlots(Sentence);
 
@@ -737,6 +714,7 @@ void UBalhwajeomTabletWidget::BuildPhotoSlots(const FSentenceDefinition& Sentenc
 		}
 		PhotoSlotWidget->Configure(PhotoSlotDefinition.SlotIndex);
 		PhotoSlotWidget->OnPhotoSlotDropped.AddUniqueDynamic(this, &ThisClass::HandlePhotoSlotDropped);
+		PhotoSlotWidget->OnPhotoSlotClicked.AddUniqueDynamic(this, &ThisClass::HandlePhotoSlotClicked);
 		ActivePhotoSlotsBySlot.Add(PhotoSlotDefinition.SlotIndex, PhotoSlotWidget);
 		if (UWrapBoxSlot* WrapSlot = Cast<UWrapBoxSlot>(WB_PhotoSlots->AddChild(PhotoSlotWidget)))
 		{
@@ -847,7 +825,7 @@ void UBalhwajeomTabletWidget::HandlePhotoSlotDropped(const int32 SlotIndex, cons
 		FPhotoDefinition PhotoDef;
 		if (Investigation->GetPhotoDefinition(PhotoID, PhotoDef))
 		{
-			PhotoSlotWidget->SetFilled(PhotoDef.PhotoName);
+			PhotoSlotWidget->SetFilled(PhotoDef.PhotoName, GetOrLoadCapturedPhotoTexture(PhotoID));
 		}
 	}
 
@@ -856,7 +834,74 @@ void UBalhwajeomTabletWidget::HandlePhotoSlotDropped(const int32 SlotIndex, cons
 		TXT_PuzzleFeedback->SetVisibility(ESlateVisibility::Collapsed);
 	}
 
+	// The candidate row was only revealed to make this drop possible; hide it again now that its
+	// job is done, ready to be re-revealed by clicking another empty slot.
+	ClosePhotoPicker();
+
 	EvaluatePuzzleIfComplete();
+}
+
+void UBalhwajeomTabletWidget::HandlePhotoSlotClicked(const int32 SlotIndex)
+{
+	OpenPhotoPicker(SlotIndex);
+}
+
+void UBalhwajeomTabletWidget::OpenPhotoPicker(const int32 SlotIndex)
+{
+	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	if (!Investigation || !WB_PuzzlePhotos || !WidgetTree)
+	{
+		return;
+	}
+
+	WB_PuzzlePhotos->ClearChildren();
+
+	// Eligible: captured, its own analysis solved, and it carries a declaration sentence for some
+	// statement's evidence puzzle. Reuses the existing WB_PuzzlePhotos/chip drag-and-drop that was
+	// already wired up, just hidden until an empty slot is clicked instead of always visible.
+	TArray<FCapturedPhotoRecord> CapturedPhotoRecords;
+	Investigation->GetCapturedPhotos(CapturedPhotoRecords);
+	bool bAnyEligiblePhoto = false;
+	for (const FCapturedPhotoRecord& Record : CapturedPhotoRecords)
+	{
+		FPhotoDefinition PhotoDef;
+		if (!Investigation->GetPhotoDefinition(Record.PhotoID, PhotoDef) ||
+			PhotoDef.PhotoSentenceID.IsNone() ||
+			!Investigation->IsSentenceSolved(PhotoDef.PhotoSentenceID) ||
+			PhotoDef.EvidenceSentenceID.IsNone())
+		{
+			continue;
+		}
+
+		UBalhwajeomTabletPhotoChip* Chip = Cast<UBalhwajeomTabletPhotoChip>(
+			UUserWidget::CreateWidgetInstance(*WidgetTree, UBalhwajeomTabletPhotoChip::StaticClass(), NAME_None));
+		if (!Chip)
+		{
+			continue;
+		}
+		Chip->Configure(PhotoDef.PhotoID, PhotoDef.PhotoName, GetOrLoadCapturedPhotoTexture(PhotoDef.PhotoID));
+		WB_PuzzlePhotos->AddChild(Chip);
+		bAnyEligiblePhoto = true;
+	}
+
+	WB_PuzzlePhotos->SetVisibility(bAnyEligiblePhoto ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (TXT_PuzzlePhotoLabel)
+	{
+		TXT_PuzzlePhotoLabel->SetVisibility(bAnyEligiblePhoto ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+}
+
+void UBalhwajeomTabletWidget::ClosePhotoPicker()
+{
+	if (WB_PuzzlePhotos)
+	{
+		WB_PuzzlePhotos->ClearChildren();
+		WB_PuzzlePhotos->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	if (TXT_PuzzlePhotoLabel)
+	{
+		TXT_PuzzlePhotoLabel->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 void UBalhwajeomTabletWidget::EvaluatePuzzleIfComplete()
@@ -895,7 +940,10 @@ void UBalhwajeomTabletWidget::ValidateActivePuzzle(const bool bExplicitStatement
 	}
 	else if (TXT_PuzzleFeedback)
 	{
-		TXT_PuzzleFeedback->SetText(NSLOCTEXT("Tablet", "WrongEvidence", "잘못된 증거인 것 같다."));
+		// A wrong-but-completed evidence photo surfaces its own declaration sentence's ResultText
+		// (see ValidateSentence) instead of the generic message.
+		TXT_PuzzleFeedback->SetText(
+			Result.IsEmpty() ? NSLOCTEXT("Tablet", "WrongEvidence", "잘못된 증거인 것 같다.") : Result);
 		TXT_PuzzleFeedback->SetVisibility(ESlateVisibility::Visible);
 	}
 }
@@ -910,6 +958,13 @@ void UBalhwajeomTabletWidget::ShowPopup(const FText& Title, const FText& Body, U
 	{
 		BTN_PlayStoryVoice->SetVisibility(ESlateVisibility::Collapsed);
 	}
+	// Reset here; HandleStatementTileSelected re-populates this right after this call for the
+	// statement popup. Every other popup (e.g. a plain photo) leaves it collapsed.
+	if (IMG_StatementIllustration)
+	{
+		IMG_StatementIllustration->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	ClosePhotoPicker();
 	HidePuzzleControls();
 	if (TXT_PopupTitle)
 	{
@@ -1002,6 +1057,7 @@ UTexture2D* UBalhwajeomTabletWidget::GetOrLoadCapturedPhotoTexture(const FName P
 
 void UBalhwajeomTabletWidget::HidePopup()
 {
+	ClosePhotoPicker();
 	if (PopupLayer)
 	{
 		PopupLayer->SetVisibility(ESlateVisibility::Collapsed);
@@ -1449,10 +1505,11 @@ void UBalhwajeomTabletSentenceBlank::NativeOnDragDetected(
 	OutOperation = Operation;
 }
 
-void UBalhwajeomTabletPhotoChip::Configure(const FName InPhotoID, const FText& InLabel)
+void UBalhwajeomTabletPhotoChip::Configure(const FName InPhotoID, const FText& InLabel, UTexture2D* InThumbnail)
 {
 	PhotoID = InPhotoID;
 	DisplayLabel = InLabel;
+	Thumbnail = InThumbnail;
 
 	if (!WidgetTree)
 	{
@@ -1463,14 +1520,32 @@ void UBalhwajeomTabletPhotoChip::Configure(const FName InPhotoID, const FText& I
 	Background->SetBrushColor(FLinearColor(0.30f, 0.24f, 0.16f, 1.0f));
 	Background->SetPadding(FMargin(10.0f, 6.0f));
 
+	UVerticalBox* Layout = WidgetTree->ConstructWidget<UVerticalBox>();
+
+	if (InThumbnail)
+	{
+		USizeBox* ThumbnailBox = WidgetTree->ConstructWidget<USizeBox>();
+		ThumbnailBox->SetWidthOverride(76.0f);
+		ThumbnailBox->SetHeightOverride(48.0f);
+
+		UImage* Image = WidgetTree->ConstructWidget<UImage>();
+		Image->SetBrushFromTexture(InThumbnail, true);
+		ThumbnailBox->AddChild(Image);
+
+		UVerticalBoxSlot* ThumbnailSlot = Layout->AddChildToVerticalBox(ThumbnailBox);
+		ThumbnailSlot->SetHorizontalAlignment(HAlign_Center);
+		ThumbnailSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+	}
+
 	UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>();
 	Label->SetText(InLabel);
 	Label->SetJustification(ETextJustify::Center);
 	FSlateFontInfo Font = Label->GetFont();
 	Font.Size = 20;
 	Label->SetFont(Font);
-	Background->SetContent(Label);
+	Layout->AddChildToVerticalBox(Label);
 
+	Background->SetContent(Layout);
 	WidgetTree->RootWidget = Background;
 }
 
@@ -1499,12 +1574,30 @@ void UBalhwajeomTabletPhotoChip::NativeOnDragDetected(
 		UBorder* DragVisual = WidgetTree->ConstructWidget<UBorder>();
 		DragVisual->SetBrushColor(FLinearColor(0.30f, 0.24f, 0.16f, 0.9f));
 		DragVisual->SetPadding(FMargin(10.0f, 6.0f));
+
+		UVerticalBox* DragLayout = WidgetTree->ConstructWidget<UVerticalBox>();
+
+		if (Thumbnail)
+		{
+			USizeBox* ThumbnailBox = WidgetTree->ConstructWidget<USizeBox>();
+			ThumbnailBox->SetWidthOverride(76.0f);
+			ThumbnailBox->SetHeightOverride(48.0f);
+			UImage* Image = WidgetTree->ConstructWidget<UImage>();
+			Image->SetBrushFromTexture(Thumbnail, true);
+			ThumbnailBox->AddChild(Image);
+			UVerticalBoxSlot* ThumbnailSlot = DragLayout->AddChildToVerticalBox(ThumbnailBox);
+			ThumbnailSlot->SetHorizontalAlignment(HAlign_Center);
+			ThumbnailSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+		}
+
 		UTextBlock* DragLabel = WidgetTree->ConstructWidget<UTextBlock>();
 		DragLabel->SetText(DisplayLabel);
 		FSlateFontInfo Font = DragLabel->GetFont();
 		Font.Size = 20;
 		DragLabel->SetFont(Font);
-		DragVisual->SetContent(DragLabel);
+		DragLayout->AddChildToVerticalBox(DragLabel);
+
+		DragVisual->SetContent(DragLayout);
 		Operation->DefaultDragVisual = DragVisual;
 	}
 
@@ -1524,35 +1617,76 @@ void UBalhwajeomTabletPhotoSlot::Configure(const int32 InSlotIndex)
 	Background->SetBrushColor(FLinearColor(0.20f, 0.16f, 0.10f, 1.0f));
 	Background->SetPadding(FMargin(10.0f, 4.0f));
 
+	UVerticalBox* Layout = WidgetTree->ConstructWidget<UVerticalBox>();
+
+	ThumbnailBox = WidgetTree->ConstructWidget<USizeBox>();
+	ThumbnailBox->SetWidthOverride(76.0f);
+	ThumbnailBox->SetHeightOverride(48.0f);
+	ThumbnailImage = WidgetTree->ConstructWidget<UImage>();
+	ThumbnailBox->AddChild(ThumbnailImage);
+	UVerticalBoxSlot* ThumbnailSlot = Layout->AddChildToVerticalBox(ThumbnailBox);
+	ThumbnailSlot->SetHorizontalAlignment(HAlign_Center);
+	ThumbnailSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+
 	DisplayText = WidgetTree->ConstructWidget<UTextBlock>();
 	DisplayText->SetJustification(ETextJustify::Center);
 	FSlateFontInfo Font = DisplayText->GetFont();
 	Font.Size = 22;
 	DisplayText->SetFont(Font);
-	Background->SetContent(DisplayText);
+	Layout->AddChildToVerticalBox(DisplayText);
 
+	Background->SetContent(Layout);
 	WidgetTree->RootWidget = Background;
 	SetEmpty();
 }
 
 void UBalhwajeomTabletPhotoSlot::SetEmpty()
 {
+	bFilled = false;
+	if (ThumbnailBox)
+	{
+		ThumbnailBox->SetVisibility(ESlateVisibility::Collapsed);
+	}
 	if (!DisplayText)
 	{
 		return;
 	}
-	DisplayText->SetText(NSLOCTEXT("Tablet", "PhotoSlotPlaceholder", "증거 사진"));
+	DisplayText->SetText(NSLOCTEXT("Tablet", "PhotoSlotPlaceholder", "증거 사진 (클릭해서 선택)"));
 	DisplayText->SetColorAndOpacity(FSlateColor(FLinearColor(0.62f, 0.56f, 0.46f, 1.0f)));
 }
 
-void UBalhwajeomTabletPhotoSlot::SetFilled(const FText& PhotoLabel)
+void UBalhwajeomTabletPhotoSlot::SetFilled(const FText& PhotoLabel, UTexture2D* Thumbnail)
 {
+	bFilled = true;
+	if (ThumbnailBox && ThumbnailImage)
+	{
+		if (Thumbnail)
+		{
+			ThumbnailImage->SetBrushFromTexture(Thumbnail, true);
+			ThumbnailBox->SetVisibility(ESlateVisibility::Visible);
+		}
+		else
+		{
+			ThumbnailBox->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
 	if (!DisplayText)
 	{
 		return;
 	}
 	DisplayText->SetText(PhotoLabel);
 	DisplayText->SetColorAndOpacity(FSlateColor(FLinearColor(0.96f, 0.91f, 0.82f, 1.0f)));
+}
+
+FReply UBalhwajeomTabletPhotoSlot::NativeOnMouseButtonDown(
+	const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (!bFilled && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		OnPhotoSlotClicked.Broadcast(SlotIndex);
+		return FReply::Handled();
+	}
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
 bool UBalhwajeomTabletPhotoSlot::NativeOnDrop(
@@ -1593,6 +1727,26 @@ void UBalhwajeomTabletWidget::HandleStatementTileSelected(const FName SentenceID
 			NSLOCTEXT("Tablet", "StatementPopup", "거짓말\n{0}\n\n반증\n{1}"),
 			Statement.LieText,
 			Answer));
+	if (IMG_StatementIllustration)
+	{
+		// Show the actual captured photo that is this statement's correct evidence (its first photo
+		// slot), not a separately-authored illustration -- there's usually nothing else worth showing
+		// here until that photo exists.
+		const FName CorrectPhotoID = Statement.PhotoSlots.IsValidIndex(0)
+			? Statement.PhotoSlots[0].CorrectPhotoID
+			: NAME_None;
+		UTexture2D* IllustrationTexture =
+			CorrectPhotoID.IsNone() ? nullptr : GetOrLoadCapturedPhotoTexture(CorrectPhotoID);
+		if (IllustrationTexture)
+		{
+			IMG_StatementIllustration->SetBrushFromTexture(IllustrationTexture, true);
+			IMG_StatementIllustration->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
+		else
+		{
+			IMG_StatementIllustration->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
 	if (!Investigation->IsSentenceSolved(Statement.SentenceID))
 	{
 		PreparePuzzle(Statement.SentenceID);
