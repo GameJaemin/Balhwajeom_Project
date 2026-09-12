@@ -28,21 +28,20 @@ ABalhwajeomCameraCharacter::ABalhwajeomCameraCharacter()
 
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	Movement->bOrientRotationToMovement = true;
-	Movement->RotationRate = FRotator(0.0f, 720.0f, 0.0f);
-	Movement->MaxWalkSpeed = WalkSpeed;
+	Movement->RotationRate = FRotator(0.0f, 500.0f, 0.0f);
+	Movement->JumpZVelocity = 500.0f;
+	Movement->AirControl = 0.35f;
+	Movement->MaxWalkSpeed = 500.0f;
+	Movement->MinAnalogWalkSpeed = 20.0f;
 	Movement->BrakingDecelerationWalking = 2000.0f;
+	Movement->BrakingDecelerationFalling = 1500.0f;
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->SetUsingAbsoluteRotation(true);
-	CameraBoom->TargetArmLength = 1200.0f;
-	// Fixed diagonal quarter view. Absolute rotation keeps the camera from
-	// spinning when the character turns toward its movement direction.
-	CameraBoom->SetRelativeRotation(FRotator(-55.0f, -45.0f, 0.0f));
-	CameraBoom->bDoCollisionTest = false;
-	CameraBoom->bInheritPitch = false;
-	CameraBoom->bInheritYaw = false;
-	CameraBoom->bInheritRoll = false;
+	CameraBoom->TargetArmLength = ThirdPersonArmLength;
+	CameraBoom->TargetOffset = ThirdPersonTargetOffset;
+	CameraBoom->SocketOffset = ThirdPersonSocketOffset;
+	CameraBoom->bUsePawnControlRotation = true;
 
 	TopDownCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("TopDownCamera"));
 	TopDownCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
@@ -118,38 +117,48 @@ void ABalhwajeomCameraCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Apply the Blueprint default so designers can tune WalkSpeed without
-	// changing or recompiling this C++ class.
-	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+	// Blueprint child assets can retain the old quarter-view component values even after the
+	// native constructor changes. Normalize the exploration camera at runtime so every child
+	// starts with the same camera layout as BP_ThirdPersonCharacter.
+	CameraBoom->SetUsingAbsoluteRotation(false);
+	CameraBoom->SetRelativeLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
+	CameraBoom->TargetArmLength = ThirdPersonArmLength;
+	CameraBoom->TargetOffset = ThirdPersonTargetOffset;
+	CameraBoom->SocketOffset = ThirdPersonSocketOffset;
+	CameraBoom->bDoCollisionTest = true;
+	CameraBoom->bUsePawnControlRotation = true;
+	CameraBoom->bInheritPitch = true;
+	CameraBoom->bInheritYaw = true;
+	CameraBoom->bInheritRoll = false;
+
+	TopDownCamera->SetRelativeLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
+	TopDownCamera->SetFieldOfView(ThirdPersonFieldOfView);
+	TopDownCamera->bUsePawnControlRotation = false;
+
+	if (Controller)
+	{
+		FRotator InitialControlRotation = Controller->GetControlRotation();
+		InitialControlRotation.Pitch = ThirdPersonInitialPitch;
+		InitialControlRotation.Roll = 0.0f;
+		Controller->SetControlRotation(InitialControlRotation);
+	}
+
+	// The legacy Blueprint still contains an authored camera component. If more than one camera
+	// is active, AActor can select that stale component instead of the native follow camera.
+	TInlineComponentArray<UCameraComponent*> CameraComponents(this);
+	for (UCameraComponent* CameraComponent : CameraComponents)
+	{
+		CameraComponent->SetActive(CameraComponent == TopDownCamera);
+	}
+
+	GetMesh()->SetOwnerNoSee(false);
+	GetMesh()->SetOnlyOwnerSee(false);
+	GetMesh()->SetVisibility(true, true);
+
 	if (PlayerInteractionComponent)
 	{
 		PlayerInteractionComponent->OnInspectionSucceeded.AddUniqueDynamic(
 			this, &ABalhwajeomCameraCharacter::HandleInspectionSucceeded);
-	}
-
-	if (bAllowCameraOrbit)
-	{
-		// Let the boom read the controller's rotation instead of holding a fixed world-space angle.
-		CameraBoom->SetUsingAbsoluteRotation(false);
-		CameraBoom->bUsePawnControlRotation = true;
-		CameraBoom->bInheritPitch = true;
-		CameraBoom->bInheritYaw = true;
-		CameraBoom->bInheritRoll = false;
-
-		// Orbit mode expects a strafe-style controller: the character always faces the camera's
-		// yaw, and WASD translates relative to that facing instead of spinning to face movement.
-		// (bOrientRotationToMovement would otherwise snap the character to face the input
-		// direction, which reads as "AD just turns the character" and makes it spin to face the
-		// camera when walking backward.)
-		bUseControllerRotationYaw = true;
-		GetCharacterMovement()->bOrientRotationToMovement = false;
-
-		if (AController* CharacterController = GetController())
-		{
-			FRotator InitialControlRotation = CharacterController->GetControlRotation();
-			InitialControlRotation.Pitch = InitialOrbitPitch;
-			CharacterController->SetControlRotation(InitialControlRotation);
-		}
 	}
 }
 
@@ -169,8 +178,6 @@ void ABalhwajeomCameraCharacter::SetupPlayerInputComponent(UInputComponent* Play
 	check(PlayerInputComponent);
 	PlayerInputComponent->BindAxis(TEXT("MoveForward"), this, &ABalhwajeomCameraCharacter::MoveForward);
 	PlayerInputComponent->BindAxis(TEXT("MoveRight"), this, &ABalhwajeomCameraCharacter::MoveRight);
-	PlayerInputComponent->BindAction(TEXT("Sprint"), IE_Pressed, this, &ABalhwajeomCameraCharacter::StartSprinting);
-	PlayerInputComponent->BindAction(TEXT("Sprint"), IE_Released, this, &ABalhwajeomCameraCharacter::StopSprinting);
 
 	if (UBalhwajeomPhotoCameraComponent* PhotoCamera = PhotoCameraComponent.Get())
 	{
@@ -195,11 +202,18 @@ void ABalhwajeomCameraCharacter::MoveForward(float Value)
 		return;
 	}
 
-	FVector CameraForward = ActiveCameraZone
-		? ActiveCameraZone->GetPlanarForwardVector()
-		: CameraBoom->GetForwardVector();
-	CameraForward.Z = 0.0f;
-	AddMovementInput(CameraForward.GetSafeNormal(), Value);
+	if (ActiveCameraZone)
+	{
+		AddMovementInput(ActiveCameraZone->GetPlanarForwardVector(), Value);
+		return;
+	}
+
+	if (Controller)
+	{
+		const FRotator YawRotation(0.0f, Controller->GetControlRotation().Yaw, 0.0f);
+		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+		AddMovementInput(ForwardDirection, Value);
+	}
 }
 
 void ABalhwajeomCameraCharacter::MoveRight(float Value)
@@ -215,21 +229,18 @@ void ABalhwajeomCameraCharacter::MoveRight(float Value)
 		return;
 	}
 
-	FVector CameraRight = ActiveCameraZone
-		? ActiveCameraZone->GetPlanarRightVector()
-		: CameraBoom->GetRightVector();
-	CameraRight.Z = 0.0f;
-	AddMovementInput(CameraRight.GetSafeNormal(), Value);
-}
+	if (ActiveCameraZone)
+	{
+		AddMovementInput(ActiveCameraZone->GetPlanarRightVector(), Value);
+		return;
+	}
 
-void ABalhwajeomCameraCharacter::StartSprinting()
-{
-	GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
-}
-
-void ABalhwajeomCameraCharacter::StopSprinting()
-{
-	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+	if (Controller)
+	{
+		const FRotator YawRotation(0.0f, Controller->GetControlRotation().Yaw, 0.0f);
+		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+		AddMovementInput(RightDirection, Value);
+	}
 }
 
 bool ABalhwajeomCameraCharacter::IsInCameraMode() const
@@ -266,7 +277,7 @@ void ABalhwajeomCameraCharacter::ApplyMouseYawInput(float Value)
 	{
 		PhotoCameraComponent->LookYaw(Value);
 	}
-	else if (bAllowCameraOrbit)
+	else
 	{
 		AddControllerYawInput(Value);
 	}
@@ -278,7 +289,7 @@ void ABalhwajeomCameraCharacter::HandleLookUp(float Value)
 	{
 		PhotoCameraComponent->LookPitch(Value);
 	}
-	else if (!ActiveCameraZone && bAllowCameraOrbit)
+	else if (!ActiveCameraZone)
 	{
 		AddControllerPitchInput(Value);
 	}
