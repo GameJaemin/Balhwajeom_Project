@@ -3,6 +3,7 @@
 
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
@@ -14,6 +15,8 @@
 #include "Interaction/WorldInteractable.h"
 #include "CameraSystem/BalhwajeomEvidenceActor.h"
 #include "CameraSystem/BalhwajeomPhotoCameraComponent.h"
+#include "Story/StoryStateSubsystem.h"
+#include "Story/StoryStateTags.h"
 
 
 UPlayerInteractionComponent::UPlayerInteractionComponent()
@@ -144,6 +147,43 @@ void UPlayerInteractionComponent::BeginPlay()
 
 	RefreshInspectableObjects();
 	SetupInteractionInput();
+
+	if (UWorld* World = GetWorld())
+	{
+		if (UGameInstance* GameInstance = World->GetGameInstance())
+		{
+			if (UStoryStateSubsystem* StoryState =
+				GameInstance->GetSubsystem<UStoryStateSubsystem>())
+			{
+				StoryState->OnStateTagAdded.AddUniqueDynamic(
+					this,
+					&ThisClass::HandleStoryStateTagAdded
+				);
+			}
+		}
+	}
+}
+
+void UPlayerInteractionComponent::EndPlay(
+	const EEndPlayReason::Type EndPlayReason
+)
+{
+	if (UWorld* World = GetWorld())
+	{
+		if (UGameInstance* GameInstance = World->GetGameInstance())
+		{
+			if (UStoryStateSubsystem* StoryState =
+				GameInstance->GetSubsystem<UStoryStateSubsystem>())
+			{
+				StoryState->OnStateTagAdded.RemoveDynamic(
+					this,
+					&ThisClass::HandleStoryStateTagAdded
+				);
+			}
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 
@@ -508,6 +548,22 @@ void UPlayerInteractionComponent::SetupInteractionInput()
 void UPlayerInteractionComponent::OnInteractActionStarted()
 {
 	HandleInteractStarted();
+}
+
+void UPlayerInteractionComponent::HandleStoryStateTagAdded(
+	FGameplayTag StateTag
+)
+{
+	if (StateTag != BalhwajeomGameplayTags::Runtime_Player_Mode_PhotoCamera &&
+		StateTag != BalhwajeomGameplayTags::Runtime_Player_Mode_Tablet)
+	{
+		return;
+	}
+
+	SetFocusedInspection(nullptr);
+	FocusedItemActor.Reset();
+	OnInspectionDismissRequested.Broadcast();
+	ReceiveInspectionDismissRequested();
 }
 
 bool UPlayerInteractionComponent::HasFocusedItemInspection() const
