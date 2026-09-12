@@ -35,8 +35,6 @@ public:
 		AddActionMappingIfMissing(Settings, FInputActionKeyMapping(TEXT("CameraMode"), EKeys::RightMouseButton));
 		AddActionMappingIfMissing(Settings, FInputActionKeyMapping(TEXT("ExitCameraMode"), EKeys::Escape));
 		AddActionMappingIfMissing(Settings, FInputActionKeyMapping(TEXT("TakePhoto"), EKeys::LeftMouseButton));
-		AddActionMappingIfMissing(Settings, FInputActionKeyMapping(TEXT("Sprint"), EKeys::LeftShift));
-		AddActionMappingIfMissing(Settings, FInputActionKeyMapping(TEXT("Sprint"), EKeys::RightShift));
 		AddActionMappingIfMissing(Settings, FInputActionKeyMapping(TEXT("Jump"), EKeys::SpaceBar));
 		AddActionMappingIfMissing(Settings, FInputActionKeyMapping(TEXT("Jump"), EKeys::Gamepad_FaceButton_Bottom));
 
