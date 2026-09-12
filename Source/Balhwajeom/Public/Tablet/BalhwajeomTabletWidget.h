@@ -44,7 +44,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPhotoSlotClicked, int32, Sl
 
 /** Runtime-created photo entry shared by the folder grid and the statement tile. */
 UCLASS()
-class BALHWAJEOM_API UBalhwajeomTabletPhotoButton : public UButton
+class BALHWAJEOM_API UBalhwajeomTabletPhotoButton : public UUserWidget
 {
 	GENERATED_BODY()
 
@@ -56,15 +56,30 @@ public:
 	FOnTabletPhotoSelected OnPhotoSelected;
 
 private:
+	virtual void NativeOnInitialized() override;
+	void BuildFallbackVisuals();
+
 	UFUNCTION()
 	void HandleClicked();
 
 	FName PhotoID = NAME_None;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BTN_File;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<USizeBox> SB_Thumbnail;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> IMG_Thumbnail;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TXT_Label;
 };
 
 /** Runtime-created home-page entry for one DT_Characters folder. */
 UCLASS()
-class BALHWAJEOM_API UBalhwajeomTabletFolderButton : public UButton
+class BALHWAJEOM_API UBalhwajeomTabletFolderButton : public UUserWidget
 {
 	GENERATED_BODY()
 
@@ -79,10 +94,22 @@ public:
 	FOnTabletFolderSelected OnFolderSelected;
 
 private:
+	virtual void NativeOnInitialized() override;
+	void BuildFallbackVisuals();
+
 	UFUNCTION()
 	void HandleClicked();
 
 	FName CharacterID = NAME_None;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BTN_Folder;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> IMG_FolderIcon;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TXT_FolderLabel;
 };
 
 /**
@@ -103,6 +130,9 @@ public:
 	bool IsEmpty() const { return TileCount == 0; }
 
 private:
+	virtual void NativeOnInitialized() override;
+	void BuildFallbackVisuals();
+
 	UFUNCTION()
 	void HandleHeaderClicked();
 
@@ -112,17 +142,54 @@ private:
 	int32 TileCount = 0;
 	bool bExpanded = true;
 
-	UPROPERTY()
+	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> HeaderButton;
 
-	UPROPERTY()
+	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ArrowText;
 
-	UPROPERTY()
+	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TitleText;
 
-	UPROPERTY()
+	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UWrapBox> ContentWrapBox;
+};
+
+/** Designer-owned detail surface used by the separate statement and photo Widget Blueprints. */
+UCLASS()
+class BALHWAJEOM_API UBalhwajeomTabletDetailWidget : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	UTextBlock* GetTitleText() const { return TXT_PopupTitle; }
+	UTextBlock* GetBodyText() const { return TXT_PopupBody; }
+	UImage* GetPhotoImage() const { return IMG_PopupPhoto; }
+	UImage* GetStatementIllustration() const { return IMG_StatementIllustration; }
+	UButton* GetCloseButton() const { return BTN_PopupClose; }
+	UButton* GetPlayVoiceButton() const { return BTN_PlayStoryVoice; }
+	UWrapBox* GetPuzzleWords() const { return WB_PuzzleWords; }
+	UWrapBox* GetSentenceBuilder() const { return WB_SentenceBuilder; }
+	UTextBlock* GetPuzzleFeedback() const { return TXT_PuzzleFeedback; }
+	UTextBlock* GetPuzzlePhotoLabel() const { return TXT_PuzzlePhotoLabel; }
+	UWrapBox* GetPuzzlePhotos() const { return WB_PuzzlePhotos; }
+	UWrapBox* GetPhotoSlots() const { return WB_PhotoSlots; }
+	UButton* GetStatementSubmitButton() const { return BTN_StatementSubmit; }
+
+private:
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TXT_PopupTitle;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TXT_PopupBody;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UImage> IMG_PopupPhoto;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UImage> IMG_StatementIllustration;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UButton> BTN_PopupClose;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UButton> BTN_PlayStoryVoice;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UWrapBox> WB_PuzzleWords;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UWrapBox> WB_SentenceBuilder;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TXT_PuzzleFeedback;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TXT_PuzzlePhotoLabel;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UWrapBox> WB_PuzzlePhotos;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UWrapBox> WB_PhotoSlots;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UButton> BTN_StatementSubmit;
 };
 
 /**
@@ -316,6 +383,8 @@ class BALHWAJEOM_API UBalhwajeomTabletWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	UBalhwajeomTabletWidget(const FObjectInitializer& ObjectInitializer);
+
 	FSimpleMulticastDelegate OnTabletCloseAnimationFinished;
 
 	/** Plays the designer-authored TabletUpAnim using its authored duration. */
@@ -383,6 +452,22 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Family")
 	TObjectPtr<UTexture2D> StatementFileIcon;
 
+	/** Designer templates used for runtime-populated folder contents. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Designer Templates")
+	TSoftClassPtr<UBalhwajeomTabletFolderButton> FolderButtonWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Designer Templates")
+	TSoftClassPtr<UBalhwajeomTabletPhotoButton> FileTileWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Designer Templates")
+	TSoftClassPtr<UBalhwajeomTabletFolderSection> FolderSectionWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Designer Templates")
+	TSoftClassPtr<UBalhwajeomTabletDetailWidget> StatementDetailWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Tablet|Designer Templates")
+	TSoftClassPtr<UBalhwajeomTabletDetailWidget> PhotoDetailWidgetClass;
+
 private:
 	void SetTabletPage(ETabletPage NewPage, bool bAddToHistory = true);
 	void NavigateBack();
@@ -401,7 +486,13 @@ private:
 	 * failure feedback ("잘못된 증거인 것 같다") only appears after the puzzle is fully filled in,
 	 * not after every single drop. */
 	void EvaluatePuzzleIfComplete();
-	void ShowPopup(const FText& Title, const FText& Body, UTexture2D* PhotoTexture = nullptr);
+	void ShowPopup(
+		const FText& Title,
+		const FText& Body,
+		UTexture2D* PhotoTexture = nullptr,
+		bool bStatementDetail = false);
+	bool ActivateDetailWidget(bool bStatementDetail);
+	void BindActiveDetailWidgets();
 	void HidePopup();
 	void UpdateUnreadBadge();
 
@@ -613,4 +704,7 @@ private:
 	/** PhotoID -> decoded PNG, so reopening a folder/photo doesn't re-read the file from disk. */
 	UPROPERTY(Transient)
 	TMap<FName, TObjectPtr<UTexture2D>> CapturedPhotoTextureCache;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UBalhwajeomTabletDetailWidget> ActiveDetailWidget;
 };

@@ -7,6 +7,7 @@
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
 #include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
@@ -51,6 +52,21 @@ namespace
 		Style.SetPressedPadding(FMargin(0.0f));
 		Button->SetStyle(Style);
 	}
+}
+
+UBalhwajeomTabletWidget::UBalhwajeomTabletWidget(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	FolderButtonWidgetClass = TSoftClassPtr<UBalhwajeomTabletFolderButton>(FSoftObjectPath(
+		TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletFolderButton.WBP_TabletFolderButton_C")));
+	FileTileWidgetClass = TSoftClassPtr<UBalhwajeomTabletPhotoButton>(FSoftObjectPath(
+		TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletFileTile.WBP_TabletFileTile_C")));
+	FolderSectionWidgetClass = TSoftClassPtr<UBalhwajeomTabletFolderSection>(FSoftObjectPath(
+		TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletFolderSection.WBP_TabletFolderSection_C")));
+	StatementDetailWidgetClass = TSoftClassPtr<UBalhwajeomTabletDetailWidget>(FSoftObjectPath(
+		TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletStatement.WBP_TabletStatement_C")));
+	PhotoDetailWidgetClass = TSoftClassPtr<UBalhwajeomTabletDetailWidget>(FSoftObjectPath(
+		TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletPhoto.WBP_TabletPhoto_C")));
 }
 
 void UBalhwajeomTabletPersonFolderWidget::NativeOnInitialized()
@@ -318,8 +334,17 @@ void UBalhwajeomTabletWidget::RefreshHomeFolders()
 		EntrySize->SetWidthOverride(109.0f);
 		EntrySize->SetHeightOverride(100.0f);
 		EntrySize->SetClipping(EWidgetClipping::ClipToBounds);
-		UBalhwajeomTabletFolderButton* Entry =
-			WidgetTree->ConstructWidget<UBalhwajeomTabletFolderButton>();
+		UClass* EntryClass = FolderButtonWidgetClass.LoadSynchronous();
+		if (!EntryClass)
+		{
+			EntryClass = UBalhwajeomTabletFolderButton::StaticClass();
+		}
+		UBalhwajeomTabletFolderButton* Entry = Cast<UBalhwajeomTabletFolderButton>(
+			UUserWidget::CreateWidgetInstance(*WidgetTree, EntryClass, NAME_None));
+		if (!Entry)
+		{
+			continue;
+		}
 		Entry->Configure(Character.CharacterID, Character.FolderName, DefaultFolderIcon, FolderLabelFont);
 		Entry->OnFolderSelected.AddUniqueDynamic(this, &ThisClass::HandleHomeFolderSelected);
 		EntrySize->AddChild(Entry);
@@ -417,12 +442,17 @@ void UBalhwajeomTabletWidget::RefreshFolderContents()
 
 	// Three buckets, in the order the player should see them: the one thing to read (진술서), the
 	// puzzles still needing keywords (분석 문장), then everything already wrapped up (완성 문장).
+	UClass* SectionClass = FolderSectionWidgetClass.LoadSynchronous();
+	if (!SectionClass)
+	{
+		SectionClass = UBalhwajeomTabletFolderSection::StaticClass();
+	}
 	UBalhwajeomTabletFolderSection* StatementSection = Cast<UBalhwajeomTabletFolderSection>(
-		UUserWidget::CreateWidgetInstance(*WidgetTree, UBalhwajeomTabletFolderSection::StaticClass(), NAME_None));
+		UUserWidget::CreateWidgetInstance(*WidgetTree, SectionClass, NAME_None));
 	UBalhwajeomTabletFolderSection* NeedsAnalysisSection = Cast<UBalhwajeomTabletFolderSection>(
-		UUserWidget::CreateWidgetInstance(*WidgetTree, UBalhwajeomTabletFolderSection::StaticClass(), NAME_None));
+		UUserWidget::CreateWidgetInstance(*WidgetTree, SectionClass, NAME_None));
 	UBalhwajeomTabletFolderSection* CompletedSection = Cast<UBalhwajeomTabletFolderSection>(
-		UUserWidget::CreateWidgetInstance(*WidgetTree, UBalhwajeomTabletFolderSection::StaticClass(), NAME_None));
+		UUserWidget::CreateWidgetInstance(*WidgetTree, SectionClass, NAME_None));
 	if (!StatementSection || !NeedsAnalysisSection || !CompletedSection)
 	{
 		return;
@@ -437,8 +467,17 @@ void UBalhwajeomTabletWidget::RefreshFolderContents()
 		const FText Label = FText::Format(
 			NSLOCTEXT("Tablet", "DynamicStatementFileLabel", "{0} 진술서"), FolderName);
 
-		UBalhwajeomTabletPhotoButton* Entry =
-			WidgetTree->ConstructWidget<UBalhwajeomTabletPhotoButton>();
+		UClass* EntryClass = FileTileWidgetClass.LoadSynchronous();
+		if (!EntryClass)
+		{
+			EntryClass = UBalhwajeomTabletPhotoButton::StaticClass();
+		}
+		UBalhwajeomTabletPhotoButton* Entry = Cast<UBalhwajeomTabletPhotoButton>(
+			UUserWidget::CreateWidgetInstance(*WidgetTree, EntryClass, NAME_None));
+		if (!Entry)
+		{
+			return;
+		}
 		Entry->Configure(StatementID, Label, StatementFileIcon);
 		Entry->OnPhotoSelected.AddUniqueDynamic(this, &ThisClass::HandleStatementTileSelected);
 		StatementSection->AddTile(MakeFolderTileSlot(*WidgetTree, Entry));
@@ -452,8 +491,17 @@ void UBalhwajeomTabletWidget::RefreshFolderContents()
 			continue;
 		}
 
-		UBalhwajeomTabletPhotoButton* Entry =
-			WidgetTree->ConstructWidget<UBalhwajeomTabletPhotoButton>();
+		UClass* EntryClass = FileTileWidgetClass.LoadSynchronous();
+		if (!EntryClass)
+		{
+			EntryClass = UBalhwajeomTabletPhotoButton::StaticClass();
+		}
+		UBalhwajeomTabletPhotoButton* Entry = Cast<UBalhwajeomTabletPhotoButton>(
+			UUserWidget::CreateWidgetInstance(*WidgetTree, EntryClass, NAME_None));
+		if (!Entry)
+		{
+			continue;
+		}
 		Entry->Configure(PhotoID, Photo.PhotoName, GetOrLoadCapturedPhotoTexture(PhotoID));
 		Entry->OnPhotoSelected.AddUniqueDynamic(this, &ThisClass::HandleFolderPhotoSelected);
 		USizeBox* Tile = MakeFolderTileSlot(*WidgetTree, Entry);
@@ -948,8 +996,79 @@ void UBalhwajeomTabletWidget::ValidateActivePuzzle(const bool bExplicitStatement
 	}
 }
 
-void UBalhwajeomTabletWidget::ShowPopup(const FText& Title, const FText& Body, UTexture2D* PhotoTexture)
+bool UBalhwajeomTabletWidget::ActivateDetailWidget(const bool bStatementDetail)
 {
+	if (!PopupLayer || !WidgetTree)
+	{
+		return false;
+	}
+
+	UClass* DetailClass = bStatementDetail
+		? StatementDetailWidgetClass.LoadSynchronous()
+		: PhotoDetailWidgetClass.LoadSynchronous();
+	if (!DetailClass)
+	{
+		return false;
+	}
+
+	UBalhwajeomTabletDetailWidget* Detail = Cast<UBalhwajeomTabletDetailWidget>(
+		UUserWidget::CreateWidgetInstance(*WidgetTree, DetailClass, NAME_None));
+	if (!Detail)
+	{
+		return false;
+	}
+
+	PopupLayer->ClearChildren();
+	UOverlaySlot* DetailSlot = PopupLayer->AddChildToOverlay(Detail);
+	DetailSlot->SetHorizontalAlignment(HAlign_Fill);
+	DetailSlot->SetVerticalAlignment(VAlign_Fill);
+	ActiveDetailWidget = Detail;
+	BindActiveDetailWidgets();
+	return true;
+}
+
+void UBalhwajeomTabletWidget::BindActiveDetailWidgets()
+{
+	if (!ActiveDetailWidget)
+	{
+		return;
+	}
+
+	TXT_PopupTitle = ActiveDetailWidget->GetTitleText();
+	TXT_PopupBody = ActiveDetailWidget->GetBodyText();
+	IMG_PopupPhoto = ActiveDetailWidget->GetPhotoImage();
+	IMG_StatementIllustration = ActiveDetailWidget->GetStatementIllustration();
+	BTN_PopupClose = ActiveDetailWidget->GetCloseButton();
+	BTN_PlayStoryVoice = ActiveDetailWidget->GetPlayVoiceButton();
+	WB_PuzzleWords = ActiveDetailWidget->GetPuzzleWords();
+	WB_SentenceBuilder = ActiveDetailWidget->GetSentenceBuilder();
+	TXT_PuzzleFeedback = ActiveDetailWidget->GetPuzzleFeedback();
+	TXT_PuzzlePhotoLabel = ActiveDetailWidget->GetPuzzlePhotoLabel();
+	WB_PuzzlePhotos = ActiveDetailWidget->GetPuzzlePhotos();
+	WB_PhotoSlots = ActiveDetailWidget->GetPhotoSlots();
+	BTN_StatementSubmit = ActiveDetailWidget->GetStatementSubmitButton();
+
+	if (BTN_PopupClose)
+	{
+		BTN_PopupClose->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePopupCloseClicked);
+	}
+	if (BTN_PlayStoryVoice)
+	{
+		BTN_PlayStoryVoice->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePlayStoryVoiceClicked);
+	}
+	if (BTN_StatementSubmit)
+	{
+		BTN_StatementSubmit->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleStatementSubmitClicked);
+	}
+}
+
+void UBalhwajeomTabletWidget::ShowPopup(
+	const FText& Title,
+	const FText& Body,
+	UTexture2D* PhotoTexture,
+	const bool bStatementDetail)
+{
+	ActivateDetailWidget(bStatementDetail);
 	ActiveSentenceID = NAME_None;
 	// Reset here; OpenPhoto re-populates this (and BTN_PlayStoryVoice's visibility) right after this
 	// call for a photo popup. Callers that open a non-photo popup (e.g. the statement) leave both unset.
@@ -1130,47 +1249,60 @@ void UBalhwajeomTabletWidget::HandlePhysicalHomeClicked()
 	ResetToDesktop();
 }
 
+void UBalhwajeomTabletPhotoButton::NativeOnInitialized()
+{
+	Super::NativeOnInitialized();
+	if (BTN_File)
+	{
+		BTN_File->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleClicked);
+	}
+}
+
+void UBalhwajeomTabletPhotoButton::BuildFallbackVisuals()
+{
+	if (!WidgetTree)
+	{
+		WidgetTree = NewObject<UWidgetTree>(this, TEXT("WidgetTree"));
+	}
+	BTN_File = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("BTN_File"));
+	MakeButtonTransparent(BTN_File);
+	UVerticalBox* Layout = WidgetTree->ConstructWidget<UVerticalBox>();
+	SB_Thumbnail = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("SB_Thumbnail"));
+	SB_Thumbnail->SetWidthOverride(96.0f);
+	SB_Thumbnail->SetHeightOverride(64.0f);
+	IMG_Thumbnail = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("IMG_Thumbnail"));
+	SB_Thumbnail->AddChild(IMG_Thumbnail);
+	Layout->AddChildToVerticalBox(SB_Thumbnail);
+	TXT_Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TXT_Label"));
+	Layout->AddChildToVerticalBox(TXT_Label);
+	BTN_File->SetContent(Layout);
+	WidgetTree->RootWidget = BTN_File;
+	BTN_File->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleClicked);
+}
+
 void UBalhwajeomTabletPhotoButton::Configure(
 	const FName InPhotoID,
 	const FText& InLabel,
 	UTexture2D* Thumbnail)
 {
 	PhotoID = InPhotoID;
-	OnClicked.AddUniqueDynamic(this, &ThisClass::HandleClicked);
-	MakeButtonTransparent(this);
-
-	UVerticalBox* Layout = NewObject<UVerticalBox>(this);
-
-	if (Thumbnail)
+	if (!BTN_File)
 	{
-		// Sized to fit inside the ~170-wide folder tile (see RefreshFolderContents).
-		USizeBox* ThumbnailBox = NewObject<USizeBox>(this);
-		ThumbnailBox->SetWidthOverride(150.0f);
-		ThumbnailBox->SetHeightOverride(95.0f);
-
-		UImage* Image = NewObject<UImage>(this);
-		Image->SetBrushFromTexture(Thumbnail, true);
-		ThumbnailBox->AddChild(Image);
-
-		UVerticalBoxSlot* ThumbnailSlot = Layout->AddChildToVerticalBox(ThumbnailBox);
-		ThumbnailSlot->SetHorizontalAlignment(HAlign_Center);
-		ThumbnailSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 4.0f));
+		BuildFallbackVisuals();
 	}
-
-	UTextBlock* Label = NewObject<UTextBlock>(this);
-	Label->SetText(InLabel);
-	Label->SetJustification(ETextJustify::Center);
-	// Single line, truncated with "..." like a real folder's filename label, instead of
-	// wrapping and getting clipped by the tile's fixed height once a thumbnail is present.
-	Label->SetAutoWrapText(false);
-	Label->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
-	FSlateFontInfo Font = Label->GetFont();
-	Font.Size = 20;
-	Label->SetFont(Font);
-	UVerticalBoxSlot* LabelSlot = Layout->AddChildToVerticalBox(Label);
-	LabelSlot->SetHorizontalAlignment(HAlign_Fill);
-
-	SetContent(Layout);
+	if (TXT_Label)
+	{
+		TXT_Label->SetText(InLabel);
+	}
+	if (IMG_Thumbnail)
+	{
+		IMG_Thumbnail->SetBrushFromTexture(Thumbnail, true);
+	}
+	if (SB_Thumbnail)
+	{
+		SB_Thumbnail->SetVisibility(
+			Thumbnail ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
 }
 
 void UBalhwajeomTabletPhotoButton::HandleClicked()
@@ -1181,6 +1313,33 @@ void UBalhwajeomTabletPhotoButton::HandleClicked()
 	}
 }
 
+void UBalhwajeomTabletFolderButton::NativeOnInitialized()
+{
+	Super::NativeOnInitialized();
+	if (BTN_Folder)
+	{
+		BTN_Folder->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleClicked);
+	}
+}
+
+void UBalhwajeomTabletFolderButton::BuildFallbackVisuals()
+{
+	if (!WidgetTree)
+	{
+		WidgetTree = NewObject<UWidgetTree>(this, TEXT("WidgetTree"));
+	}
+	BTN_Folder = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("BTN_Folder"));
+	MakeButtonTransparent(BTN_Folder);
+	UVerticalBox* Layout = WidgetTree->ConstructWidget<UVerticalBox>();
+	IMG_FolderIcon = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("IMG_FolderIcon"));
+	Layout->AddChildToVerticalBox(IMG_FolderIcon);
+	TXT_FolderLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TXT_FolderLabel"));
+	Layout->AddChildToVerticalBox(TXT_FolderLabel);
+	BTN_Folder->SetContent(Layout);
+	WidgetTree->RootWidget = BTN_Folder;
+	BTN_Folder->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleClicked);
+}
+
 void UBalhwajeomTabletFolderButton::Configure(
 	const FName InCharacterID,
 	const FText& InLabel,
@@ -1188,46 +1347,27 @@ void UBalhwajeomTabletFolderButton::Configure(
 	const FSlateFontInfo& InLabelFont)
 {
 	CharacterID = InCharacterID;
-	OnClicked.AddUniqueDynamic(this, &ThisClass::HandleClicked);
-	MakeButtonTransparent(this);
-
-	UVerticalBox* Layout = NewObject<UVerticalBox>(this);
-
-	if (IconTexture)
+	if (!BTN_Folder)
 	{
-		USizeBox* IconBox = NewObject<USizeBox>(this);
-		IconBox->SetWidthOverride(64.0f);
-		IconBox->SetHeightOverride(60.0f);
-
-		UImage* Icon = NewObject<UImage>(this);
-		Icon->SetBrushFromTexture(IconTexture, true);
-		IconBox->AddChild(Icon);
-
-		UVerticalBoxSlot* IconSlot = Layout->AddChildToVerticalBox(IconBox);
-		IconSlot->SetHorizontalAlignment(HAlign_Center);
-		IconSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
+		BuildFallbackVisuals();
 	}
-
-	UTextBlock* Label = NewObject<UTextBlock>(this);
-	Label->SetText(InLabel);
-	Label->SetJustification(ETextJustify::Center);
-	Label->SetAutoWrapText(false);
-	Label->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
-	Label->SetColorAndOpacity(FSlateColor(FLinearColor(0.96f, 0.91f, 0.82f, 1.0f)));
-	FSlateFontInfo Font = InLabelFont;
-	if (!Font.FontObject)
+	if (IMG_FolderIcon)
 	{
-		Font = Label->GetFont();
+		IMG_FolderIcon->SetBrushFromTexture(IconTexture, true);
 	}
-	if (Font.Size <= 0)
+	if (TXT_FolderLabel)
 	{
-		Font.Size = 18;
+		TXT_FolderLabel->SetText(InLabel);
+		if (InLabelFont.FontObject || InLabelFont.Size > 0)
+		{
+			FSlateFontInfo Font = InLabelFont;
+			if (!Font.FontObject)
+			{
+				Font.FontObject = TXT_FolderLabel->GetFont().FontObject;
+			}
+			TXT_FolderLabel->SetFont(Font);
+		}
 	}
-	Label->SetFont(Font);
-	UVerticalBoxSlot* LabelSlot = Layout->AddChildToVerticalBox(Label);
-	LabelSlot->SetHorizontalAlignment(HAlign_Fill);
-
-	SetContent(Layout);
 }
 
 void UBalhwajeomTabletFolderButton::HandleClicked()
@@ -1238,11 +1378,17 @@ void UBalhwajeomTabletFolderButton::HandleClicked()
 	}
 }
 
-void UBalhwajeomTabletFolderSection::Configure(const FText& InTitle, const bool bStartExpanded)
+void UBalhwajeomTabletFolderSection::NativeOnInitialized()
 {
-	Title = InTitle;
-	bExpanded = bStartExpanded;
+	Super::NativeOnInitialized();
+	if (HeaderButton)
+	{
+		HeaderButton->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleHeaderClicked);
+	}
+}
 
+void UBalhwajeomTabletFolderSection::BuildFallbackVisuals()
+{
 	if (!WidgetTree)
 	{
 		WidgetTree = NewObject<UWidgetTree>(this, TEXT("WidgetTree"));
@@ -1288,6 +1434,17 @@ void UBalhwajeomTabletFolderSection::Configure(const FText& InTitle, const bool 
 	ContentSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 14.0f));
 
 	WidgetTree->RootWidget = Root;
+}
+
+void UBalhwajeomTabletFolderSection::Configure(const FText& InTitle, const bool bStartExpanded)
+{
+	Title = InTitle;
+	bExpanded = bStartExpanded;
+
+	if (!HeaderButton || !ArrowText || !TitleText || !ContentWrapBox)
+	{
+		BuildFallbackVisuals();
+	}
 
 	ContentWrapBox->SetVisibility(bExpanded ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	RefreshHeaderText();
@@ -1726,7 +1883,9 @@ void UBalhwajeomTabletWidget::HandleStatementTileSelected(const FName SentenceID
 		FText::Format(
 			NSLOCTEXT("Tablet", "StatementPopup", "거짓말\n{0}\n\n반증\n{1}"),
 			Statement.LieText,
-			Answer));
+			Answer),
+		nullptr,
+		true);
 	if (IMG_StatementIllustration)
 	{
 		// Show the actual captured photo that is this statement's correct evidence (its first photo
