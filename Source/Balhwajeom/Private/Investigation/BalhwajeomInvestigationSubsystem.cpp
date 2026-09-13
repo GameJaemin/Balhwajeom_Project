@@ -784,6 +784,27 @@ bool UBalhwajeomInvestigationSubsystem::GetWordDefinition(
 	return true;
 }
 
+void UBalhwajeomInvestigationSubsystem::GetAllWordDefinitions(
+	TArray<FWordDefinition>& OutDefinitions) const
+{
+	OutDefinitions.Reset();
+	if (!IsValid(WordsTable) || WordsTable->GetRowStruct() != FWordDefinition::StaticStruct())
+	{
+		return;
+	}
+
+	const FString Context(TEXT("GetAllWordDefinitions"));
+	TArray<FName> OrderedRowNames = WordsTable->GetRowNames();
+	OrderedRowNames.Sort(FNameLexicalLess());
+	for (const FName RowName : OrderedRowNames)
+	{
+		if (const FWordDefinition* Definition = WordsTable->FindRow<FWordDefinition>(RowName, Context, false))
+		{
+			OutDefinitions.Add(*Definition);
+		}
+	}
+}
+
 bool UBalhwajeomInvestigationSubsystem::GetSentenceDefinition(
 	FName SentenceID,
 	FSentenceDefinition& OutDefinition) const

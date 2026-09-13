@@ -10,6 +10,7 @@
 #include "Components/OverlaySlot.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
+#include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
@@ -24,8 +25,10 @@
 #include "Tablet/BalhwajeomInternetWidget.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Engine/GameInstance.h"
+#include "Engine/Font.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
+#include "UObject/ConstructorHelpers.h"
 
 namespace
 {
@@ -52,6 +55,15 @@ namespace
 		Style.SetPressedPadding(FMargin(0.0f));
 		Button->SetStyle(Style);
 	}
+}
+
+UBalhwajeomTabletDetailWidget::UBalhwajeomTabletDetailWidget(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	KeywordFont = ConstructorHelpers::FObjectFinder<UFont>(
+		TEXT("/Game/Balhwajeom/UI/JE/Freesentation-4Regular_Font.Freesentation-4Regular_Font")).Object;
+	StatementTextFont = ConstructorHelpers::FObjectFinder<UFont>(
+		TEXT("/Game/Balhwajeom/UI/JE/UnBatang_Font.UnBatang_Font")).Object;
 }
 
 UBalhwajeomTabletWidget::UBalhwajeomTabletWidget(const FObjectInitializer& ObjectInitializer)
@@ -634,35 +646,67 @@ void UBalhwajeomTabletWidget::RefreshPuzzleControls()
 
 	AvailablePuzzleWordIDs.Reset();
 	TArray<FAcquiredWordRecord> AcquiredWords;
-	if (Sentence.SentenceType == ESentenceType::Statement)
-	{
-		Investigation->GetAcquiredWordsForCharacter(Sentence.CharacterID, AcquiredWords);
-	}
-	else
-	{
-		Investigation->GetAcquiredWords(AcquiredWords);
-	}
+	Investigation->GetAcquiredWords(AcquiredWords);
 	for (const FAcquiredWordRecord& Word : AcquiredWords) AvailablePuzzleWordIDs.Add(Word.WordID);
 
 	if (WB_PuzzleWords && WidgetTree)
 	{
-		WB_PuzzleWords->SetVisibility(
-			AvailablePuzzleWordIDs.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-		for (const FName WordID : AvailablePuzzleWordIDs)
+		if (Sentence.SentenceType == ESentenceType::Statement)
 		{
-			FWordDefinition Word;
-			if (!Investigation->GetWordDefinition(WordID, Word))
+			TArray<FWordDefinition> OrderedWords;
+			Investigation->GetAllWordDefinitions(OrderedWords);
+			WB_PuzzleWords->SetVisibility(
+				OrderedWords.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+			for (const FWordDefinition& Word : OrderedWords)
 			{
-				continue;
+				if (!AvailablePuzzleWordIDs.Contains(Word.WordID))
+				{
+					USpacer* EmptyCell = WidgetTree->ConstructWidget<USpacer>();
+					EmptyCell->SetSize(FVector2D(106.0f, 39.0f));
+					WB_PuzzleWords->AddChild(EmptyCell);
+					continue;
+				}
+				UBalhwajeomTabletWordChip* Chip = Cast<UBalhwajeomTabletWordChip>(
+					UUserWidget::CreateWidgetInstance(*WidgetTree, UBalhwajeomTabletWordChip::StaticClass(), NAME_None));
+				if (Chip)
+				{
+					Chip->Configure(
+						Word.WordID,
+						Word.DisplayWord,
+						true,
+						ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFont() : nullptr,
+						ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFontSize() : 14);
+					WB_PuzzleWords->AddChild(Chip);
+				}
 			}
-			UBalhwajeomTabletWordChip* Chip = Cast<UBalhwajeomTabletWordChip>(
-				UUserWidget::CreateWidgetInstance(*WidgetTree, UBalhwajeomTabletWordChip::StaticClass(), NAME_None));
-			if (!Chip)
+			if (TXT_PuzzleKeywordCount)
 			{
-				continue;
+				TXT_PuzzleKeywordCount->SetText(FText::Format(
+					NSLOCTEXT("Tablet", "StatementKeywordCount", "{0}/{1}"),
+					AvailablePuzzleWordIDs.Num(),
+					OrderedWords.Num()));
+				TXT_PuzzleKeywordCount->SetVisibility(ESlateVisibility::HitTestInvisible);
 			}
-			Chip->Configure(WordID, Word.DisplayWord, Sentence.SentenceType == ESentenceType::Statement);
-			WB_PuzzleWords->AddChild(Chip);
+		}
+		else
+		{
+			WB_PuzzleWords->SetVisibility(
+				AvailablePuzzleWordIDs.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+			for (const FName WordID : AvailablePuzzleWordIDs)
+			{
+				FWordDefinition Word;
+				if (!Investigation->GetWordDefinition(WordID, Word))
+				{
+					continue;
+				}
+				UBalhwajeomTabletWordChip* Chip = Cast<UBalhwajeomTabletWordChip>(
+					UUserWidget::CreateWidgetInstance(*WidgetTree, UBalhwajeomTabletWordChip::StaticClass(), NAME_None));
+				if (Chip)
+				{
+					Chip->Configure(WordID, Word.DisplayWord);
+					WB_PuzzleWords->AddChild(Chip);
+				}
+			}
 		}
 	}
 
@@ -700,6 +744,12 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 	Sentence.SentenceTemplate.ToString().ParseIntoArray(Segments, TEXT("[]"), false);
 	const int32 SlotCount = Sentence.WordSlots.Num();
 	const bool bStatementStyle = Sentence.SentenceType == ESentenceType::Statement;
+	UFont* StatementFont = bStatementStyle && ActiveDetailWidget
+		? ActiveDetailWidget->GetStatementTextFont()
+		: nullptr;
+	const int32 StatementFontSize = bStatementStyle && ActiveDetailWidget
+		? ActiveDetailWidget->GetStatementTextFontSize()
+		: 16;
 
 	for (int32 SegmentIndex = 0; SegmentIndex < Segments.Num(); ++SegmentIndex)
 	{
@@ -708,7 +758,11 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 			UTextBlock* SegmentText = WidgetTree->ConstructWidget<UTextBlock>();
 			SegmentText->SetText(FText::FromString(Segments[SegmentIndex]));
 			FSlateFontInfo Font = SegmentText->GetFont();
-			Font.Size = bStatementStyle ? 16 : 22;
+			Font.Size = bStatementStyle ? StatementFontSize : 22;
+			if (bStatementStyle)
+			{
+				Font.FontObject = StatementFont;
+			}
 			SegmentText->SetFont(Font);
 			SegmentText->SetColorAndOpacity(FSlateColor(
 				bStatementStyle ? FLinearColor::Black : FLinearColor(0.91f, 0.86f, 0.78f, 1.0f)));
@@ -726,7 +780,11 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 			{
 				continue;
 			}
-			Blank->Configure(SegmentIndex, Sentence.SentenceType == ESentenceType::Statement);
+			Blank->Configure(
+				SegmentIndex,
+				bStatementStyle,
+				StatementFont,
+				StatementFontSize);
 			Blank->OnBlankDropped.AddUniqueDynamic(this, &ThisClass::HandleSentenceBlankDropped);
 			ActiveBlanksBySlot.Add(SegmentIndex, Blank);
 			if (UWrapBoxSlot* WrapSlot = Cast<UWrapBoxSlot>(WB_SentenceBuilder->AddChild(Blank)))
@@ -880,7 +938,13 @@ void UBalhwajeomTabletWidget::HandlePhotoSlotDropped(const int32 SlotIndex, cons
 		FPhotoDefinition PhotoDef;
 		if (Investigation->GetPhotoDefinition(PhotoID, PhotoDef))
 		{
-			PhotoSlotWidget->SetFilled(PhotoDef.PhotoName, GetOrLoadCapturedPhotoTexture(PhotoID));
+			UTexture2D* SelectedTexture = GetOrLoadCapturedPhotoTexture(PhotoID);
+			PhotoSlotWidget->SetFilled(PhotoDef.PhotoName, SelectedTexture);
+			if (Sentence.SentenceType == ESentenceType::Statement && IMG_StatementIllustration && SelectedTexture)
+			{
+				IMG_StatementIllustration->SetBrushFromTexture(SelectedTexture, true);
+				IMG_StatementIllustration->SetVisibility(ESlateVisibility::HitTestInvisible);
+			}
 		}
 	}
 
@@ -910,6 +974,7 @@ void UBalhwajeomTabletWidget::OpenPhotoPicker(const int32 SlotIndex)
 	}
 
 	WB_PuzzlePhotos->ClearChildren();
+	PendingPhotoSlotIndex = SlotIndex;
 
 	// Eligible: captured, its own analysis solved, and it carries a declaration sentence for some
 	// statement's evidence puzzle. Reuses the existing WB_PuzzlePhotos/chip drag-and-drop that was
@@ -935,11 +1000,17 @@ void UBalhwajeomTabletWidget::OpenPhotoPicker(const int32 SlotIndex)
 			continue;
 		}
 		Chip->Configure(PhotoDef.PhotoID, PhotoDef.PhotoName, GetOrLoadCapturedPhotoTexture(PhotoDef.PhotoID));
+		Chip->OnPhotoSelected.AddUniqueDynamic(this, &ThisClass::HandlePhotoPickerSelected);
 		WB_PuzzlePhotos->AddChild(Chip);
 		bAnyEligiblePhoto = true;
 	}
 
 	WB_PuzzlePhotos->SetVisibility(bAnyEligiblePhoto ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (PhotoPickerPanel)
+	{
+		PhotoPickerPanel->SetVisibility(
+			bAnyEligiblePhoto ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
 	if (TXT_PuzzlePhotoLabel)
 	{
 		TXT_PuzzlePhotoLabel->SetVisibility(bAnyEligiblePhoto ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
@@ -948,6 +1019,11 @@ void UBalhwajeomTabletWidget::OpenPhotoPicker(const int32 SlotIndex)
 
 void UBalhwajeomTabletWidget::ClosePhotoPicker()
 {
+	PendingPhotoSlotIndex = INDEX_NONE;
+	if (PhotoPickerPanel)
+	{
+		PhotoPickerPanel->SetVisibility(ESlateVisibility::Collapsed);
+	}
 	if (WB_PuzzlePhotos)
 	{
 		WB_PuzzlePhotos->ClearChildren();
@@ -957,6 +1033,19 @@ void UBalhwajeomTabletWidget::ClosePhotoPicker()
 	{
 		TXT_PuzzlePhotoLabel->SetVisibility(ESlateVisibility::Collapsed);
 	}
+}
+
+void UBalhwajeomTabletWidget::HandlePhotoPickerSelected(const FName PhotoID)
+{
+	if (PendingPhotoSlotIndex != INDEX_NONE)
+	{
+		HandlePhotoSlotDropped(PendingPhotoSlotIndex, PhotoID);
+	}
+}
+
+void UBalhwajeomTabletWidget::HandlePhotoPickerCloseClicked()
+{
+	ClosePhotoPicker();
 }
 
 void UBalhwajeomTabletWidget::EvaluatePuzzleIfComplete()
@@ -1068,6 +1157,9 @@ void UBalhwajeomTabletWidget::BindActiveDetailWidgets()
 	WB_PuzzlePhotos = ActiveDetailWidget->GetPuzzlePhotos();
 	WB_PhotoSlots = ActiveDetailWidget->GetPhotoSlots();
 	BTN_StatementSubmit = ActiveDetailWidget->GetStatementSubmitButton();
+	TXT_PuzzleKeywordCount = ActiveDetailWidget->GetPuzzleKeywordCount();
+	PhotoPickerPanel = ActiveDetailWidget->GetPhotoPickerPanel();
+	BTN_PhotoPickerClose = ActiveDetailWidget->GetPhotoPickerCloseButton();
 
 	if (BTN_PopupClose)
 	{
@@ -1080,6 +1172,10 @@ void UBalhwajeomTabletWidget::BindActiveDetailWidgets()
 	if (BTN_StatementSubmit)
 	{
 		BTN_StatementSubmit->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleStatementSubmitClicked);
+	}
+	if (BTN_PhotoPickerClose)
+	{
+		BTN_PhotoPickerClose->OnClicked.AddUniqueDynamic(this, &ThisClass::HandlePhotoPickerCloseClicked);
 	}
 }
 
@@ -1099,6 +1195,9 @@ void UBalhwajeomTabletWidget::ClearActiveDetailWidgets()
 	WB_PuzzlePhotos = nullptr;
 	WB_PhotoSlots = nullptr;
 	BTN_StatementSubmit = nullptr;
+	TXT_PuzzleKeywordCount = nullptr;
+	PhotoPickerPanel = nullptr;
+	BTN_PhotoPickerClose = nullptr;
 }
 
 bool UBalhwajeomTabletWidget::ShowPopup(
@@ -1133,6 +1232,13 @@ bool UBalhwajeomTabletWidget::ShowPopup(
 	}
 	if (TXT_PopupBody)
 	{
+		if (bStatementDetail && ActiveDetailWidget)
+		{
+			FSlateFontInfo Font = TXT_PopupBody->GetFont();
+			Font.FontObject = ActiveDetailWidget->GetStatementTextFont();
+			Font.Size = ActiveDetailWidget->GetStatementTextFontSize();
+			TXT_PopupBody->SetFont(Font);
+		}
 		TXT_PopupBody->SetText(Body);
 	}
 	if (IMG_PopupPhoto)
@@ -1172,6 +1278,45 @@ void UBalhwajeomTabletWidget::RefreshAcquiredWordsDisplay()
 	Investigation->GetAcquiredWordsForCharacter(ActiveCharacterID, FolderWords);
 
 	WB_PuzzleWords->ClearChildren();
+	if (TXT_PuzzleKeywordCount)
+	{
+		TArray<FWordDefinition> OrderedWords;
+		Investigation->GetAllWordDefinitions(OrderedWords);
+		int32 AcquiredCount = 0;
+		for (const FWordDefinition& Word : OrderedWords)
+		{
+			if (!Investigation->HasAcquiredWord(Word.WordID))
+			{
+				USpacer* EmptyCell = WidgetTree->ConstructWidget<USpacer>();
+				EmptyCell->SetSize(FVector2D(106.0f, 39.0f));
+				WB_PuzzleWords->AddChild(EmptyCell);
+				continue;
+			}
+
+			++AcquiredCount;
+			UBalhwajeomTabletWordChip* Chip = Cast<UBalhwajeomTabletWordChip>(
+				UUserWidget::CreateWidgetInstance(*WidgetTree, UBalhwajeomTabletWordChip::StaticClass(), NAME_None));
+			if (Chip)
+			{
+				Chip->Configure(
+					Word.WordID,
+					Word.DisplayWord,
+					true,
+					ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFont() : nullptr,
+					ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFontSize() : 14);
+				WB_PuzzleWords->AddChild(Chip);
+			}
+		}
+		TXT_PuzzleKeywordCount->SetText(FText::Format(
+			NSLOCTEXT("Tablet", "StatementKeywordCount", "{0}/{1}"),
+			AcquiredCount,
+			OrderedWords.Num()));
+		TXT_PuzzleKeywordCount->SetVisibility(ESlateVisibility::HitTestInvisible);
+		WB_PuzzleWords->SetVisibility(
+			OrderedWords.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+		return;
+	}
+
 	for (const FAcquiredWordRecord& Record : FolderWords)
 	{
 		FWordDefinition Word;
@@ -1540,7 +1685,9 @@ void UBalhwajeomTabletFolderSection::RefreshHeaderText()
 void UBalhwajeomTabletWordChip::Configure(
 	const FName InWordID,
 	const FText& InLabel,
-	const bool bInStatementStyle)
+	const bool bInStatementStyle,
+	UFont* InStatementFont,
+	const int32 InStatementFontSize)
 {
 	WordID = InWordID;
 	DisplayLabel = InLabel;
@@ -1574,7 +1721,11 @@ void UBalhwajeomTabletWordChip::Configure(
 	LabelText->SetColorAndOpacity(FSlateColor(
 		bStatementStyle ? FLinearColor::White : FLinearColor(0.96f, 0.91f, 0.82f, 1.0f)));
 	FSlateFontInfo Font = LabelText->GetFont();
-	Font.Size = bStatementStyle ? 14 : 20;
+	Font.Size = bStatementStyle ? InStatementFontSize : 20;
+	if (bStatementStyle)
+	{
+		Font.FontObject = InStatementFont;
+	}
 	LabelText->SetFont(Font);
 	Background->SetContent(LabelText);
 
@@ -1637,15 +1788,44 @@ void UBalhwajeomTabletWordChip::NativeOnDragDetected(
 	if (WidgetTree)
 	{
 		UBorder* DragVisual = WidgetTree->ConstructWidget<UBorder>();
-		DragVisual->SetBrushColor(FLinearColor(0.30f, 0.24f, 0.16f, 0.9f));
-		DragVisual->SetPadding(FMargin(10.0f, 6.0f));
+		DragVisual->SetBrushColor(
+			bStatementStyle
+				? FLinearColor::White
+				: FLinearColor(0.30f, 0.24f, 0.16f, 0.9f));
+		DragVisual->SetPadding(bStatementStyle ? FMargin(5.0f, 3.0f) : FMargin(10.0f, 6.0f));
+		if (bStatementStyle)
+		{
+			if (UTexture2D* HoverTexture = LoadObject<UTexture2D>(
+				nullptr,
+				TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/keyword_hover.keyword_hover")))
+			{
+				DragVisual->SetBrushFromTexture(HoverTexture);
+			}
+		}
 		UTextBlock* DragLabel = WidgetTree->ConstructWidget<UTextBlock>();
 		DragLabel->SetText(DisplayLabel);
-		FSlateFontInfo Font = DragLabel->GetFont();
-		Font.Size = 20;
-		DragLabel->SetFont(Font);
+		DragLabel->SetJustification(ETextJustify::Center);
+		if (LabelText)
+		{
+			DragLabel->SetFont(LabelText->GetFont());
+			DragLabel->SetColorAndOpacity(
+				bStatementStyle
+					? FSlateColor(FLinearColor::Black)
+					: LabelText->GetColorAndOpacity());
+		}
 		DragVisual->SetContent(DragLabel);
-		Operation->DefaultDragVisual = DragVisual;
+		if (bStatementStyle)
+		{
+			USizeBox* DragSize = WidgetTree->ConstructWidget<USizeBox>();
+			DragSize->SetWidthOverride(106.0f);
+			DragSize->SetHeightOverride(39.0f);
+			DragSize->SetContent(DragVisual);
+			Operation->DefaultDragVisual = DragSize;
+		}
+		else
+		{
+			Operation->DefaultDragVisual = DragVisual;
+		}
 	}
 
 	OutOperation = Operation;
@@ -1653,7 +1833,9 @@ void UBalhwajeomTabletWordChip::NativeOnDragDetected(
 
 void UBalhwajeomTabletSentenceBlank::Configure(
 	const int32 InSlotIndex,
-	const bool bInStatementStyle)
+	const bool bInStatementStyle,
+	UFont* InStatementFont,
+	const int32 InStatementFontSize)
 {
 	SlotIndex = InSlotIndex;
 	bStatementStyle = bInStatementStyle;
@@ -1673,7 +1855,11 @@ void UBalhwajeomTabletSentenceBlank::Configure(
 	DisplayText = WidgetTree->ConstructWidget<UTextBlock>();
 	DisplayText->SetJustification(ETextJustify::Center);
 	FSlateFontInfo Font = DisplayText->GetFont();
-	Font.Size = bStatementStyle ? 16 : 22;
+	Font.Size = bStatementStyle ? InStatementFontSize : 22;
+	if (bStatementStyle)
+	{
+		Font.FontObject = InStatementFont;
+	}
 	DisplayText->SetFont(Font);
 	Background->SetContent(DisplayText);
 
@@ -1777,16 +1963,16 @@ void UBalhwajeomTabletPhotoChip::Configure(const FName InPhotoID, const FText& I
 	}
 
 	UBorder* Background = WidgetTree->ConstructWidget<UBorder>();
-	Background->SetBrushColor(FLinearColor(0.30f, 0.24f, 0.16f, 1.0f));
-	Background->SetPadding(FMargin(10.0f, 6.0f));
+	Background->SetBrushColor(FLinearColor(0.94f, 0.94f, 0.94f, 1.0f));
+	Background->SetPadding(FMargin(8.0f));
 
 	UVerticalBox* Layout = WidgetTree->ConstructWidget<UVerticalBox>();
 
 	if (InThumbnail)
 	{
 		USizeBox* ThumbnailBox = WidgetTree->ConstructWidget<USizeBox>();
-		ThumbnailBox->SetWidthOverride(76.0f);
-		ThumbnailBox->SetHeightOverride(48.0f);
+		ThumbnailBox->SetWidthOverride(140.0f);
+		ThumbnailBox->SetHeightOverride(82.0f);
 
 		UImage* Image = WidgetTree->ConstructWidget<UImage>();
 		Image->SetBrushFromTexture(InThumbnail, true);
@@ -1801,12 +1987,17 @@ void UBalhwajeomTabletPhotoChip::Configure(const FName InPhotoID, const FText& I
 	Label->SetText(InLabel);
 	Label->SetJustification(ETextJustify::Center);
 	FSlateFontInfo Font = Label->GetFont();
-	Font.Size = 20;
+	Font.Size = 15;
 	Label->SetFont(Font);
+	Label->SetColorAndOpacity(FSlateColor(FLinearColor(0.08f, 0.08f, 0.08f, 1.0f)));
 	Layout->AddChildToVerticalBox(Label);
 
 	Background->SetContent(Layout);
-	WidgetTree->RootWidget = Background;
+	USizeBox* TileSize = WidgetTree->ConstructWidget<USizeBox>();
+	TileSize->SetWidthOverride(160.0f);
+	TileSize->SetHeightOverride(126.0f);
+	TileSize->SetContent(Background);
+	WidgetTree->RootWidget = TileSize;
 }
 
 FReply UBalhwajeomTabletPhotoChip::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
@@ -1816,6 +2007,18 @@ FReply UBalhwajeomTabletPhotoChip::NativeOnMouseButtonDown(const FGeometry& InGe
 		return FReply::Handled().DetectDrag(TakeWidget(), EKeys::LeftMouseButton);
 	}
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+FReply UBalhwajeomTabletPhotoChip::NativeOnMouseButtonUp(
+	const FGeometry& InGeometry,
+	const FPointerEvent& InMouseEvent)
+{
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		OnPhotoSelected.Broadcast(PhotoID);
+		return FReply::Handled();
+	}
+	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
 }
 
 void UBalhwajeomTabletPhotoChip::NativeOnDragDetected(
@@ -2023,23 +2226,9 @@ void UBalhwajeomTabletWidget::HandleStatementTileSelected(const FName SentenceID
 	}
 	if (IMG_StatementIllustration)
 	{
-		// Show the actual captured photo that is this statement's correct evidence (its first photo
-		// slot), not a separately-authored illustration -- there's usually nothing else worth showing
-		// here until that photo exists.
-		const FName CorrectPhotoID = Statement.PhotoSlots.IsValidIndex(0)
-			? Statement.PhotoSlots[0].CorrectPhotoID
-			: NAME_None;
-		UTexture2D* IllustrationTexture =
-			CorrectPhotoID.IsNone() ? nullptr : GetOrLoadCapturedPhotoTexture(CorrectPhotoID);
-		if (IllustrationTexture)
-		{
-			IMG_StatementIllustration->SetBrushFromTexture(IllustrationTexture, true);
-			IMG_StatementIllustration->SetVisibility(ESlateVisibility::HitTestInvisible);
-		}
-		else
-		{
-			IMG_StatementIllustration->SetVisibility(ESlateVisibility::Collapsed);
-		}
+		// Do not reveal the authored correct answer. The evidence area is filled only after the
+		// player chooses a photo from the folder-style picker.
+		IMG_StatementIllustration->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	if (!Investigation->IsSentenceSolved(Statement.SentenceID))
 	{

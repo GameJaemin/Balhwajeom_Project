@@ -99,7 +99,6 @@ namespace TabletDesigner
 	const TCHAR* PhotoDetailAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletPhoto.WBP_TabletPhoto");
 	const TCHAR* StatementBackgroundPath = TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/final_sentence_sister_BG.final_sentence_sister_BG");
 	const TCHAR* StatementSubmitPath = TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/final_button.final_button");
-	const TCHAR* StatementSubmitHoverPath = TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/final_button_hover.final_button_hover");
 
 	const TCHAR* TabletBodyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Tablet_Body.Tablet_Body");
 	const TCHAR* FamilyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Family.Family");
@@ -629,17 +628,6 @@ namespace TabletDesigner
 				Illustration->SetVisibility(ESlateVisibility::Collapsed);
 				Place(Canvas, Illustration, 574.0f, 404.0f, 385.0f, 216.0f, 3);
 
-				UTextBlock* PhotoLabel = MakeText(
-					TEXT("TXT_PuzzlePhotoLabel"), TEXT("증거사진"), 14, FLinearColor::Black, true);
-				PhotoLabel->SetJustification(ETextJustify::Center);
-				PhotoLabel->SetVisibility(ESlateVisibility::Collapsed);
-				Place(Canvas, PhotoLabel, 600.0f, 632.0f, 334.0f, 24.0f, 5);
-
-				UWrapBox* PuzzlePhotos = Make<UWrapBox>(TEXT("WB_PuzzlePhotos"), true);
-				PuzzlePhotos->SetInnerSlotPadding(FVector2D(5.0f, 5.0f));
-				PuzzlePhotos->SetVisibility(ESlateVisibility::Collapsed);
-				Place(Canvas, PuzzlePhotos, 584.0f, 414.0f, 365.0f, 196.0f, 7);
-
 				UWrapBox* PhotoSlots = Make<UWrapBox>(TEXT("WB_PhotoSlots"), true);
 				PhotoSlots->SetInnerSlotPadding(FVector2D::ZeroVector);
 				PhotoSlots->SetVisibility(ESlateVisibility::Collapsed);
@@ -655,9 +643,19 @@ namespace TabletDesigner
 
 				// The right-side grid is baked into the background. Runtime chips occupy two 106px columns;
 				// their supplied hover texture is applied by UBalhwajeomTabletWordChip.
+				UTextBlock* KeywordCount = MakeText(
+					TEXT("TXT_PuzzleKeywordCount"), TEXT("0/0"), 18, FLinearColor::White, true);
+				KeywordCount->SetJustification(ETextJustify::Right);
+				KeywordCount->SetShadowOffset(FVector2D::ZeroVector);
+				Place(Canvas, KeywordCount, 1175.0f, 132.0f, 76.0f, 30.0f, 7);
+
 				UScrollBox* WordScroll = Make<UScrollBox>(TEXT("SB_PuzzleWords"));
 				UWrapBox* WordWrap = Make<UWrapBox>(TEXT("WB_PuzzleWords"), true);
 				WordWrap->SetInnerSlotPadding(FVector2D::ZeroVector);
+				// A ScrollBox offers unconstrained width to its child, so WrapBox otherwise keeps every
+				// keyword on one row. 212px is exactly two fixed 106px keyword cells.
+				WordWrap->SetWrapSize(212.0f);
+				WordWrap->SetExplicitWrapSize(true);
 				WordScroll->AddChild(WordWrap);
 				Place(Canvas, WordScroll, 1044.0f, 169.0f, 212.0f, 598.0f, 6);
 
@@ -675,17 +673,50 @@ namespace TabletDesigner
 					}
 					return Brush;
 				};
-				const FSlateBrush SubmitNormal = MakeButtonBrush(StatementSubmitPath);
-				const FSlateBrush SubmitHover = MakeButtonBrush(StatementSubmitHoverPath);
+				FSlateBrush SubmitNormal = MakeButtonBrush(StatementSubmitPath);
+				FSlateBrush SubmitHover = SubmitNormal;
+				// Both states use identical layout geometry so hover never shrinks or jumps up-left.
+				SubmitNormal.ImageSize = FVector2D(109.0f, 35.0f);
+				SubmitHover.ImageSize = FVector2D(109.0f, 35.0f);
+				// Never swap to the differently-padded hover texture. Only dim the exact same pixels.
+				SubmitHover.TintColor = FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.72f));
+				FSlateBrush SubmitPressed = SubmitHover;
+				SubmitPressed.TintColor = FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.55f));
 				SubmitStyle.SetNormal(SubmitNormal);
 				SubmitStyle.SetHovered(SubmitHover);
-				SubmitStyle.SetPressed(SubmitHover);
+				SubmitStyle.SetPressed(SubmitPressed);
 				SubmitStyle.SetDisabled(SubmitNormal);
 				SubmitStyle.SetNormalPadding(FMargin(0.0f));
 				SubmitStyle.SetPressedPadding(FMargin(0.0f));
 				Submit->SetStyle(SubmitStyle);
 				Submit->SetVisibility(ESlateVisibility::Collapsed);
 				Place(Canvas, Submit, 703.0f, 704.0f, 109.0f, 35.0f, 9);
+
+				// Folder-style photo browser opened by the evidence slot's "찾아보기" action.
+				UCanvasPanel* PhotoPicker = Make<UCanvasPanel>(TEXT("PhotoPickerPanel"), true);
+				FillCanvas(PhotoPicker, MakeColorImage(
+					TEXT("IMG_PhotoPickerBackground"), FLinearColor(0.88f, 0.88f, 0.88f, 1.0f)));
+				UBorder* PickerHeader = MakeBorder(
+					TEXT("BRD_PhotoPickerHeader"), FLinearColor(0.48f, 0.48f, 0.48f, 1.0f));
+				Place(PhotoPicker, PickerHeader, 0.0f, 0.0f, 860.0f, 54.0f, 2);
+				UTextBlock* PhotoLabel = MakeText(
+					TEXT("TXT_PuzzlePhotoLabel"), TEXT("증거 사진 폴더"), 20, FLinearColor::White, true);
+				PhotoLabel->SetShadowOffset(FVector2D::ZeroVector);
+				Place(PhotoPicker, PhotoLabel, 24.0f, 10.0f, 500.0f, 36.0f, 3);
+				Place(PhotoPicker, MakeTextButton(TEXT("BTN_PhotoPickerClose"), TEXT("×"), 30),
+					800.0f, 2.0f, 54.0f, 48.0f, 4);
+
+				UBorder* FolderBody = MakeBorder(
+					TEXT("BRD_PhotoPickerBody"), FLinearColor(0.97f, 0.97f, 0.97f, 1.0f), FMargin(18.0f));
+				Place(PhotoPicker, FolderBody, 18.0f, 72.0f, 824.0f, 592.0f, 2);
+				UScrollBox* PhotoScroll = Make<UScrollBox>(TEXT("SB_PuzzlePhotos"));
+				UWrapBox* PuzzlePhotos = Make<UWrapBox>(TEXT("WB_PuzzlePhotos"), true);
+				PuzzlePhotos->SetInnerSlotPadding(FVector2D(12.0f, 12.0f));
+				PuzzlePhotos->SetVisibility(ESlateVisibility::Collapsed);
+				PhotoScroll->AddChild(PuzzlePhotos);
+				FolderBody->SetContent(PhotoScroll);
+				PhotoPicker->SetVisibility(ESlateVisibility::Collapsed);
+				Place(Canvas, PhotoPicker, 207.0f, 108.0f, 860.0f, 680.0f, 20);
 
 				Tree->RootWidget = Scale;
 				return;
