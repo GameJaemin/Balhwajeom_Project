@@ -50,6 +50,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
 	bool GetPhotoDefinition(FName PhotoID, FPhotoDefinition& OutDefinition) const;
 
+	/** Resolves the unique photo whose PhotoSentenceID matches a PhotoAnalysis sentence. */
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
+	bool GetPhotoDefinitionBySentenceID(
+		FName SentenceID,
+		FPhotoDefinition& OutDefinition) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
 	bool GetCharacterDefinition(FName CharacterID, FCharacterDefinition& OutDefinition) const;
 
