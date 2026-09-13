@@ -16,6 +16,7 @@ class APhotoWorldStoryActor;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UTexture2D;
+class USoundBase;
 
 enum class EBalhwajeomPhotoCaptureResult : uint8
 {
@@ -336,6 +337,15 @@ protected:
     /** Total fade-out + fade-in time for a camera mode change. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.1"))
     float CameraTransitionDuration = 0.5f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Audio")
+    TSoftObjectPtr<USoundBase> CameraEnterSound;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Audio")
+    TSoftObjectPtr<USoundBase> CameraExitSound;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Audio")
+    TSoftObjectPtr<USoundBase> ShutterSound;
 
     /** Camera pan speed along the fixed entry Right axis and world Up axis, in cm/s. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Pan", meta = (ClampMin = "0.0"))

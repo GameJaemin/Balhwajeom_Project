@@ -30,6 +30,7 @@
 #include "Misc/Paths.h"
 #include "Story/StoryStateSubsystem.h"
 #include "Story/StoryStateTags.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
 #include "BalhwajeomEvidenceActor.h"
@@ -337,6 +338,12 @@ UBalhwajeomPhotoCameraComponent::UBalhwajeomPhotoCameraComponent()
 		FSoftObjectPath(TEXT("/Game/Balhwajeom/Camera/Materials/M_PP_CameraFocusNearVertical.M_PP_CameraFocusNearVertical")));
 	FocusCompositeMaterial = TSoftObjectPtr<UMaterialInterface>(
 		FSoftObjectPath(TEXT("/Game/Balhwajeom/Camera/Materials/M_PP_CameraFocusComposite.M_PP_CameraFocusComposite")));
+	CameraEnterSound = TSoftObjectPtr<USoundBase>(
+		FSoftObjectPath(TEXT("/Game/Balhwajeom/Audio/SFX/TabletUp.TabletUp")));
+	CameraExitSound = TSoftObjectPtr<USoundBase>(
+		FSoftObjectPath(TEXT("/Game/Balhwajeom/Audio/SFX/TabletDown.TabletDown")));
+	ShutterSound = TSoftObjectPtr<USoundBase>(
+		FSoftObjectPath(TEXT("/Game/Balhwajeom/Audio/SFX/Shutter.Shutter")));
 }
 
 void UBalhwajeomPhotoCameraComponent::BeginDestroy()
@@ -417,6 +424,11 @@ void UBalhwajeomPhotoCameraComponent::ToggleCameraMode()
 	}
 
 	bIsCameraTransitioning = true;
+	if (USoundBase* TransitionSound =
+		(bIsInCameraMode ? CameraExitSound : CameraEnterSound).LoadSynchronous())
+	{
+		UGameplayStatics::PlaySound2D(this, TransitionSound);
+	}
 	const float HalfDuration = CameraTransitionDuration * 0.5f;
 
 	if (const APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this)))
@@ -524,6 +536,10 @@ void UBalhwajeomPhotoCameraComponent::TakePhoto()
 	if (!bIsInCameraMode || bIsCameraTransitioning || !PhotoCamera || !GetWorld())
 	{
 		return;
+	}
+	if (USoundBase* Sound = ShutterSound.LoadSynchronous())
+	{
+		UGameplayStatics::PlaySound2D(this, Sound);
 	}
 
 	AActor* Owner = GetOwner();

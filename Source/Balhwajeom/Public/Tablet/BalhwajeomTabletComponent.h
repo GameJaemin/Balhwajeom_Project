@@ -12,6 +12,7 @@ class UBalhwajeomTabletWidget;
 class UEnhancedInputComponent;
 class UInputAction;
 class UInputMappingContext;
+class USoundBase;
 
 DECLARE_MULTICAST_DELEGATE(FOnBalhwajeomTabletClosed);
 
@@ -77,6 +78,12 @@ protected:
 	/** Defaults to WBP_Tablet, but can be replaced per player/component. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tablet|UI")
 	TSoftClassPtr<UBalhwajeomTabletWidget> TabletWidgetClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Audio")
+	TSoftObjectPtr<USoundBase> TabletOpenSound;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Audio")
+	TSoftObjectPtr<USoundBase> TabletCloseSound;
 
 private:
 	bool TryInitializeForLocalPlayer();

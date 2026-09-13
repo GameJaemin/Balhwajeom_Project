@@ -10,6 +10,8 @@
 #include "GameFramework/PlayerController.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "Story/StoryStateSubsystem.h"
 #include "Story/StoryStateTags.h"
 #include "Tablet/BalhwajeomTabletWidget.h"
@@ -25,6 +27,10 @@ UBalhwajeomTabletComponent::UBalhwajeomTabletComponent()
 		FSoftObjectPath(TEXT("/Game/Balhwajeom/Core/Input/IA_Tablet.IA_Tablet")));
 	TabletWidgetClass = TSoftClassPtr<UBalhwajeomTabletWidget>(
 		FSoftObjectPath(TEXT("/Game/Balhwajeom/UI/Tablet/WBP_Tablet.WBP_Tablet_C")));
+	TabletOpenSound = TSoftObjectPtr<USoundBase>(
+		FSoftObjectPath(TEXT("/Game/Balhwajeom/Audio/SFX/TabletUp.TabletUp")));
+	TabletCloseSound = TSoftObjectPtr<USoundBase>(
+		FSoftObjectPath(TEXT("/Game/Balhwajeom/Audio/SFX/TabletDown.TabletDown")));
 }
 
 void UBalhwajeomTabletComponent::BeginPlay()
@@ -418,6 +424,10 @@ void UBalhwajeomTabletComponent::OpenTabletNow()
 	SetGameplayInputBlocked(true);
 
 	TabletWidget->SetVisibility(ESlateVisibility::Visible);
+	if (USoundBase* Sound = TabletOpenSound.LoadSynchronous())
+	{
+		UGameplayStatics::PlaySound2D(this, Sound);
+	}
 	TabletWidget->PlayTabletOpenAnimation();
 	if (bOpenStatementWhenReady)
 	{
@@ -446,6 +456,10 @@ void UBalhwajeomTabletComponent::CloseTablet()
 	}
 
 	bTabletClosing = true;
+	if (USoundBase* Sound = TabletCloseSound.LoadSynchronous())
+	{
+		UGameplayStatics::PlaySound2D(this, Sound);
+	}
 	if (TabletWidget && TabletWidget->PlayTabletCloseAnimation())
 	{
 		return;
