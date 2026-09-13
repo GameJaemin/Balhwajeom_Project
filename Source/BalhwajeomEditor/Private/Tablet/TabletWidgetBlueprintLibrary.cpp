@@ -687,6 +687,14 @@ namespace TabletDesigner
 				Illustration->SetVisibility(ESlateVisibility::Collapsed);
 				Place(Canvas, Illustration, 574.0f, 404.0f, 385.0f, 216.0f, 3);
 
+				UTextBlock* SelectedPhotoResult = MakeText(
+					TEXT("TXT_SelectedPhotoResult"), TEXT(""), 14, FLinearColor::Black, true);
+				SelectedPhotoResult->SetJustification(ETextJustify::Center);
+				SelectedPhotoResult->SetAutoWrapText(true);
+				SelectedPhotoResult->SetShadowOffset(FVector2D::ZeroVector);
+				SelectedPhotoResult->SetVisibility(ESlateVisibility::Collapsed);
+				Place(Canvas, SelectedPhotoResult, 574.0f, 628.0f, 385.0f, 48.0f, 7);
+
 				UWrapBox* PhotoSlots = Make<UWrapBox>(TEXT("WB_PhotoSlots"), true);
 				PhotoSlots->SetInnerSlotPadding(FVector2D::ZeroVector);
 				PhotoSlots->SetVisibility(ESlateVisibility::Collapsed);
@@ -698,7 +706,7 @@ namespace TabletDesigner
 				Feedback->SetJustification(ETextJustify::Center);
 				Feedback->SetVisibility(ESlateVisibility::Collapsed);
 				Feedback->SetShadowOffset(FVector2D::ZeroVector);
-				Place(Canvas, Feedback, 574.0f, 662.0f, 385.0f, 26.0f, 8);
+				Place(Canvas, Feedback, 574.0f, 678.0f, 385.0f, 22.0f, 8);
 
 				// The right-side grid is baked into the background. Runtime chips occupy two 106px columns;
 				// their supplied hover texture is applied by UBalhwajeomTabletWordChip.

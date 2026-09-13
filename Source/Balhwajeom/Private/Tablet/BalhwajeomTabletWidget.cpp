@@ -700,6 +700,11 @@ void UBalhwajeomTabletWidget::HidePuzzleControls()
 		TXT_PuzzleFeedback->SetText(FText::GetEmpty());
 		TXT_PuzzleFeedback->SetVisibility(ESlateVisibility::Collapsed);
 	}
+	if (TXT_SelectedPhotoResult)
+	{
+		TXT_SelectedPhotoResult->SetText(FText::GetEmpty());
+		TXT_SelectedPhotoResult->SetVisibility(ESlateVisibility::Collapsed);
+	}
 	if (TXT_PopupBody)
 	{
 		// Restored here; RefreshPuzzleControls/BuildSentenceBuilder hides it again if there's
@@ -1022,6 +1027,18 @@ void UBalhwajeomTabletWidget::HandlePhotoSlotDropped(const int32 SlotIndex, cons
 			{
 				IMG_StatementIllustration->SetBrushFromTexture(SelectedTexture, true);
 				IMG_StatementIllustration->SetVisibility(ESlateVisibility::HitTestInvisible);
+			}
+			if (Sentence.SentenceType == ESentenceType::Statement && TXT_SelectedPhotoResult)
+			{
+				FSentenceDefinition PhotoSentence;
+				const bool bHasSolvedResult = !PhotoDef.PhotoSentenceID.IsNone() &&
+					Investigation->IsSentenceSolved(PhotoDef.PhotoSentenceID) &&
+					Investigation->GetSentenceDefinition(PhotoDef.PhotoSentenceID, PhotoSentence) &&
+					!PhotoSentence.ResultText.IsEmpty();
+				TXT_SelectedPhotoResult->SetText(
+					bHasSolvedResult ? PhotoSentence.ResultText : FText::GetEmpty());
+				TXT_SelectedPhotoResult->SetVisibility(
+					bHasSolvedResult ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 			}
 		}
 	}
@@ -1346,6 +1363,18 @@ void UBalhwajeomTabletWidget::BindActiveDetailWidgets()
 	WB_PuzzleWords = ActiveDetailWidget->GetPuzzleWords();
 	WB_SentenceBuilder = ActiveDetailWidget->GetSentenceBuilder();
 	TXT_PuzzleFeedback = ActiveDetailWidget->GetPuzzleFeedback();
+	TXT_SelectedPhotoResult = ActiveDetailWidget->GetSelectedPhotoResult();
+	if (TXT_SelectedPhotoResult)
+	{
+		FSlateFontInfo ResultFont = TXT_SelectedPhotoResult->GetFont();
+		if (UFont* ConfiguredFont = ActiveDetailWidget->GetSelectedPhotoResultFont())
+		{
+			ResultFont.FontObject = ConfiguredFont;
+		}
+		ResultFont.Size = ActiveDetailWidget->GetSelectedPhotoResultFontSize();
+		TXT_SelectedPhotoResult->SetFont(ResultFont);
+		TXT_SelectedPhotoResult->SetJustification(ETextJustify::Left);
+	}
 	TXT_PuzzlePhotoLabel = ActiveDetailWidget->GetPuzzlePhotoLabel();
 	WB_PuzzlePhotos = ActiveDetailWidget->GetPuzzlePhotos();
 	WB_PhotoSlots = ActiveDetailWidget->GetPhotoSlots();
@@ -1390,6 +1419,7 @@ void UBalhwajeomTabletWidget::ClearActiveDetailWidgets()
 	WB_PuzzleWords = nullptr;
 	WB_SentenceBuilder = nullptr;
 	TXT_PuzzleFeedback = nullptr;
+	TXT_SelectedPhotoResult = nullptr;
 	TXT_PuzzlePhotoLabel = nullptr;
 	WB_PuzzlePhotos = nullptr;
 	WB_PhotoSlots = nullptr;
@@ -2378,7 +2408,7 @@ void UBalhwajeomTabletPhotoSlot::SetFilled(const FText& PhotoLabel, UTexture2D* 
 FReply UBalhwajeomTabletPhotoSlot::NativeOnMouseButtonDown(
 	const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	if (!bFilled && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
 		OnPhotoSlotClicked.Broadcast(SlotIndex);
 		return FReply::Handled();
