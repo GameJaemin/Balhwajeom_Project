@@ -18,6 +18,8 @@ class UScrollBox;
 class USizeBox;
 class UTextBlock;
 class UTexture2D;
+class UWidget;
+class UFont;
 class UWrapBox;
 class UWidgetSwitcher;
 class UWidgetAnimation;
@@ -162,6 +164,8 @@ class BALHWAJEOM_API UBalhwajeomTabletDetailWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	UBalhwajeomTabletDetailWidget(const FObjectInitializer& ObjectInitializer);
+
 	UTextBlock* GetTitleText() const { return TXT_PopupTitle; }
 	UTextBlock* GetBodyText() const { return TXT_PopupBody; }
 	UImage* GetPhotoImage() const { return IMG_PopupPhoto; }
@@ -175,6 +179,26 @@ public:
 	UWrapBox* GetPuzzlePhotos() const { return WB_PuzzlePhotos; }
 	UWrapBox* GetPhotoSlots() const { return WB_PhotoSlots; }
 	UButton* GetStatementSubmitButton() const { return BTN_StatementSubmit; }
+	UTextBlock* GetPuzzleKeywordCount() const { return TXT_PuzzleKeywordCount; }
+	UWidget* GetPhotoPickerPanel() const { return PhotoPickerPanel; }
+	UButton* GetPhotoPickerCloseButton() const { return BTN_PhotoPickerClose; }
+	UFont* GetKeywordFont() const { return KeywordFont; }
+	int32 GetKeywordFontSize() const { return KeywordFontSize; }
+	UFont* GetStatementTextFont() const { return StatementTextFont; }
+	int32 GetStatementTextFontSize() const { return StatementTextFontSize; }
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Statement Style")
+	TObjectPtr<UFont> KeywordFont;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Statement Style", meta = (ClampMin = "8", ClampMax = "40"))
+	int32 KeywordFontSize = 14;
+
+	/** Font shared by TXT_PopupBody, sentence fragments, and keyword drop blanks. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Statement Style")
+	TObjectPtr<UFont> StatementTextFont;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Statement Style", meta = (ClampMin = "8", ClampMax = "40"))
+	int32 StatementTextFontSize = 16;
 
 private:
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TXT_PopupTitle;
@@ -190,6 +214,9 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UWrapBox> WB_PuzzlePhotos;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UWrapBox> WB_PhotoSlots;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UButton> BTN_StatementSubmit;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TXT_PuzzleKeywordCount;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UWidget> PhotoPickerPanel;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UButton> BTN_PhotoPickerClose;
 };
 
 /**
@@ -257,7 +284,12 @@ class BALHWAJEOM_API UBalhwajeomTabletWordChip : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void Configure(FName InWordID, const FText& InLabel, bool bInStatementStyle = false);
+	void Configure(
+		FName InWordID,
+		const FText& InLabel,
+		bool bInStatementStyle = false,
+		UFont* InStatementFont = nullptr,
+		int32 InStatementFontSize = 14);
 	FName GetWordID() const { return WordID; }
 
 protected:
@@ -290,7 +322,11 @@ class BALHWAJEOM_API UBalhwajeomTabletSentenceBlank : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void Configure(int32 InSlotIndex, bool bInStatementStyle = false);
+	void Configure(
+		int32 InSlotIndex,
+		bool bInStatementStyle = false,
+		UFont* InStatementFont = nullptr,
+		int32 InStatementFontSize = 16);
 	void SetFilled(FName InWordID, const FText& WordText);
 	void SetEmpty();
 	int32 GetSlotIndex() const { return SlotIndex; }
@@ -339,8 +375,12 @@ public:
 	void Configure(FName InPhotoID, const FText& InLabel, UTexture2D* Thumbnail = nullptr);
 	FName GetPhotoID() const { return PhotoID; }
 
+	UPROPERTY()
+	FOnTabletPhotoSelected OnPhotoSelected;
+
 protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
 
 private:
@@ -585,6 +625,12 @@ private:
 	UFUNCTION()
 	void HandleStatementSubmitClicked();
 
+	UFUNCTION()
+	void HandlePhotoPickerSelected(FName PhotoID);
+
+	UFUNCTION()
+	void HandlePhotoPickerCloseClicked();
+
 	/** Bound to BTN_PlayStoryVoice; replays the currently open photo's StoryVoice on demand. */
 	UFUNCTION()
 	void HandlePlayStoryVoiceClicked();
@@ -702,6 +748,15 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_StatementSubmit;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TXT_PuzzleKeywordCount;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> PhotoPickerPanel;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BTN_PhotoPickerClose;
+
 	TArray<ETabletPage> PageHistory;
 	TArray<FName> VisiblePhotoIDs;
 	TArray<FName> VisibleStatementIDs;
@@ -710,6 +765,7 @@ private:
 	FName ActiveSentenceID = NAME_None;
 	FSentenceSubmission ActiveSubmission;
 	TArray<FName> AvailablePuzzleWordIDs;
+	int32 PendingPhotoSlotIndex = INDEX_NONE;
 
 	/** Blank widgets for the sentence currently open, keyed by SlotIndex. Rebuilt each PreparePuzzle. */
 	UPROPERTY(Transient)
