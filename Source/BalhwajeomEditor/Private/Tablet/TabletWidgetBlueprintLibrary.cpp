@@ -99,6 +99,15 @@ namespace TabletDesigner
 	const TCHAR* PhotoDetailAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletPhoto.WBP_TabletPhoto");
 	const TCHAR* StatementBackgroundPath = TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/final_sentence_sister_BG.final_sentence_sister_BG");
 	const TCHAR* StatementSubmitPath = TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/final_button.final_button");
+	const TCHAR* PersonFolderBackgroundPath = TEXT("/Game/Balhwajeom/UI/Tablet/PersonFolder/folder_BG.folder_BG");
+	const TCHAR* PersonFolderSisterIdlePath = TEXT("/Game/Balhwajeom/UI/Tablet/PersonFolder/folder_sis_idle.folder_sis_idle");
+	const TCHAR* PersonFolderSisterSelectedPath = TEXT("/Game/Balhwajeom/UI/Tablet/PersonFolder/folder_sis_selected.folder_sis_selected");
+	const TCHAR* PersonFolderMotherIdlePath = TEXT("/Game/Balhwajeom/UI/Tablet/PersonFolder/folder_mom_idle.folder_mom_idle");
+	const TCHAR* PersonFolderMotherSelectedPath = TEXT("/Game/Balhwajeom/UI/Tablet/PersonFolder/folder_mom_selected.folder_mom_selected");
+	const TCHAR* PersonFolderBrotherIdlePath = TEXT("/Game/Balhwajeom/UI/Tablet/PersonFolder/folder_bro_idle.folder_bro_idle");
+	const TCHAR* PersonFolderBrotherSelectedPath = TEXT("/Game/Balhwajeom/UI/Tablet/PersonFolder/folder_bro_selected.folder_bro_selected");
+	const TCHAR* PersonFolderPhotoShadowPath = TEXT("/Game/Balhwajeom/UI/Tablet/PersonFolder/folder_photo_shadow.folder_photo_shadow");
+	const TCHAR* PersonFolderScrollPath = TEXT("/Game/Balhwajeom/UI/Tablet/PersonFolder/folder_scroll.folder_scroll");
 
 	const TCHAR* TabletBodyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Tablet_Body.Tablet_Body");
 	const TCHAR* FamilyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Family.Family");
@@ -503,25 +512,59 @@ namespace TabletDesigner
 			UScaleBox* Scale = Make<UScaleBox>(TEXT("ScaleBox_Wrapper"));
 			Scale->SetStretch(EStretch::ScaleToFit);
 			USizeBox* Size = Make<USizeBox>(TEXT("SizeBox_Wrapper"));
-			Size->SetWidthOverride(1440.0f);
-			Size->SetHeightOverride(1080.0f);
+			Size->SetWidthOverride(904.0f);
+			Size->SetHeightOverride(738.0f);
 			Scale->SetContent(Size);
 
 			UCanvasPanel* Page = Make<UCanvasPanel>(TEXT("Canvas_PersonFolderRoot"));
 			Size->SetContent(Page);
-			FillCanvas(Page, MakeColorImage(TEXT("IMG_Page_PersonFolderBackground"), PageBackground));
+			FillCanvas(Page, MakeTextureImage(TEXT("IMG_Page_PersonFolderBackground"), PersonFolderBackgroundPath, false), 0);
 
+			auto AddFolderTab = [&](const TCHAR* Suffix, const TCHAR* IdlePath, const TCHAR* SelectedPath,
+				const float X, const bool bInitiallySelected)
+			{
+				UButton* Button = MakeTransparentButton(*FString::Printf(TEXT("BTN_Folder%s"), Suffix));
+				UOverlay* Art = Make<UOverlay>(*FString::Printf(TEXT("Overlay_Folder%s"), Suffix));
+				UImage* Idle = MakeTextureImage(*FString::Printf(TEXT("IMG_Folder%sIdle"), Suffix), IdlePath, true);
+				UImage* Selected = MakeTextureImage(*FString::Printf(TEXT("IMG_Folder%sSelected"), Suffix), SelectedPath, true);
+				Idle->SetVisibility(bInitiallySelected ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+				Selected->SetVisibility(bInitiallySelected ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+				FillOverlay(Art, Idle);
+				FillOverlay(Art, Selected);
+				Button->SetContent(Art);
+				Place(Page, Button, X, 7.0f, 189.0f, 45.0f, 5);
+			};
+			AddFolderTab(TEXT("Sister"), PersonFolderSisterIdlePath, PersonFolderSisterSelectedPath, 21.0f, true);
+			AddFolderTab(TEXT("Mother"), PersonFolderMotherIdlePath, PersonFolderMotherSelectedPath, 214.0f, false);
+			AddFolderTab(TEXT("Brother"), PersonFolderBrotherIdlePath, PersonFolderBrotherSelectedPath, 407.0f, false);
+
+			// The title and icon remain as invisible binding anchors for existing runtime code; the
+			// authored tab textures provide the visible labels and folder icons.
 			UImage* FolderTitleIcon = Make<UImage>(TEXT("IMG_FolderTitleIcon"), true);
-			Place(Page, FolderTitleIcon, 40, 88, 48, 48, 5);
-			Place(Page, MakeText(TEXT("TXT_FolderTitle"), TEXT("여동생"), 30, WarmWhite, true), 100, 86, 500, 52, 5);
-			Place(Page, MakeTextButton(TEXT("BTN_FolderClose"), TEXT("×"), 36), 1320, 78, 58, 58, 5);
+			FolderTitleIcon->SetVisibility(ESlateVisibility::Collapsed);
+			Place(Page, FolderTitleIcon, 0, 0, 1, 1, 1);
+			UTextBlock* FolderTitle = MakeText(
+				TEXT("TXT_FolderTitle"), TEXT("여동생"), 18, FLinearColor::Black, true);
+			FolderTitle->SetShadowOffset(FVector2D::ZeroVector);
+			FolderTitle->SetJustification(ETextJustify::Center);
+			FolderTitle->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
+			Place(Page, FolderTitle, 27.0f, 65.0f, 139.0f, 26.0f, 5);
+			UTextBlock* FolderFeedback = MakeText(
+				TEXT("TXT_FolderFeedback"), TEXT(""), 17, FLinearColor(0.22f, 0.22f, 0.22f, 1.0f), true);
+			FolderFeedback->SetShadowOffset(FVector2D::ZeroVector);
+			FolderFeedback->SetJustification(ETextJustify::Center);
+			FolderFeedback->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
+			FolderFeedback->SetVisibility(ESlateVisibility::Collapsed);
+			Place(Page, FolderFeedback, 193.0f, 65.0f, 679.0f, 26.0f, 5);
+			// The close glyph is already drawn in folder_BG; this is its hit target.
+			Place(Page, MakeTransparentButton(TEXT("BTN_FolderClose")), 840.0f, 0.0f, 64.0f, 52.0f, 10);
 
-			UBorder* RecordArea = MakeBorder(TEXT("BRD_FolderRecordArea"), PagePanel, FMargin(28.0f));
-			UCanvasPanel* Records = Make<UCanvasPanel>(TEXT("Canvas_FolderRecords"));
-			RecordArea->SetContent(Records);
 			UScrollBox* PhotoScroll = Make<UScrollBox>(TEXT("SB_EvidencePhotos"), true);
-			Place(Records, PhotoScroll, 18, 20, 1144, 700);
-			Place(Page, RecordArea, 120, 220, 1200, 750, 5);
+			PhotoScroll->SetScrollBarVisibility(ESlateVisibility::Collapsed);
+			Place(Page, PhotoScroll, 23.0f, 104.0f, 857.0f, 620.0f, 4);
+			UImage* ScrollThumb = MakeTextureImage(TEXT("IMG_FolderScroll"), PersonFolderScrollPath, true);
+			ScrollThumb->SetVisibility(ESlateVisibility::HitTestInvisible);
+			Place(Page, ScrollThumb, 892.0f, 104.0f, 1.0f, 135.0f, 6);
 
 			Tree->RootWidget = Scale;
 		}
@@ -550,16 +593,32 @@ namespace TabletDesigner
 			UButton* Button = MakeTransparentButton(TEXT("BTN_File"));
 			UVerticalBox* Layout = Make<UVerticalBox>(TEXT("VB_FileLayout"));
 			USizeBox* ThumbnailSize = Make<USizeBox>(TEXT("SB_Thumbnail"), true);
-			ThumbnailSize->SetWidthOverride(96.0f);
-			ThumbnailSize->SetHeightOverride(64.0f);
-			ThumbnailSize->SetContent(Make<UImage>(TEXT("IMG_Thumbnail"), true));
-			UVerticalBoxSlot* ThumbnailSlot = Layout->AddChildToVerticalBox(ThumbnailSize);
-			ThumbnailSlot->SetHorizontalAlignment(HAlign_Center);
-			ThumbnailSlot->SetPadding(FMargin(0, 0, 0, 4));
-			UTextBlock* Label = MakeText(TEXT("TXT_Label"), TEXT("파일"), 18, WarmWhite, true);
-			Label->SetJustification(ETextJustify::Center);
+			ThumbnailSize->SetWidthOverride(152.0f);
+			ThumbnailSize->SetHeightOverride(89.0f);
+			UOverlay* ThumbnailOverlay = Make<UOverlay>(TEXT("Overlay_Thumbnail"));
+			ThumbnailSize->SetContent(ThumbnailOverlay);
+			FillOverlay(ThumbnailOverlay, MakeTextureImage(TEXT("IMG_ThumbnailShadow"), PersonFolderPhotoShadowPath, false));
+			UImage* Thumbnail = Make<UImage>(TEXT("IMG_Thumbnail"), true);
+			UOverlaySlot* ThumbnailImageSlot = ThumbnailOverlay->AddChildToOverlay(Thumbnail);
+			ThumbnailImageSlot->SetHorizontalAlignment(HAlign_Fill);
+			ThumbnailImageSlot->SetVerticalAlignment(VAlign_Fill);
+			ThumbnailImageSlot->SetPadding(FMargin(4.0f, 3.0f, 4.0f, 6.0f));
+			UVerticalBoxSlot* ThumbnailLayoutSlot = Layout->AddChildToVerticalBox(ThumbnailSize);
+			ThumbnailLayoutSlot->SetHorizontalAlignment(HAlign_Center);
+			ThumbnailLayoutSlot->SetPadding(FMargin(0, 0, 0, 3));
+			UTextBlock* Label = MakeText(TEXT("TXT_Label"), TEXT("파일"), 18, FLinearColor::Black, true);
+			Label->SetShadowOffset(FVector2D::ZeroVector);
+			Label->SetJustification(ETextJustify::Left);
+			Label->SetMinDesiredWidth(0.0f);
+			Label->SetAutoWrapText(false);
+			Label->SetClipping(EWidgetClipping::ClipToBounds);
 			Label->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
-			Layout->AddChildToVerticalBox(Label)->SetHorizontalAlignment(HAlign_Fill);
+			USizeBox* LabelSize = Make<USizeBox>(TEXT("SB_Label"));
+			LabelSize->SetWidthOverride(152.0f);
+			LabelSize->SetHeightOverride(26.0f);
+			LabelSize->SetClipping(EWidgetClipping::ClipToBounds);
+			LabelSize->SetContent(Label);
+			Layout->AddChildToVerticalBox(LabelSize)->SetHorizontalAlignment(HAlign_Fill);
 			Button->SetContent(Layout);
 			Tree->RootWidget = Button;
 		}
@@ -569,21 +628,21 @@ namespace TabletDesigner
 			UVerticalBox* Root = Make<UVerticalBox>(TEXT("VB_SectionRoot"));
 			UButton* Header = MakeTransparentButton(TEXT("HeaderButton"));
 			UHorizontalBox* HeaderRow = Make<UHorizontalBox>(TEXT("HB_SectionHeader"));
-			UTextBlock* Arrow = MakeText(TEXT("ArrowText"), TEXT("▼"), 20, WarmWhite, true);
+			UTextBlock* Arrow = MakeText(TEXT("ArrowText"), TEXT(""), 1, FLinearColor::Transparent, true);
 			UHorizontalBoxSlot* ArrowSlot = HeaderRow->AddChildToHorizontalBox(Arrow);
 			ArrowSlot->SetPadding(FMargin(0, 0, 10, 0));
 			ArrowSlot->SetVerticalAlignment(VAlign_Center);
 			HeaderRow->AddChildToHorizontalBox(
-				MakeText(TEXT("TitleText"), TEXT("분류 (0)"), 22, WarmWhite, true));
+				MakeText(TEXT("TitleText"), TEXT("단서와 정보 0"), 20, FLinearColor::Black, true));
 			if (UButtonSlot* HeaderContentSlot = Cast<UButtonSlot>(Header->SetContent(HeaderRow)))
 			{
 				HeaderContentSlot->SetHorizontalAlignment(HAlign_Left);
 			}
 			UVerticalBoxSlot* HeaderSlot = Root->AddChildToVerticalBox(Header);
-			HeaderSlot->SetPadding(FMargin(0, 6, 0, 10));
+			HeaderSlot->SetPadding(FMargin(2, 8, 0, 10));
 			UWrapBox* Content = Make<UWrapBox>(TEXT("ContentWrapBox"), true);
-			Content->SetInnerSlotPadding(FVector2D(12, 12));
-			Root->AddChildToVerticalBox(Content)->SetPadding(FMargin(0, 0, 0, 14));
+			Content->SetInnerSlotPadding(FVector2D(17, 14));
+			Root->AddChildToVerticalBox(Content)->SetPadding(FMargin(0, 0, 0, 16));
 			Tree->RootWidget = Root;
 		}
 
@@ -692,31 +751,14 @@ namespace TabletDesigner
 				Submit->SetVisibility(ESlateVisibility::Collapsed);
 				Place(Canvas, Submit, 703.0f, 704.0f, 109.0f, 35.0f, 9);
 
-				// Folder-style photo browser opened by the evidence slot's "찾아보기" action.
-				UCanvasPanel* PhotoPicker = Make<UCanvasPanel>(TEXT("PhotoPickerPanel"), true);
-				FillCanvas(PhotoPicker, MakeColorImage(
-					TEXT("IMG_PhotoPickerBackground"), FLinearColor(0.88f, 0.88f, 0.88f, 1.0f)));
-				UBorder* PickerHeader = MakeBorder(
-					TEXT("BRD_PhotoPickerHeader"), FLinearColor(0.48f, 0.48f, 0.48f, 1.0f));
-				Place(PhotoPicker, PickerHeader, 0.0f, 0.0f, 860.0f, 54.0f, 2);
-				UTextBlock* PhotoLabel = MakeText(
-					TEXT("TXT_PuzzlePhotoLabel"), TEXT("증거 사진 폴더"), 20, FLinearColor::White, true);
-				PhotoLabel->SetShadowOffset(FVector2D::ZeroVector);
-				Place(PhotoPicker, PhotoLabel, 24.0f, 10.0f, 500.0f, 36.0f, 3);
-				Place(PhotoPicker, MakeTextButton(TEXT("BTN_PhotoPickerClose"), TEXT("×"), 30),
-					800.0f, 2.0f, 54.0f, 48.0f, 4);
-
-				UBorder* FolderBody = MakeBorder(
-					TEXT("BRD_PhotoPickerBody"), FLinearColor(0.97f, 0.97f, 0.97f, 1.0f), FMargin(18.0f));
-				Place(PhotoPicker, FolderBody, 18.0f, 72.0f, 824.0f, 592.0f, 2);
-				UScrollBox* PhotoScroll = Make<UScrollBox>(TEXT("SB_PuzzlePhotos"));
-				UWrapBox* PuzzlePhotos = Make<UWrapBox>(TEXT("WB_PuzzlePhotos"), true);
-				PuzzlePhotos->SetInnerSlotPadding(FVector2D(12.0f, 12.0f));
-				PuzzlePhotos->SetVisibility(ESlateVisibility::Collapsed);
-				PhotoScroll->AddChild(PuzzlePhotos);
-				FolderBody->SetContent(PhotoScroll);
-				PhotoPicker->SetVisibility(ESlateVisibility::Collapsed);
-				Place(Canvas, PhotoPicker, 207.0f, 108.0f, 860.0f, 680.0f, 20);
+				// Reuse the real personal-folder WBP as the modal evidence browser.
+				if (UClass* PersonFolderClass = LoadClass<UUserWidget>(nullptr, PersonFolderClassPath))
+				{
+					UUserWidget* PhotoPickerFolder = MakeUserWidget(
+						PersonFolderClass, TEXT("WBP_PhotoPickerFolder"), true);
+					PhotoPickerFolder->SetVisibility(ESlateVisibility::Collapsed);
+					Place(Canvas, PhotoPickerFolder, 185.0f, 84.5f, 904.0f, 738.0f, 20);
+				}
 
 				Tree->RootWidget = Scale;
 				return;
@@ -2124,11 +2166,25 @@ bool UTabletWidgetBlueprintLibrary::RedesignTabletStatementWidget()
 bool UTabletWidgetBlueprintLibrary::InstallTabletPersonFolderWidget()
 {
 	using namespace TabletDesigner;
+	// These three assets form one visual unit in the supplied folder design, so update them
+	// together while leaving unrelated tablet child widgets untouched.
 	if (!BuildWidgetBlueprint(
+		TEXT("WBP_TabletFileTile"),
+		FileTileAssetPath,
+		UBalhwajeomTabletPhotoButton::StaticClass(),
+		true,
+		[](const FBuilder& Builder) { Builder.BuildFileTileWidget(); })
+		|| !BuildWidgetBlueprint(
+			TEXT("WBP_TabletFolderSection"),
+			FolderSectionAssetPath,
+			UBalhwajeomTabletFolderSection::StaticClass(),
+			true,
+			[](const FBuilder& Builder) { Builder.BuildFolderSectionWidget(); })
+		|| !BuildWidgetBlueprint(
 		PersonFolderAssetName,
 		PersonFolderAssetPath,
 		UBalhwajeomTabletPersonFolderWidget::StaticClass(),
-		false,
+		true,
 		[](const FBuilder& Builder) { Builder.BuildPersonFolderWidget(); }))
 	{
 		return false;

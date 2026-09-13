@@ -39,6 +39,7 @@ enum class ETabletPage : uint8
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPhotoSelected, FName, PhotoID);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletFolderSelected, FName, CharacterID);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnTabletPersonFolderBackRequested);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPersonFolderTabRequested, int32, TabIndex);
 /** OriginSlotIndex is the sentence blank the word was dragged out of (INDEX_NONE if it came from the acquired-keyword list instead). */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnTabletBlankDropped, int32, SlotIndex, FName, WordID, int32, OriginSlotIndex);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTabletPhotoSlotDropped, int32, SlotIndex, FName, PhotoID);
@@ -182,6 +183,7 @@ public:
 	UTextBlock* GetPuzzleKeywordCount() const { return TXT_PuzzleKeywordCount; }
 	UWidget* GetPhotoPickerPanel() const { return PhotoPickerPanel; }
 	UButton* GetPhotoPickerCloseButton() const { return BTN_PhotoPickerClose; }
+	class UBalhwajeomTabletPersonFolderWidget* GetPhotoPickerFolder() const { return WBP_PhotoPickerFolder; }
 	UFont* GetKeywordFont() const { return KeywordFont; }
 	int32 GetKeywordFontSize() const { return KeywordFontSize; }
 	UFont* GetStatementTextFont() const { return StatementTextFont; }
@@ -217,6 +219,7 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TXT_PuzzleKeywordCount;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UWidget> PhotoPickerPanel;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UButton> BTN_PhotoPickerClose;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<class UBalhwajeomTabletPersonFolderWidget> WBP_PhotoPickerFolder;
 };
 
 /**
@@ -230,12 +233,19 @@ class BALHWAJEOM_API UBalhwajeomTabletPersonFolderWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	UBalhwajeomTabletPersonFolderWidget(const FObjectInitializer& ObjectInitializer);
 	void SetFolderHeader(const FText& FolderName, UTexture2D* FolderIcon);
+	void SetSelectedTab(int32 TabIndex);
+	void SetFeedbackMessage(const FText& Message);
+	void ClearFeedbackMessage();
 	void ClearFolderSections();
 	void AddFolderSection(UWidget* Section);
 
 	UPROPERTY(BlueprintAssignable, Category = "Tablet|Folder")
 	FOnTabletPersonFolderBackRequested OnBackRequested;
+
+	UPROPERTY(BlueprintAssignable, Category = "Tablet|Folder")
+	FOnTabletPersonFolderTabRequested OnTabRequested;
 
 protected:
 	virtual void NativeOnInitialized() override;
@@ -244,14 +254,35 @@ private:
 	UFUNCTION()
 	void HandleCloseClicked();
 
+	UFUNCTION() void HandleSisterTabClicked();
+	UFUNCTION() void HandleMotherTabClicked();
+	UFUNCTION() void HandleBrotherTabClicked();
+	UFUNCTION() void HandleFolderScrolled(float CurrentOffset);
+	void RefreshTabVisuals();
+	int32 SelectedTabIndex = 0;
+
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TXT_FolderTitle;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TXT_FolderFeedback;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UImage> IMG_FolderTitleIcon;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_FolderClose;
+
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UButton> BTN_FolderSister;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UButton> BTN_FolderMother;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UButton> BTN_FolderBrother;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UImage> IMG_FolderSisterIdle;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UImage> IMG_FolderSisterSelected;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UImage> IMG_FolderMotherIdle;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UImage> IMG_FolderMotherSelected;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UImage> IMG_FolderBrotherIdle;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UImage> IMG_FolderBrotherSelected;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UImage> IMG_FolderScroll;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UScrollBox> SB_EvidencePhotos;
@@ -629,7 +660,19 @@ private:
 	void HandlePhotoPickerSelected(FName PhotoID);
 
 	UFUNCTION()
+	void HandleUnavailablePhotoPickerSelected(FName PhotoID);
+
+	UFUNCTION()
 	void HandlePhotoPickerCloseClicked();
+
+	UFUNCTION()
+	void HandlePersonFolderTabRequested(int32 TabIndex);
+
+	UFUNCTION()
+	void HandlePhotoPickerTabRequested(int32 TabIndex);
+
+	FName ResolveFolderTabCharacterID(int32 TabIndex) const;
+	void PopulatePhotoPicker();
 
 	/** Bound to BTN_PlayStoryVoice; replays the currently open photo's StoryVoice on demand. */
 	UFUNCTION()
@@ -757,6 +800,9 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_PhotoPickerClose;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UBalhwajeomTabletPersonFolderWidget> PhotoPickerFolder;
+
 	TArray<ETabletPage> PageHistory;
 	TArray<FName> VisiblePhotoIDs;
 	TArray<FName> VisibleStatementIDs;
@@ -766,6 +812,7 @@ private:
 	FSentenceSubmission ActiveSubmission;
 	TArray<FName> AvailablePuzzleWordIDs;
 	int32 PendingPhotoSlotIndex = INDEX_NONE;
+	FName PhotoPickerCharacterID = NAME_None;
 
 	/** Blank widgets for the sentence currently open, keyed by SlotIndex. Rebuilt each PreparePuzzle. */
 	UPROPERTY(Transient)
