@@ -119,7 +119,7 @@ private:
  * Collapsible group header for the folder page's file list (like Windows Explorer's date groups):
  * a clickable title row ("{Title} ({Count})" with a ▼/▶ fold arrow) above a WrapBox of file tiles.
  * Built entirely at runtime; RefreshFolderContents() clears and rebuilds one of these per bucket
- * (진술서/분석 문장/완성 문장) every time a folder is opened.
+ * (단서와 정보/증거 사진/추억 사진) every time a folder is opened.
  */
 UCLASS()
 class BALHWAJEOM_API UBalhwajeomTabletFolderSection : public UUserWidget
@@ -176,6 +176,7 @@ public:
 	UWrapBox* GetPuzzleWords() const { return WB_PuzzleWords; }
 	UWrapBox* GetSentenceBuilder() const { return WB_SentenceBuilder; }
 	UTextBlock* GetPuzzleFeedback() const { return TXT_PuzzleFeedback; }
+	UTextBlock* GetSelectedPhotoResult() const { return TXT_SelectedPhotoResult; }
 	UTextBlock* GetPuzzlePhotoLabel() const { return TXT_PuzzlePhotoLabel; }
 	UWrapBox* GetPuzzlePhotos() const { return WB_PuzzlePhotos; }
 	UWrapBox* GetPhotoSlots() const { return WB_PhotoSlots; }
@@ -188,6 +189,8 @@ public:
 	int32 GetKeywordFontSize() const { return KeywordFontSize; }
 	UFont* GetStatementTextFont() const { return StatementTextFont; }
 	int32 GetStatementTextFontSize() const { return StatementTextFontSize; }
+	UFont* GetSelectedPhotoResultFont() const { return SelectedPhotoResultFont; }
+	int32 GetSelectedPhotoResultFontSize() const { return SelectedPhotoResultFontSize; }
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Statement Style")
 	TObjectPtr<UFont> KeywordFont;
@@ -202,6 +205,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Statement Style", meta = (ClampMin = "8", ClampMax = "40"))
 	int32 StatementTextFontSize = 16;
 
+	/** Font used by the selected evidence photo's ResultText below the photo area. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Statement Style")
+	TObjectPtr<UFont> SelectedPhotoResultFont;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Statement Style", meta = (ClampMin = "8", ClampMax = "40"))
+	int32 SelectedPhotoResultFontSize = 11;
+
 private:
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TXT_PopupTitle;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TXT_PopupBody;
@@ -212,6 +222,7 @@ private:
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UWrapBox> WB_PuzzleWords;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UWrapBox> WB_SentenceBuilder;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TXT_PuzzleFeedback;
+	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TXT_SelectedPhotoResult;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TXT_PuzzlePhotoLabel;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UWrapBox> WB_PuzzlePhotos;
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UWrapBox> WB_PhotoSlots;
@@ -510,6 +521,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Tablet|Family")
 	FName GetActiveCharacterID() const { return ActiveCharacterID; }
 
+	/** Opens the default person's folder and its first statement. Returns false when none exists. */
+	bool OpenInitialStatement();
+
 #if WITH_EDITOR
 	/** Commandlet-created widgets have no local player, so UMG skips NativeOnInitialized. */
 	void InitializeForAutomatedTest();
@@ -752,7 +766,7 @@ private:
 	TObjectPtr<UButton> BTN_PhysicalHome;
 
 	/** Folder file list container. RefreshFolderContents() clears it and adds up to three
-	 * UBalhwajeomTabletFolderSection children (진술서/분석 문장/완성 문장), each holding its own tiles --
+	 * UBalhwajeomTabletFolderSection children (단서와 정보/증거 사진/추억 사진), each holding its own tiles --
 	 * replaces the old single flat WB_EvidencePhotos WrapBox + separate SB_StatementTile slot. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UScrollBox> SB_EvidencePhotos;
@@ -772,6 +786,10 @@ private:
 	/** Shows "잘못된 증거인 것 같다" briefly after an incorrect drop. Cleared on the next correct drop or popup open. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TXT_PuzzleFeedback;
+
+	/** The solved ResultText belonging to the evidence photo currently placed in the statement. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TXT_SelectedPhotoResult;
 
 	/** "증거 사진" label above WB_PuzzlePhotos/WB_PhotoSlots. Only shown alongside them, when the
 	 * active sentence actually requires photo evidence (Sentence.PhotoSlots non-empty) -- never for

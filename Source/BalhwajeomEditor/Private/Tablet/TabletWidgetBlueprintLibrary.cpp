@@ -688,6 +688,14 @@ namespace TabletDesigner
 				Illustration->SetVisibility(ESlateVisibility::Collapsed);
 				Place(Canvas, Illustration, 574.0f, 404.0f, 385.0f, 216.0f, 3);
 
+				UTextBlock* SelectedPhotoResult = MakeText(
+					TEXT("TXT_SelectedPhotoResult"), TEXT(""), 14, FLinearColor::Black, true);
+				SelectedPhotoResult->SetJustification(ETextJustify::Center);
+				SelectedPhotoResult->SetAutoWrapText(true);
+				SelectedPhotoResult->SetShadowOffset(FVector2D::ZeroVector);
+				SelectedPhotoResult->SetVisibility(ESlateVisibility::Collapsed);
+				Place(Canvas, SelectedPhotoResult, 574.0f, 628.0f, 385.0f, 48.0f, 7);
+
 				UWrapBox* PhotoSlots = Make<UWrapBox>(TEXT("WB_PhotoSlots"), true);
 				PhotoSlots->SetInnerSlotPadding(FVector2D::ZeroVector);
 				PhotoSlots->SetVisibility(ESlateVisibility::Collapsed);
@@ -699,7 +707,7 @@ namespace TabletDesigner
 				Feedback->SetJustification(ETextJustify::Center);
 				Feedback->SetVisibility(ESlateVisibility::Collapsed);
 				Feedback->SetShadowOffset(FVector2D::ZeroVector);
-				Place(Canvas, Feedback, 574.0f, 662.0f, 385.0f, 26.0f, 8);
+				Place(Canvas, Feedback, 574.0f, 678.0f, 385.0f, 22.0f, 8);
 
 				// The right-side grid is baked into the background. Runtime chips occupy two 106px columns;
 				// their supplied hover texture is applied by UBalhwajeomTabletWordChip.
@@ -3764,7 +3772,6 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		FSentenceDefinition Statement;
 		Statement.SentenceID = TEXT("SENT_STATEMENT_SISTER_01");
 		Statement.CharacterID = SisterCharacterID;
-		Statement.LieText = FText::FromString(TEXT("나는 돼지 장식이 놓인 거울을 본 적이 없어."));
 		Statement.SentenceType = ESentenceType::Statement;
 		Statement.SentenceTemplate = FText::FromString(TEXT("현장에 남은 [   ]이 그 말을 반박한다."));
 		Statement.ResultText = FText::FromString(TEXT("현장에 남은 거울과 완성된 사진이 그 말을 반박한다."));

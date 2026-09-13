@@ -55,9 +55,6 @@ struct BALHWAJEOM_API FSentenceDefinition : public FTableRowBase
 	bool bIsFolderStatement = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (MultiLine = "true"))
-	FText LieText;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence", meta = (MultiLine = "true"))
 	FText SentenceTemplate;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sentence")

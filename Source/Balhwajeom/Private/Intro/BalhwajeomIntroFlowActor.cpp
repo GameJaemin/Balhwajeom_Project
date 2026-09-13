@@ -2,6 +2,8 @@
 
 #include "CameraSystem/BalhwajeomCameraPlayerController.h"
 #include "Components/AudioComponent.h"
+#include "Investigation/BalhwajeomInvestigationSubsystem.h"
+#include "Investigation/EvidenceDefinitions.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -93,6 +95,21 @@ void ABalhwajeomIntroFlowActor::EndPlay(const EEndPlayReason::Type EndPlayReason
 		IntroMediaPlayer->OnEndReached.RemoveAll(this);
 		IntroMediaPlayer->Close();
 	}
+	if (EndingMediaPlayer)
+	{
+		EndingMediaPlayer->OnMediaOpened.RemoveAll(this);
+		EndingMediaPlayer->OnMediaOpenFailed.RemoveAll(this);
+		EndingMediaPlayer->OnEndReached.RemoveAll(this);
+		EndingMediaPlayer->Close();
+	}
+	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+	if (UBalhwajeomTabletComponent* Tablet = Pawn
+		? Pawn->FindComponentByClass<UBalhwajeomTabletComponent>()
+		: (PC ? PC->FindComponentByClass<UBalhwajeomTabletComponent>() : nullptr))
+	{
+		Tablet->OnTabletClosed.RemoveAll(this);
+	}
 	if (CinematicVideoWidget) CinematicVideoWidget->RemoveFromParent();
 	if (MainMenuWidget) MainMenuWidget->RemoveFromParent();
 	if (ScreenFadeWidget) ScreenFadeWidget->RemoveFromParent();
@@ -119,6 +136,14 @@ void ABalhwajeomIntroFlowActor::HandleFadeToBlackFinished()
 	else if (State == EBalhwajeomIntroState::TransitionToGameplay)
 	{
 		EnterGameplayAtBlack();
+	}
+	else if (State == EBalhwajeomIntroState::TransitionToEnding)
+	{
+		StartEndingCinematic();
+	}
+	else if (State == EBalhwajeomIntroState::TransitionToTitle)
+	{
+		ReturnToTitle();
 	}
 }
 
@@ -188,34 +213,50 @@ bool ABalhwajeomIntroFlowActor::StartMediaCinematic()
 void ABalhwajeomIntroFlowActor::HandleMediaOpened(FString OpenedUrl)
 {
 	(void)OpenedUrl;
-	if (State != EBalhwajeomIntroState::Cinematic || !IntroMediaPlayer)
+	UMediaPlayer* ActiveMediaPlayer = State == EBalhwajeomIntroState::Ending
+		? EndingMediaPlayer.Get() : IntroMediaPlayer.Get();
+	if ((State != EBalhwajeomIntroState::Cinematic && State != EBalhwajeomIntroState::Ending) ||
+		!ActiveMediaPlayer)
 	{
 		return;
 	}
-	IntroMediaPlayer->Play();
+	ActiveMediaPlayer->Play();
 	ScreenFadeWidget->FadeFromBlack(TransitionFadeDuration);
 }
 
 void ABalhwajeomIntroFlowActor::HandleMediaOpenFailed(FString FailedUrl)
 {
 	UE_LOG(LogTemp, Error, TEXT("%s: Failed to open intro media: %s"), *GetName(), *FailedUrl);
-	if (IntroMediaPlayer)
+	UMediaPlayer* FailedPlayer = State == EBalhwajeomIntroState::Ending
+		? EndingMediaPlayer.Get() : IntroMediaPlayer.Get();
+	if (FailedPlayer)
 	{
-		IntroMediaPlayer->OnMediaOpened.RemoveAll(this);
-		IntroMediaPlayer->OnMediaOpenFailed.RemoveAll(this);
-		IntroMediaPlayer->OnEndReached.RemoveAll(this);
+		FailedPlayer->OnMediaOpened.RemoveAll(this);
+		FailedPlayer->OnMediaOpenFailed.RemoveAll(this);
+		FailedPlayer->OnEndReached.RemoveAll(this);
 	}
 	if (CinematicVideoWidget)
 	{
 		CinematicVideoWidget->RemoveFromParent();
 		CinematicVideoWidget = nullptr;
 	}
-	StartSequenceCinematic();
+	if (State == EBalhwajeomIntroState::Ending)
+	{
+		StartEndingSequenceCinematic();
+	}
+	else
+	{
+		StartSequenceCinematic();
+	}
 }
 
 void ABalhwajeomIntroFlowActor::HandleMediaEndReached()
 {
-	if (State == EBalhwajeomIntroState::Cinematic)
+	if (State == EBalhwajeomIntroState::Ending)
+	{
+		BeginTitleTransition();
+	}
+	else if (State == EBalhwajeomIntroState::Cinematic)
 	{
 		BeginGameplayTransition();
 	}
@@ -250,7 +291,14 @@ void ABalhwajeomIntroFlowActor::StartSequenceCinematic()
 
 void ABalhwajeomIntroFlowActor::HandleSequenceFinished()
 {
-	BeginGameplayTransition();
+	if (State == EBalhwajeomIntroState::Ending)
+	{
+		BeginTitleTransition();
+	}
+	else
+	{
+		BeginGameplayTransition();
+	}
 }
 
 void ABalhwajeomIntroFlowActor::BeginGameplayTransition()
@@ -274,6 +322,20 @@ void ABalhwajeomIntroFlowActor::EnterGameplayAtBlack()
 		CinematicVideoWidget = nullptr;
 	}
 	SetGameplayEnabled(true);
+	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+	UBalhwajeomTabletComponent* Tablet = Pawn
+		? Pawn->FindComponentByClass<UBalhwajeomTabletComponent>()
+		: (PC ? PC->FindComponentByClass<UBalhwajeomTabletComponent>() : nullptr);
+	if (Tablet)
+	{
+		Tablet->OnTabletClosed.RemoveAll(this);
+		Tablet->OnTabletClosed.AddUObject(this, &ThisClass::HandleTabletClosed);
+		if (bOpenStatementAfterIntro)
+		{
+			Tablet->RequestOpenTabletToStatement();
+		}
+	}
 	if (BGM)
 	{
 		BGMAudioComponent->Stop();
@@ -281,6 +343,133 @@ void ABalhwajeomIntroFlowActor::EnterGameplayAtBlack()
 		BGMAudioComponent->FadeIn(BGMFadeDuration, BGMVolume);
 	}
 	ScreenFadeWidget->FadeFromBlack(TransitionFadeDuration);
+}
+
+void ABalhwajeomIntroFlowActor::HandleTabletClosed()
+{
+	if (State != EBalhwajeomIntroState::Gameplay || bEndingTriggered)
+	{
+		return;
+	}
+
+	UGameInstance* GameInstance = GetGameInstance();
+	UBalhwajeomInvestigationSubsystem* Investigation = GameInstance
+		? GameInstance->GetSubsystem<UBalhwajeomInvestigationSubsystem>() : nullptr;
+	if (!Investigation)
+	{
+		return;
+	}
+
+	bool bFoundStatement = false;
+	TArray<FCharacterDefinition> Characters;
+	Investigation->GetAllCharacterDefinitions(Characters);
+	for (const FCharacterDefinition& Character : Characters)
+	{
+		TArray<FSentenceDefinition> Statements;
+		Investigation->GetStatementSentencesForCharacter(Character.CharacterID, Statements);
+		for (const FSentenceDefinition& Statement : Statements)
+		{
+			bFoundStatement = true;
+			if (!Investigation->IsSentenceSolved(Statement.SentenceID))
+			{
+				return;
+			}
+		}
+	}
+	if (!bFoundStatement)
+	{
+		return;
+	}
+
+	bEndingTriggered = true;
+	State = EBalhwajeomIntroState::TransitionToEnding;
+	if (BGMAudioComponent && BGMAudioComponent->IsPlaying())
+	{
+		BGMAudioComponent->FadeOut(BGMFadeDuration, 0.0f);
+	}
+	SetGameplayEnabled(false);
+	ScreenFadeWidget->FadeToBlack(TransitionFadeDuration);
+}
+
+void ABalhwajeomIntroFlowActor::StartEndingCinematic()
+{
+	if (!StartEndingMediaCinematic())
+	{
+		StartEndingSequenceCinematic();
+	}
+}
+
+bool ABalhwajeomIntroFlowActor::StartEndingMediaCinematic()
+{
+	if (!EndingMediaSource || !EndingMediaPlayer || !EndingMediaTexture)
+	{
+		return false;
+	}
+	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	const TSubclassOf<UBalhwajeomCinematicVideoWidget> WidgetClass =
+		CinematicVideoWidgetClass.LoadSynchronous();
+	if (!PC || !WidgetClass)
+	{
+		return false;
+	}
+	CinematicVideoWidget = CreateWidget<UBalhwajeomCinematicVideoWidget>(PC, WidgetClass);
+	if (!CinematicVideoWidget)
+	{
+		return false;
+	}
+	EndingMediaTexture->SetMediaPlayer(EndingMediaPlayer);
+	CinematicVideoWidget->SetMediaTexture(EndingMediaTexture);
+	CinematicVideoWidget->AddToPlayerScreen(2000);
+	EndingMediaPlayer->OnMediaOpened.RemoveAll(this);
+	EndingMediaPlayer->OnMediaOpenFailed.RemoveAll(this);
+	EndingMediaPlayer->OnEndReached.RemoveAll(this);
+	EndingMediaPlayer->OnMediaOpened.AddDynamic(this, &ThisClass::HandleMediaOpened);
+	EndingMediaPlayer->OnMediaOpenFailed.AddDynamic(this, &ThisClass::HandleMediaOpenFailed);
+	EndingMediaPlayer->OnEndReached.AddDynamic(this, &ThisClass::HandleMediaEndReached);
+	EndingMediaPlayer->SetLooping(false);
+	State = EBalhwajeomIntroState::Ending;
+	if (!EndingMediaPlayer->OpenSource(EndingMediaSource))
+	{
+		HandleMediaOpenFailed(EndingMediaSource->GetUrl());
+	}
+	return true;
+}
+
+void ABalhwajeomIntroFlowActor::StartEndingSequenceCinematic()
+{
+	if (!EndingSequence)
+	{
+		ReturnToTitle();
+		return;
+	}
+	FMovieSceneSequencePlaybackSettings Settings;
+	Settings.bAutoPlay = false;
+	Settings.LoopCount.Value = 0;
+	ALevelSequenceActor* CreatedSequenceActor = nullptr;
+	SequencePlayer = ULevelSequencePlayer::CreateLevelSequencePlayer(
+		GetWorld(), EndingSequence, Settings, CreatedSequenceActor);
+	SequenceActor = CreatedSequenceActor;
+	if (!SequencePlayer)
+	{
+		ReturnToTitle();
+		return;
+	}
+	SequencePlayer->OnFinished.AddDynamic(this, &ThisClass::HandleSequenceFinished);
+	State = EBalhwajeomIntroState::Ending;
+	SequencePlayer->Play();
+	ScreenFadeWidget->FadeFromBlack(TransitionFadeDuration);
+}
+
+void ABalhwajeomIntroFlowActor::BeginTitleTransition()
+{
+	State = EBalhwajeomIntroState::TransitionToTitle;
+	ScreenFadeWidget->FadeToBlack(TransitionFadeDuration);
+}
+
+void ABalhwajeomIntroFlowActor::ReturnToTitle()
+{
+	const FString CurrentLevel = UGameplayStatics::GetCurrentLevelName(this, true);
+	UGameplayStatics::OpenLevel(this, FName(*CurrentLevel));
 }
 
 void ABalhwajeomIntroFlowActor::SetGameplayEnabled(bool bEnabled)
