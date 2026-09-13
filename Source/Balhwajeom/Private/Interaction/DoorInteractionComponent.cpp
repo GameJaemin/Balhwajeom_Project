@@ -1,7 +1,10 @@
 #include "Interaction/DoorInteractionComponent.h"
 
 #include "Components/SceneComponent.h"
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "Story/StoryStateSubsystem.h"
 
 
 UDoorInteractionComponent::UDoorInteractionComponent()
@@ -32,9 +35,36 @@ void UDoorInteractionComponent::BeginPlay()
 }
 
 
+bool UDoorInteractionComponent::IsUnlocked() const
+{
+	const bool bHasQuery = !UnlockQuery.IsEmpty();
+	const bool bHasTags = !UnlockRequiresTags.IsEmpty();
+	if (!bHasQuery && !bHasTags)
+	{
+		return true;
+	}
+
+	const UWorld* World = GetWorld();
+	const UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+	const UStoryStateSubsystem* StoryState =
+		GameInstance ? GameInstance->GetSubsystem<UStoryStateSubsystem>() : nullptr;
+	if (!StoryState)
+	{
+		return false;
+	}
+
+	if (bHasTags && !StoryState->HasAllStateTags(UnlockRequiresTags))
+	{
+		return false;
+	}
+
+	return !bHasQuery || StoryState->MatchesStateQuery(UnlockQuery);
+}
+
+
 bool UDoorInteractionComponent::CanInteract() const
 {
-	return IsValid(GetOwner()) && !bIsOpening && !bIsOpen;
+	return IsValid(GetOwner()) && !bIsOpening && !bIsOpen && IsUnlocked();
 }
 
 

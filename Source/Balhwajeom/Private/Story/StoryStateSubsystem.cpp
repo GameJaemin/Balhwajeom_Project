@@ -29,6 +29,10 @@ void UStoryStateSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		this,
 		&ThisClass::HandleSentenceSolved
 	);
+	InvestigationSubsystem->OnEvidenceStateChanged.AddUniqueDynamic(
+		this,
+		&ThisClass::HandleEvidenceStateChanged
+	);
 
 	TArray<FCapturedPhotoRecord> CapturedPhotos;
 	InvestigationSubsystem->GetCapturedPhotos(CapturedPhotos);
@@ -50,6 +54,10 @@ void UStoryStateSubsystem::Deinitialize()
 		InvestigationSubsystem->OnSentenceSolved.RemoveDynamic(
 			this,
 			&ThisClass::HandleSentenceSolved
+		);
+		InvestigationSubsystem->OnEvidenceStateChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleEvidenceStateChanged
 		);
 		InvestigationSubsystem = nullptr;
 	}
@@ -236,6 +244,35 @@ void UStoryStateSubsystem::HandleSentenceSolved(FName SentenceID)
 }
 
 
+bool UStoryStateSubsystem::AddEvidenceStoryPlayedTag(FName StateID)
+{
+	if (StateID.IsNone())
+	{
+		return false;
+	}
+
+	const FGameplayTag StoryPlayedTag = FGameplayTag::RequestGameplayTag(
+		FName(*FString::Printf(
+			TEXT("Evidence.StoryPlayed.%s"),
+			*StateID.ToString()
+		)),
+		false
+	);
+
+	return StoryPlayedTag.IsValid() && AddStateTag(StoryPlayedTag);
+}
+
+
+void UStoryStateSubsystem::HandleEvidenceStateChanged(
+	FGuid ChangedInstanceID,
+	FName PreviousStateID,
+	FName NewStateID
+)
+{
+	AddEvidenceStateTag(NewStateID);
+}
+
+
 void UStoryStateSubsystem::AddPhotographedEvidenceTag(FName ObjectID)
 {
 	if (ObjectID.IsNone())
@@ -274,5 +311,26 @@ void UStoryStateSubsystem::AddSentenceSolvedEvidenceTag(FName PhotoID)
 	if (SentenceSolvedTag.IsValid())
 	{
 		AddStateTag(SentenceSolvedTag);
+	}
+}
+
+
+void UStoryStateSubsystem::AddEvidenceStateTag(FName StateID)
+{
+	if (StateID.IsNone())
+	{
+		return;
+	}
+
+	const FGameplayTag EvidenceStateTag = FGameplayTag::RequestGameplayTag(
+		FName(*FString::Printf(
+			TEXT("Evidence.State.%s"),
+			*StateID.ToString()
+		)),
+		false
+	);
+	if (EvidenceStateTag.IsValid())
+	{
+		AddStateTag(EvidenceStateTag);
 	}
 }

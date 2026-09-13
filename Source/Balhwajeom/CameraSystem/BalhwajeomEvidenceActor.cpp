@@ -20,6 +20,7 @@
 #include "NiagaraSystem.h"
 #include "GameFramework/PlayerController.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
+#include "Story/StoryStateSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
 
@@ -434,6 +435,21 @@ bool ABalhwajeomEvidenceActor::PlayWorldStoryForState(FName StateID)
 	// Evidence interaction is blocked while the photo camera is raised, so this presentation is
 	// always read in the third-person view and needs the larger font straight away.
 	ActiveWorldStory->TransitionToThirdPersonScale();
+
+	// A Repeatable world story never changes state, so this is what lets progression
+	// gates ask "has the player heard this one yet?".
+	if (const UWorld* World = GetWorld())
+	{
+		if (const UGameInstance* GameInstance = World->GetGameInstance())
+		{
+			if (UStoryStateSubsystem* StoryState =
+				GameInstance->GetSubsystem<UStoryStateSubsystem>())
+			{
+				StoryState->AddEvidenceStoryPlayedTag(StateID);
+			}
+		}
+	}
+
 	return true;
 }
 

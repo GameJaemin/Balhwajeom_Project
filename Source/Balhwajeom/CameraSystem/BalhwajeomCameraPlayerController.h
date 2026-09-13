@@ -34,6 +34,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "UI|Interaction")
 	void EnsureInteractionPrompt();
 
+	/**
+	 * Creates the tutorial dim/highlight layer once for the local controller.
+	 * It sits at ZOrder 5: above the player HUD icons and the world, below WB_Interact,
+	 * so dimming the screen leaves the [F] prompt and the centre dot fully readable.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "UI|Tutorial")
+	void EnsureTutorialFocusLayer();
+
 	UFUNCTION(BlueprintPure, Category = "UI")
 	UUserWidget* GetPlayerHUD() const { return PlayerHUDWidget; }
 
@@ -45,6 +53,19 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "UI|Interaction")
 	UUserWidget* GetInteractionPrompt() const { return InteractionPromptWidget; }
+
+	UFUNCTION(BlueprintPure, Category = "UI|Tutorial")
+	UUserWidget* GetTutorialFocusLayer() const { return TutorialFocusWidget; }
+
+	/**
+	 * Current 0..1 fade alpha of the [F] prompt text.
+	 *
+	 * The prompt is only faded in while the player is actually looking at a close,
+	 * interactable target, so a tutorial dim multiplied by this value appears and
+	 * disappears in exact sync with the prompt -- no second fade, no flicker.
+	 */
+	UFUNCTION(BlueprintPure, Category = "UI|Interaction")
+	float GetInteractionPromptAlpha() const;
 
 	/** Hides or restores every gameplay HUD layer owned by this controller. */
 	UFUNCTION(BlueprintCallable, Category = "UI")
@@ -87,6 +108,13 @@ protected:
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "UI|Interaction")
 	TObjectPtr<UUserWidget> InteractionPromptWidget;
 
+	/** Dim/highlight layer used by the tutorial flow. Leave unset to disable the layer entirely. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Tutorial")
+	TSubclassOf<UUserWidget> TutorialFocusWidgetClass;
+
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "UI|Tutorial")
+	TObjectPtr<UUserWidget> TutorialFocusWidget;
+
 	/** Widget inside WB_Interact that fades; the rest of the widget (including the center dot) stays visible. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction")
 	FName InteractionPromptFadeTargetName = TEXT("TextBlock_50");
@@ -111,6 +139,8 @@ private:
 	void UpdateBedMemoryHUD(float DeltaSeconds);
 	void ApplyBedMemoryHUDAlpha(float Alpha);
 
+	/** Fade value of the [F] prompt before any tutorial blink is applied. */
+	float InteractionPromptAlpha = 0.0f;
 	float BedMemoryHUDAlpha = 0.0f;
 	bool bBedMemoryHUDActive = false;
 	bool bGameplayPresentationEnabled = true;

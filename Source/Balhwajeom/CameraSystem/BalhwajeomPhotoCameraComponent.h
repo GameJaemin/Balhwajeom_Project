@@ -7,6 +7,7 @@
 #include "BalhwajeomCameraFocusModel.h"
 #include "Components/ActorComponent.h"
 #include "Engine/Scene.h"
+#include "GameplayTagContainer.h"
 #include "BalhwajeomPhotoCameraComponent.generated.h"
 
 class UCameraComponent;
@@ -63,6 +64,9 @@ struct FBalhwajeomPendingPhotoCapture
 DECLARE_MULTICAST_DELEGATE(FOnCameraModeExited);
 DECLARE_MULTICAST_DELEGATE(FOnCameraTransitionFinished);
 
+/** Fired when camera mode entry is refused because a lock tag is active. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnPhotoCameraModeBlocked);
+
 UCLASS(ClassGroup = (Camera), meta = (BlueprintSpawnableComponent))
 class BALHWAJEOM_API UBalhwajeomPhotoCameraComponent
     : public UActorComponent
@@ -114,6 +118,20 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Photo Camera")
     void TakePhoto();
+
+    /**
+     * Any of these tags present in UStoryStateSubsystem blocks entry into camera mode.
+     * Absent tags mean "unlocked", so a level that never adds them needs no configuration.
+     * Leaving camera mode is never blocked, so a locked player can not get stuck in it.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Photo Camera|Lock")
+    FGameplayTagContainer BlockedByTags;
+
+    UFUNCTION(BlueprintPure, Category = "Photo Camera|Lock")
+    bool IsLockedByStoryState() const;
+
+    UPROPERTY(BlueprintAssignable, Category = "Photo Camera|Lock")
+    FOnPhotoCameraModeBlocked OnCameraModeBlocked;
 
     UFUNCTION(BlueprintPure, Category = "Photo Camera")
     bool IsInCameraMode() const { return bIsInCameraMode; }

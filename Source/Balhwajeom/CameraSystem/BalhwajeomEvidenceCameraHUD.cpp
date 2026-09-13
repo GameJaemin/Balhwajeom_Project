@@ -19,6 +19,13 @@
 
 ABalhwajeomEvidenceCameraHUD::ABalhwajeomEvidenceCameraHUD()
 {
+	static ConstructorHelpers::FClassFinder<UUserWidget> DefaultViewfinderWidget(
+		TEXT("/Game/Balhwajeom/UI/HUD/WBP_CAM"));
+	if (DefaultViewfinderWidget.Succeeded())
+	{
+		ViewfinderWidgetClass = DefaultViewfinderWidget.Class;
+	}
+
 	static ConstructorHelpers::FClassFinder<UUserWidget> FocusGuideWidgetAsset(
 		TEXT("/Game/Balhwajeom/UI/Camera/WBP_EvidenceFocusGuide"));
 	if (FocusGuideWidgetAsset.Succeeded())
@@ -53,6 +60,8 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 	if (bCaptureUIHiddenForScreenshot)
 	{
 		HideFocusGuideWidget();
+		// The saved photo must be the clean frame, without the camera frame over it.
+		HideViewfinderWidget();
 		return;
 	}
 
@@ -65,29 +74,11 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 	if (!Canvas || !PhotoCamera || !PhotoCamera->IsInCameraMode())
 	{
 		HideFocusGuideWidget();
+		HideViewfinderWidget();
 		return;
 	}
 
-	const float CenterX = Canvas->ClipX * 0.5f;
-	const float CenterY = Canvas->ClipY * 0.5f;
-	const FLinearColor OverlayColor(0.2f, 0.9f, 0.8f, 0.9f);
-	constexpr float Gap = 7.0f;
-	constexpr float Length = 12.0f;
-
-	DrawLine(CenterX - Gap - Length, CenterY, CenterX - Gap, CenterY, OverlayColor, 2.0f);
-	DrawLine(CenterX + Gap, CenterY, CenterX + Gap + Length, CenterY, OverlayColor, 2.0f);
-	DrawLine(CenterX, CenterY - Gap - Length, CenterX, CenterY - Gap, OverlayColor, 2.0f);
-	DrawLine(CenterX, CenterY + Gap, CenterX, CenterY + Gap + Length, OverlayColor, 2.0f);
-
-	DrawLine(30.0f, 30.0f, Canvas->ClipX - 30.0f, 30.0f, OverlayColor, 1.0f);
-	DrawLine(Canvas->ClipX - 30.0f, 30.0f, Canvas->ClipX - 30.0f, Canvas->ClipY - 30.0f, OverlayColor, 1.0f);
-	DrawLine(Canvas->ClipX - 30.0f, Canvas->ClipY - 30.0f, 30.0f, Canvas->ClipY - 30.0f, OverlayColor, 1.0f);
-	DrawLine(30.0f, Canvas->ClipY - 30.0f, 30.0f, 30.0f, OverlayColor, 1.0f);
-
-	DrawText(TEXT("SMARTPHONE CAMERA  |  LMB: TAKE PHOTO"), OverlayColor,
-		45.0f, 42.0f, GEngine->GetSmallFont(), 1.0f, false);
-	DrawText(TEXT("WASD: PAN  |  WHEEL: ZOOM  |  RMB / ESC: EXIT"), OverlayColor,
-		45.0f, 62.0f, GEngine->GetSmallFont(), 1.0f, false);
+	UpdateViewfinder();
 
 	FVector2D GuidePosition;
 	bool bGuideCentered = false;
@@ -215,6 +206,12 @@ void ABalhwajeomEvidenceCameraHUD::EndPlay(const EEndPlayReason::Type EndPlayRea
 	}
 	CapturePhotoWidget = nullptr;
 
+	if (ViewfinderWidget)
+	{
+		ViewfinderWidget->RemoveFromParent();
+	}
+	ViewfinderWidget = nullptr;
+
 	if (FocusGuideWidget)
 	{
 		FocusGuideWidget->RemoveFromParent();
@@ -315,6 +312,68 @@ void ABalhwajeomEvidenceCameraHUD::TriggerEvidenceSavedAnimation(const FText& Ev
 {
 	TriggerCapturePhotoPresentation(nullptr, EvidenceName, {});
 }
+
+bool ABalhwajeomEvidenceCameraHUD::EnsureViewfinderWidget()
+{
+	if (ViewfinderWidget)
+	{
+		return true;
+	}
+	if (!PlayerOwner || !ViewfinderWidgetClass)
+	{
+		return false;
+	}
+
+	ViewfinderWidget = CreateWidget<UUserWidget>(PlayerOwner, ViewfinderWidgetClass);
+	if (!ViewfinderWidget)
+	{
+		return false;
+	}
+
+	// Above the world and the exploration HUD, below the focus guide (100) and the
+	// capture card (250) so those keep reading on top of the frame.
+	ViewfinderWidget->AddToViewport(50);
+	ViewfinderWidget->SetVisibility(ESlateVisibility::Collapsed);
+	return true;
+}
+
+
+void ABalhwajeomEvidenceCameraHUD::HideViewfinderWidget()
+{
+	if (ViewfinderWidget)
+	{
+		ViewfinderWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+
+void ABalhwajeomEvidenceCameraHUD::UpdateViewfinder()
+{
+	if (EnsureViewfinderWidget())
+	{
+		ViewfinderWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+		return;
+	}
+
+	if (!Canvas)
+	{
+		return;
+	}
+
+	// Fallback for a project that has not assigned the widget yet: just a centre
+	// crosshair, enough to aim with.
+	const float CenterX = Canvas->ClipX * 0.5f;
+	const float CenterY = Canvas->ClipY * 0.5f;
+	const FLinearColor OverlayColor(0.2f, 0.9f, 0.8f, 0.9f);
+	constexpr float Gap = 7.0f;
+	constexpr float Length = 12.0f;
+
+	DrawLine(CenterX - Gap - Length, CenterY, CenterX - Gap, CenterY, OverlayColor, 2.0f);
+	DrawLine(CenterX + Gap, CenterY, CenterX + Gap + Length, CenterY, OverlayColor, 2.0f);
+	DrawLine(CenterX, CenterY - Gap - Length, CenterX, CenterY - Gap, OverlayColor, 2.0f);
+	DrawLine(CenterX, CenterY + Gap, CenterX, CenterY + Gap + Length, OverlayColor, 2.0f);
+}
+
 
 void ABalhwajeomEvidenceCameraHUD::SetCaptureUIHiddenForScreenshot(const bool bShouldHide)
 {
