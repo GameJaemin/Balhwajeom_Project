@@ -2,6 +2,7 @@
 
 #include "BalhwajeomEvidenceActor.h"
 
+#include "Components/ArrowComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
@@ -12,6 +13,12 @@
 #include "ItemInspection/JMItemInspectionData.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
+#include "CameraSystem/PhotoWorldStoryActor.h"
+#include "Engine/StaticMesh.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "GameFramework/PlayerController.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
@@ -71,6 +78,23 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 	CameraFocusPoint = CreateDefaultSubobject<USceneComponent>(TEXT("CameraFocusPoint"));
 	CameraFocusPoint->SetupAttachment(EvidenceMesh);
 
+	// Sits slightly above the object so a freshly placed actor shows readable text before the
+	// designer positions it; +X points at the reader because the story widget faces its own +X.
+	StoryAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("StoryAnchor"));
+	StoryAnchor->SetupAttachment(EvidenceMesh);
+	StoryAnchor->SetRelativeLocation(FVector(0.0f, 0.0f, 60.0f));
+
+#if WITH_EDITORONLY_DATA
+	StoryAnchorArrow = CreateEditorOnlyDefaultSubobject<UArrowComponent>(TEXT("StoryAnchorArrow"));
+	if (StoryAnchorArrow)
+	{
+		StoryAnchorArrow->SetupAttachment(StoryAnchor);
+		StoryAnchorArrow->ArrowColor = FColor(140, 200, 255);
+		StoryAnchorArrow->bIsScreenSizeScaled = true;
+		StoryAnchorArrow->SetHiddenInGame(true);
+	}
+#endif
+
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> DefaultMesh(
 		TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (DefaultMesh.Succeeded())
@@ -103,6 +127,74 @@ void ABalhwajeomEvidenceActor::FitCameraTargetBoundsToMesh()
 		FMath::Max(LocalExtent.Z, 5.0f)));
 }
 
+void ABalhwajeomEvidenceActor::UpdateObjectLabelPlacement()
+{
+	if (!ObjectLabelWidget)
+	{
+		return;
+	}
+	// Bounds.Origin is the visible mesh center even when the mesh asset's pivot is off-center.
+	const FVector WorldOffset = EvidenceMesh
+		? EvidenceMesh->GetComponentTransform().TransformVectorNoScale(ObjectLabelOffset)
+		: GetActorTransform().TransformVectorNoScale(ObjectLabelOffset);
+	const FVector LabelCenter = EvidenceMesh ? EvidenceMesh->Bounds.Origin : GetActorLocation();
+	ObjectLabelWidget->SetWorldLocation(LabelCenter + WorldOffset);
+}
+
+void ABalhwajeomEvidenceActor::ApplyStateVisuals(
+	const FEvidenceStateDefinition& State,
+	bool bInitialApply)
+{
+	// The mesh is applied on a load too, otherwise a restored state shows the wrong object.
+	if (EvidenceMesh && !State.StateMesh.IsNull())
+	{
+		// Synchronous because the swap has to land in the same frame as the state change; these
+		// are small props, not streamed geometry.
+		UStaticMesh* StateMesh = State.StateMesh.LoadSynchronous();
+		if (StateMesh && EvidenceMesh->GetStaticMesh() != StateMesh)
+		{
+			EvidenceMesh->SetStaticMesh(StateMesh);
+			// Photo focus and interaction traces run against this volume, so it has to follow.
+			FitCameraTargetBoundsToMesh();
+			UpdateObjectLabelPlacement();
+		}
+		else if (!StateMesh)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("%s: state '%s' could not load StateMesh '%s'."),
+				*GetName(), *State.StateID.ToString(), *State.StateMesh.ToString());
+		}
+	}
+
+	if (ActiveStateEffect.IsValid())
+	{
+		ActiveStateEffect->Deactivate();
+	}
+	ActiveStateEffect.Reset();
+
+	// A load restoring an already-advanced state must not replay the transition burst.
+	if (bInitialApply || State.StateEffect.IsNull() || !EvidenceMesh)
+	{
+		return;
+	}
+
+	UNiagaraSystem* Effect = State.StateEffect.LoadSynchronous();
+	if (!Effect)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: state '%s' could not load StateEffect '%s'."),
+			*GetName(), *State.StateID.ToString(), *State.StateEffect.ToString());
+		return;
+	}
+
+	ActiveStateEffect = UNiagaraFunctionLibrary::SpawnSystemAttached(
+		Effect,
+		EvidenceMesh,
+		NAME_None,
+		FVector::ZeroVector,
+		FRotator::ZeroRotator,
+		EAttachLocation::SnapToTarget,
+		/*bAutoDestroy*/ true);
+}
+
 void ABalhwajeomEvidenceActor::BeginPlay()
 {
 	Super::BeginPlay();
@@ -111,12 +203,7 @@ void ABalhwajeomEvidenceActor::BeginPlay()
 
 	if (ObjectLabelWidget)
 	{
-		// Bounds.Origin is the visible mesh center even when the mesh asset's pivot is off-center.
-		const FVector WorldOffset = EvidenceMesh
-			? EvidenceMesh->GetComponentTransform().TransformVectorNoScale(ObjectLabelOffset)
-			: GetActorTransform().TransformVectorNoScale(ObjectLabelOffset);
-		const FVector LabelCenter = EvidenceMesh ? EvidenceMesh->Bounds.Origin : GetActorLocation();
-		ObjectLabelWidget->SetWorldLocation(LabelCenter + WorldOffset);
+		UpdateObjectLabelPlacement();
 		ObjectLabelWidget->SetVisibility(false);
 	}
 
@@ -209,6 +296,9 @@ bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplay
 	FEvidenceInteractionViewData ViewData;
 	if (!Investigation || !Investigation->BeginEvidenceInteraction(EvidenceInstanceID, ViewData))
 	{
+		// A WorldStory state that refuses interaction is almost always a data mistake, and the
+		// silent failure is indistinguishable from "F did nothing", so name the cause here.
+		LogBlockedWorldStory(TEXT("its InteractionBehavior is None or its Once interaction is already spent"));
 		return false;
 	}
 
@@ -230,7 +320,121 @@ bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplay
 				EWordAcquisitionSource::EvidenceInteraction);
 		}
 	}
-	return Investigation->CompleteEvidenceInteraction(EvidenceInstanceID, ViewData.StateID);
+	else if (ViewData.Presentation == EEvidenceInteractionPresentation::WorldStory)
+	{
+		// The cues are presented as world text, so the 2D inspection popup stays silent.
+		OutDisplayText = FText::GetEmpty();
+	}
+
+	if (!Investigation->CompleteEvidenceInteraction(EvidenceInstanceID, ViewData.StateID))
+	{
+		LogBlockedWorldStory(TEXT("its InteractionBehavior is ChangeState but NextStateID is empty or points at another object"));
+		return false;
+	}
+
+	if (ViewData.Presentation == EEvidenceInteractionPresentation::WorldStory)
+	{
+		// Uses the state we interacted with, which matters when the interaction also changed state.
+		PlayWorldStoryForState(ViewData.StateID);
+	}
+	return true;
+}
+
+void ABalhwajeomEvidenceActor::LogBlockedWorldStory(const TCHAR* Reason) const
+{
+	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	FEvidenceStateDefinition State;
+	if (!Investigation || !Investigation->GetEvidenceStateDefinition(CurrentStateID, State) ||
+		State.InteractionPresentation != EEvidenceInteractionPresentation::WorldStory)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("%s: state '%s' is set to WorldStory but cannot present it because %s."),
+		*GetName(), *CurrentStateID.ToString(), Reason);
+}
+
+bool ABalhwajeomEvidenceActor::PlayWorldStory()
+{
+	return PlayWorldStoryForState(CurrentStateID);
+}
+
+void ABalhwajeomEvidenceActor::StopWorldStory()
+{
+	if (ActiveWorldStory.IsValid())
+	{
+		ActiveWorldStory->StopStory();
+	}
+	ActiveWorldStory.Reset();
+}
+
+FTransform ABalhwajeomEvidenceActor::GetWorldStoryTransform() const
+{
+	FTransform AnchorTransform = StoryAnchor
+		? StoryAnchor->GetComponentTransform()
+		: GetActorTransform();
+	// The story widget carries its own scale, so a scaled evidence actor must not shrink the text.
+	AnchorTransform.SetScale3D(FVector::OneVector);
+
+	const APlayerController* PlayerController = GetWorld()
+		? GetWorld()->GetFirstPlayerController()
+		: nullptr;
+	if (!bStoryFacesPlayer || !PlayerController)
+	{
+		return AnchorTransform;
+	}
+
+	FVector ViewLocation = FVector::ZeroVector;
+	FRotator ViewRotation = FRotator::ZeroRotator;
+	PlayerController->GetPlayerViewPoint(ViewLocation, ViewRotation);
+	FRotator StoryRotation = AnchorTransform.Rotator();
+	StoryRotation.Yaw = (ViewLocation - AnchorTransform.GetLocation()).Rotation().Yaw;
+	AnchorTransform.SetRotation(StoryRotation.Quaternion());
+	return AnchorTransform;
+}
+
+bool ABalhwajeomEvidenceActor::PlayWorldStoryForState(FName StateID)
+{
+	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	FEvidenceStateDefinition State;
+	if (!Investigation || !Investigation->GetEvidenceStateDefinition(StateID, State))
+	{
+		return false;
+	}
+	if (State.PhotoID.IsNone())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: state '%s' asks for a world story but has no PhotoID."),
+			*GetName(), *StateID.ToString());
+		return false;
+	}
+
+	FPhotoDefinition Photo;
+	if (!Investigation->GetPhotoDefinition(State.PhotoID, Photo))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s could not resolve PhotoID '%s' for a world story."),
+			*GetName(), *State.PhotoID.ToString());
+		return false;
+	}
+
+	StopWorldStory();
+	ActiveWorldStory = APhotoWorldStoryActor::SpawnAndStart(
+		GetWorld(),
+		StoryActorClass,
+		GetWorldStoryTransform(),
+		Photo,
+		this);
+	if (!ActiveWorldStory.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: PhotoID '%s' has no WorldStoryCues to present."),
+			*GetName(), *State.PhotoID.ToString());
+		return false;
+	}
+
+	// Evidence interaction is blocked while the photo camera is raised, so this presentation is
+	// always read in the third-person view and needs the larger font straight away.
+	ActiveWorldStory->TransitionToThirdPersonScale();
+	return true;
 }
 
 bool ABalhwajeomEvidenceActor::CanRequestInvestigationInteraction() const
@@ -271,7 +475,7 @@ void ABalhwajeomEvidenceActor::RegisterWithInvestigationSystem()
 	}
 	Investigation->OnEvidenceStateChanged.AddUniqueDynamic(
 		this, &ABalhwajeomEvidenceActor::HandleEvidenceStateChanged);
-	ApplyInvestigationState(CurrentStateID);
+	ApplyInvestigationState(CurrentStateID, /*bInitialApply*/ true);
 }
 
 void ABalhwajeomEvidenceActor::HandleEvidenceStateChanged(
@@ -284,7 +488,7 @@ void ABalhwajeomEvidenceActor::HandleEvidenceStateChanged(
 	}
 }
 
-void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID)
+void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID, bool bInitialApply)
 {
 	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
 	FEvidenceStateDefinition State;
@@ -292,6 +496,7 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID)
 	{
 		return;
 	}
+	const FName PreviousStateID = CurrentStateID;
 	CurrentStateID = State.StateID;
 	bCanBeCaptured = State.bCanCapture;
 	EvidenceData.bAlreadyCollected = !State.PhotoID.IsNone() &&
@@ -315,7 +520,13 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID)
 		EvidenceData.EvidenceID = ObjectID;
 		EvidenceData.EvidenceName = ObjectDefinition.ObjectName;
 	}
+	ApplyStateVisuals(State, bInitialApply);
+	// After the swap, so the rotating inspector captures the state's mesh.
 	ConfigureItemInspection();
+
+	// Last, so Blueprint reacts to a fully applied state. Use it for anything the DataTable
+	// columns cannot express, such as swapping a whole child actor or driving a material.
+	OnEvidenceStateApplied(PreviousStateID, CurrentStateID, bInitialApply);
 }
 
 void ABalhwajeomEvidenceActor::HandlePlayerDistanceStateChanged(
@@ -370,10 +581,17 @@ void ABalhwajeomEvidenceActor::ApplyInspectionDistanceState(
 void ABalhwajeomEvidenceActor::HandlePhotoCaptured(
 	const FCapturedPhotoRecord& PhotoRecord)
 {
-	if (EvidenceInstanceID.IsValid() &&
-		PhotoRecord.EvidenceInstanceID == EvidenceInstanceID)
+	if (!EvidenceInstanceID.IsValid() ||
+		PhotoRecord.EvidenceInstanceID != EvidenceInstanceID)
 	{
-		MarkAsCollected();
+		return;
+	}
+
+	MarkAsCollected();
+	if (UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem())
+	{
+		// No-op unless the captured state names a PostCaptureStateID.
+		Investigation->AdvanceEvidenceStateAfterCapture(EvidenceInstanceID);
 	}
 }
 

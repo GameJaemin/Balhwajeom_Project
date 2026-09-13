@@ -53,13 +53,16 @@ CSV 헤더 = Row Struct의 `UPROPERTY` 이름이다. Row Name(CSV 첫 컬럼)은
 | `ObjectID` | Name (참조: `DT_EvidenceDefinitions.ObjectID`) | 이 상태가 속한 증거 오브젝트 |
 | `StateName` | Text | 상태 이름(에디터/디버그 표기용) |
 | `InteractionBehavior` | Enum(`None`/`Once`/`Repeatable`/`ChangeState`) | F 상호작용 동작 방식. `None`=상호작용 불가, `Once`=1회만 성공, `Repeatable`=매번 성공, `ChangeState`=성공 시 `NextStateID`로 상태 전환 |
-| `InteractionPresentation` | Enum(`None`/`SimpleText`/`KeywordSelectionWindow`) | 상호작용 결과를 어떻게 보여줄지. `SimpleText`=문구만 표시, `KeywordSelectionWindow`=`KeywordDocumentID` 문서의 선택창을 연다 |
+| `InteractionPresentation` | Enum(`None`/`SimpleText`/`KeywordSelectionWindow`/`WorldStory`) | 상호작용 결과를 어떻게 보여줄지. `SimpleText`=문구만 표시, `KeywordSelectionWindow`=`KeywordDocumentID` 문서의 선택창을 연다, `WorldStory`=같은 행의 `PhotoID`가 가리키는 `DT_Photos.WorldStoryCues`를 Evidence Actor의 `StoryAnchor` 위치에 3D 텍스트로 띄운다(2D 문구는 표시하지 않는다) |
 | `NextStateID` | Name (참조: `DT_EvidenceStates.StateID`) | `ChangeState`일 때 전환할 다음 상태. 같은 `ObjectID` 소속이어야 한다 |
+| `PostCaptureStateID` | Name (참조: `DT_EvidenceStates.StateID`) | 이 상태의 사진을 촬영하면 전환할 상태. 같은 `ObjectID` 소속이어야 한다. 비워두면 촬영해도 상태가 유지된다. 값이 있으면 **촬영 직후의 월드 스토리 연출을 생략**하고, 전환된 상태의 상호작용이 스토리를 담당한다 |
 | `InteractionText` | Text | `SimpleText`일 때 보여줄 문구 |
 | `KeywordDocumentID` | Name (참조: `DT_KeywordDocuments.KeywordDocumentID`) | `KeywordSelectionWindow`일 때 열 문서 |
 | `FarLabel` / `MidLabel` / `NearLabel` | Text | 거리 단계별(멀리/중간/가까이) 표시 라벨. `NearLabel`은 F 조사와 별개로, 가장 가까운 거리에서 상시 표시되는 관찰 정보 문구다(2026-09-09 기준 `ObservationText`에서 개명) |
+| `StateMesh` | Static Mesh 참조 | 이 상태에서 보여줄 메시. 비우면 배치할 때 지정한 메시를 그대로 쓴다. 교체 시 `CameraTargetBounds`와 상태 아이콘 위치가 함께 갱신된다. 세이브 복원 시에도 적용된다 |
+| `StateEffect` | Niagara System 참조 | 이 상태로 **전환될 때 1회** 재생할 이펙트. 메시에 Attach되며 이전 상태의 이펙트는 정지한다. 레벨 로드로 상태를 복원할 때는 재생하지 않는다(다시 켜질 때마다 터지는 것을 막기 위해) |
 | `bCanCapture` | Bool | 카메라로 촬영 가능한 상태인지 |
-| `PhotoID` | Name (참조: `DT_Photos.PhotoID`) | `bCanCapture`가 true일 때 촬영 성공 시 등록될 사진. true인데 유효한 `PhotoID`가 없으면 검증 오류 |
+| `PhotoID` | Name (참조: `DT_Photos.PhotoID`) | `bCanCapture`가 true일 때 촬영 성공 시 등록될 사진. true인데 유효한 `PhotoID`가 없으면 검증 오류. `WorldStory` 상태에서는 촬영용이 아니라 **띄울 스토리를 가리키는 참조**로 쓰이므로, `bCanCapture`가 false여도 채워 둔다(비우면 촬영 완료 아이콘이 물음표로 되돌아간다) |
 | `PreferredFocusDistance` / `FocusDistanceTolerance` | Float | 카메라 초점 판정 기준 거리와 허용 오차(1배율 기준, cm) |
 | `bScaleFocusDistanceWithZoom` | Bool | 줌 배율에 따라 위 초점 거리 기준을 함께 스케일할지 여부 |
 

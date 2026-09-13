@@ -42,6 +42,42 @@ APhotoWorldStoryActor::APhotoWorldStoryActor()
 	StoryAudioComponent->OnAudioFinished.AddDynamic(this, &APhotoWorldStoryActor::HandleAudioFinished);
 }
 
+APhotoWorldStoryActor* APhotoWorldStoryActor::SpawnAndStart(
+	UWorld* World,
+	TSubclassOf<APhotoWorldStoryActor> StoryClass,
+	const FTransform& SpawnTransform,
+	const FPhotoDefinition& PhotoDefinition,
+	AActor* Owner)
+{
+	if (!World ||
+		(PhotoDefinition.WorldStoryCues.IsEmpty() && PhotoDefinition.WorldStoryLines.IsEmpty()))
+	{
+		return nullptr;
+	}
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.Owner = Owner;
+	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	APhotoWorldStoryActor* StoryActor = World->SpawnActor<APhotoWorldStoryActor>(
+		StoryClass ? *StoryClass : APhotoWorldStoryActor::StaticClass(),
+		SpawnTransform,
+		SpawnParameters);
+	if (!StoryActor)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to spawn photo world story for '%s'."),
+			*PhotoDefinition.PhotoID.ToString());
+		return nullptr;
+	}
+
+	StoryActor->StartStory(
+		PhotoDefinition.WorldStoryCues,
+		PhotoDefinition.WorldStoryLines,
+		PhotoDefinition.StoryVoice);
+
+	// StartStory destroys itself when the authored cues turn out to be unusable.
+	return IsValid(StoryActor) ? StoryActor : nullptr;
+}
+
 void APhotoWorldStoryActor::StartStory(
 	const TArray<FPhotoStoryCue>& InCues,
 	const TArray<FText>& LegacyLines,

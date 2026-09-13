@@ -1024,6 +1024,48 @@ bool UBalhwajeomInvestigationSubsystem::BeginEvidenceInteraction(
 	return true;
 }
 
+bool UBalhwajeomInvestigationSubsystem::AdvanceEvidenceStateAfterCapture(
+	FGuid EvidenceInstanceID)
+{
+	FEvidenceRuntimeState* RuntimeState = EvidenceRuntimeStates.Find(EvidenceInstanceID);
+	if (RuntimeState == nullptr)
+	{
+		return false;
+	}
+
+	const FEvidenceStateDefinition* StateDefinition =
+		FindEvidenceStateDefinition(RuntimeState->CurrentStateID);
+	if (StateDefinition == nullptr || StateDefinition->ObjectID != RuntimeState->ObjectID)
+	{
+		return false;
+	}
+
+	// Most states simply stay put after being photographed.
+	if (StateDefinition->PostCaptureStateID.IsNone())
+	{
+		return false;
+	}
+
+	const FEvidenceStateDefinition* NextState =
+		FindEvidenceStateDefinition(StateDefinition->PostCaptureStateID);
+	if (NextState == nullptr || NextState->ObjectID != RuntimeState->ObjectID)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("State '%s' has PostCaptureStateID '%s', which is missing or belongs to another object."),
+			*StateDefinition->StateID.ToString(),
+			*StateDefinition->PostCaptureStateID.ToString());
+		return false;
+	}
+
+	const FName PreviousStateID = RuntimeState->CurrentStateID;
+	RuntimeState->CurrentStateID = NextState->StateID;
+	OnEvidenceStateChanged.Broadcast(
+		EvidenceInstanceID,
+		PreviousStateID,
+		RuntimeState->CurrentStateID);
+	return true;
+}
+
 bool UBalhwajeomInvestigationSubsystem::CompleteEvidenceInteraction(
 	FGuid EvidenceInstanceID,
 	FName ExpectedStateID)

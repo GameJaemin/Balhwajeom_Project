@@ -1737,7 +1737,16 @@ void UBalhwajeomPhotoCameraComponent::CompleteImageSave(
 			}
 		}
 
-		if (CompletedCapture.bHasStorySpawnTransform)
+		// A state that advances after capture hands the story to its destination state, which
+		// presents it on interaction. Playing it here too would repeat the same lines at once.
+		// The captured state is read from the snapshot because the live state has already moved on.
+		FEvidenceStateDefinition CapturedState;
+		const bool bStateAdvancesAfterCapture =
+			InvestigationSubsystem->GetEvidenceStateDefinition(
+				CompletedCapture.TargetSnapshot.StateID, CapturedState) &&
+			!CapturedState.PostCaptureStateID.IsNone();
+
+		if (CompletedCapture.bHasStorySpawnTransform && !bStateAdvancesAfterCapture)
 		{
 			StartPhotoWorldStory(PhotoDefinition, CompletedCapture.StorySpawnTransform);
 		}
@@ -1788,39 +1797,26 @@ void UBalhwajeomPhotoCameraComponent::StartPhotoWorldStory(
 	const FPhotoDefinition& PhotoDefinition,
 	const FTransform& SpawnTransform)
 {
-	if (!GetWorld() || !PhotoWorldStoryClass ||
-		(PhotoDefinition.WorldStoryCues.IsEmpty() && PhotoDefinition.WorldStoryLines.IsEmpty()))
-	{
-		return;
-	}
-
 	if (ActivePhotoWorldStory.IsValid())
 	{
 		ActivePhotoWorldStory->StopStory();
 	}
 
-	FActorSpawnParameters SpawnParameters;
-	SpawnParameters.Owner = GetOwner();
-	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	APhotoWorldStoryActor* StoryActor = GetWorld()->SpawnActor<APhotoWorldStoryActor>(
+	APhotoWorldStoryActor* StoryActor = APhotoWorldStoryActor::SpawnAndStart(
+		GetWorld(),
 		PhotoWorldStoryClass,
 		SpawnTransform,
-		SpawnParameters);
+		PhotoDefinition,
+		GetOwner());
 	if (!StoryActor)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Failed to spawn photo world story for '%s'."),
-			*PhotoDefinition.PhotoID.ToString());
 		return;
 	}
 
 	ActivePhotoWorldStory = StoryActor;
-	StoryActor->StartStory(
-		PhotoDefinition.WorldStoryCues,
-		PhotoDefinition.WorldStoryLines,
-		PhotoDefinition.StoryVoice);
 
 	// Screenshot processing may finish after the player has already left photo mode.
-	if (!bIsInCameraMode && IsValid(StoryActor))
+	if (!bIsInCameraMode)
 	{
 		StoryActor->TransitionToThirdPersonScale();
 	}

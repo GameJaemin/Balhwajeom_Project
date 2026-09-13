@@ -5,6 +5,9 @@
 #include "Investigation/InvestigationEnums.h"
 #include "EvidenceDefinitions.generated.h"
 
+class UNiagaraSystem;
+class UStaticMesh;
+
 USTRUCT(BlueprintType)
 struct BALHWAJEOM_API FEvidenceDefinition : public FTableRowBase
 {
@@ -49,6 +52,20 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
 	FName KeywordDocumentID = NAME_None;
 
+	/**
+	 * Static mesh shown while this state is active, i.e. the "object" the evidence turns into.
+	 * Empty keeps whatever mesh the actor was placed with.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Presentation")
+	TSoftObjectPtr<UStaticMesh> StateMesh;
+
+	/**
+	 * Niagara system played once when this state is entered. It is deliberately skipped when a
+	 * level load restores an already-advanced state, so a one-shot burst does not replay.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Presentation")
+	TSoftObjectPtr<UNiagaraSystem> StateEffect;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inspection")
 	FText FarLabel;
 
@@ -63,6 +80,14 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture")
 	FName PhotoID = NAME_None;
+
+	/**
+	 * State entered once this state's photo is captured. Empty leaves the object in this state.
+	 * The capture presentation skips its own world story when this is set, because the destination
+	 * state is what presents the story from then on.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture")
+	FName PostCaptureStateID = NAME_None;
 
 	/** Added to the photo camera's global minimum focus/capture distance. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture|Focus", meta = (Units = "cm"))

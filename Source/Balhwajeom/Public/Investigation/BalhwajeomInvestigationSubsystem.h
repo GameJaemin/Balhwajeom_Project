@@ -85,6 +85,13 @@ public:
 		FGuid EvidenceInstanceID,
 		FEvidenceInteractionViewData& OutViewData);
 
+	/**
+	 * Moves the evidence to its state's PostCaptureStateID. Called once the photo is registered,
+	 * so capturing can drive a state change the same way interaction does.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Evidence")
+	bool AdvanceEvidenceStateAfterCapture(FGuid EvidenceInstanceID);
+
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Interaction")
 	bool CompleteEvidenceInteraction(
 		FGuid EvidenceInstanceID,

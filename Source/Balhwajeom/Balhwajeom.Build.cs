@@ -18,6 +18,7 @@ public class Balhwajeom : ModuleRules
 			"AIModule",
 			"StateTreeModule",
 			"GameplayStateTreeModule",
+			"Niagara",
 			"UMG",
 			"Slate",
 			"SlateCore",

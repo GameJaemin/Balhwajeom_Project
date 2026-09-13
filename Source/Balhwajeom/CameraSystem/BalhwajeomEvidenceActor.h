@@ -10,6 +10,9 @@
 #include "Interaction/PlayerInteractionTypes.h"
 #include "BalhwajeomEvidenceActor.generated.h"
 
+class APhotoWorldStoryActor;
+class UArrowComponent;
+class UNiagaraComponent;
 class UStaticMeshComponent;
 class UBoxComponent;
 class UPrimitiveComponent;
@@ -53,6 +56,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Evidence|Investigation")
 	bool CanRequestInvestigationInteraction() const;
 
+	/**
+	 * Plays the current state's photo story as world-locked 3D text at StoryAnchor.
+	 * Interaction triggers this automatically for states whose presentation is WorldStory;
+	 * it is exposed so a Blueprint or a debug key can replay the same presentation.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Evidence|Story")
+	bool PlayWorldStory();
+
+	/** Stops this object's story early, for example when the player walks away. */
+	UFUNCTION(BlueprintCallable, Category = "Evidence|Story")
+	void StopWorldStory();
+
+	/** Final spawn transform for the story text. Unit scale, with the optional yaw override applied. */
+	UFUNCTION(BlueprintPure, Category = "Evidence|Story")
+	FTransform GetWorldStoryTransform() const;
+
 	/** Hides the normal distance label while the dedicated photo camera HUD is active. */
 	void SetInspectionLabelSuppressed(bool bSuppressed);
 
@@ -73,6 +92,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inspection|3D")
 	UJMInspectableComponent* GetItemInspectionComponent() const { return ItemInspectionComponent; }
 
+	/**
+	 * Fires whenever a state is applied, which is the place to swap the visible object, start a
+	 * Niagara system, or play a sound for that state.
+	 * bInitialApply is true when BeginPlay restores an already-advanced state, so one-shot effects
+	 * should be skipped in that case or they replay every time the level loads.
+	 */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Evidence|Investigation")
+	void OnEvidenceStateApplied(FName PreviousStateID, FName NewStateID, bool bInitialApply);
+
 	virtual bool RequestCameraTargetInfo_Implementation(FBalhwajeomCameraTargetInfo& OutInfo) const override;
 	virtual FVector RequestCameraFocusLocation_Implementation() const override;
 	virtual UPrimitiveComponent* RequestCameraFramingComponent_Implementation() const override;
@@ -88,6 +116,12 @@ protected:
 	 * via "Replace Selected Actors With") and again from BeginPlay as a safety net. */
 	void FitCameraTargetBoundsToMesh();
 
+	/** Keeps the floating status icon centred after a state swaps the mesh for a different size. */
+	void UpdateObjectLabelPlacement();
+
+	/** Applies the state's mesh and plays its one-shot effect. Only the mesh is applied on a load. */
+	void ApplyStateVisuals(const struct FEvidenceStateDefinition& State, bool bInitialApply);
+
 	UFUNCTION()
 	void HandleEvidenceStateChanged(FGuid ChangedInstanceID, FName PreviousStateID, FName NewStateID);
 
@@ -97,10 +131,13 @@ protected:
 	UFUNCTION()
 	void HandlePlayerDistanceStateChanged(EPlayerInspectionDistanceState NewState);
 
+	bool PlayWorldStoryForState(FName StateID);
+	/** Warns only when the current state actually asks for a WorldStory, so ordinary states stay quiet. */
+	void LogBlockedWorldStory(const TCHAR* Reason) const;
 	void SetInspectionLabel(const FText& LabelText, bool bVisible);
 	void ApplyInspectionDistanceState(EPlayerInspectionDistanceState DistanceState);
 	void RegisterWithInvestigationSystem();
-	void ApplyInvestigationState(FName StateID);
+	void ApplyInvestigationState(FName StateID, bool bInitialApply = false);
 	void ConfigureItemInspection();
 	UBalhwajeomInvestigationSubsystem* GetInvestigationSubsystem() const;
 
@@ -160,6 +197,34 @@ protected:
 	/** Move this point in a derived Blueprint to choose the precise focus/guide location. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera Target")
 	TObjectPtr<USceneComponent> CameraFocusPoint;
+
+	/**
+	 * Where the world-locked 3D story text appears and which way it faces. Move and rotate this
+	 * in a derived Blueprint or directly on the placed instance; its +X axis is the reading
+	 * direction, so point the arrow at where the player will be standing.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Evidence|Story")
+	TObjectPtr<USceneComponent> StoryAnchor;
+
+#if WITH_EDITORONLY_DATA
+	/** Editor-only reading-direction indicator for StoryAnchor. */
+	UPROPERTY()
+	TObjectPtr<UArrowComponent> StoryAnchorArrow;
+#endif
+
+	/** Presentation actor spawned at StoryAnchor. The native class is used when this is empty. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Evidence|Story")
+	TSubclassOf<APhotoWorldStoryActor> StoryActorClass;
+
+	/** Replaces StoryAnchor's authored yaw with one facing the player. Pitch and roll stay authored. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Evidence|Story")
+	bool bStoryFacesPlayer = false;
+
+	UPROPERTY(Transient)
+	TWeakObjectPtr<APhotoWorldStoryActor> ActiveWorldStory;
+
+	/** Weak because a finished one-shot system destroys its own component. */
+	TWeakObjectPtr<UNiagaraComponent> ActiveStateEffect;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Evidence")
 	FBalhwajeomEvidenceData EvidenceData;

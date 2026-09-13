@@ -86,11 +86,42 @@ PIE에서는 먼저 FOV를 바꿔도 같은 실제 거리에서 초점 판정이
 - 기본 연출 액터는 `/Game/Balhwajeom/UI/PhotoStory/WBP_PhotoWorldStory`를 사용한다. Designer의 `StoryText` TextBlock에서 폰트, 색상, 그림자, 정렬을 직접 관리한다. 자동 줄바꿈은 런타임에서 비활성화되며 `DT_Photos.WorldStoryCues.Text`에 직접 입력한 개행만 표시된다.
 - 사진 모드에서 3인칭으로 복귀하면 월드 위치와 Widget Component Scale은 유지한 채 `StoryText`의 실제 Font Size를 부드럽게 키운다. 확대 비율은 Class Defaults의 `Third Person Font Size Multiplier`(기본 1.8), 전환 시간은 `Third Person Font Size Transition Duration`(기본 0.25초)에서 조절한다. 렌더 타깃을 확대하지 않으므로 글자 해상도가 유지된다.
 
+### 상호작용으로 띄우는 월드 스토리
+
+촬영 외에 F 상호작용으로도 같은 3D 텍스트를 띄울 수 있다. `DT_EvidenceStates`의 `InteractionPresentation`을 `WorldStory`로 두면, 그 행의 `PhotoID`가 가리키는 `DT_Photos.WorldStoryCues`가 재생된다.
+
+- 위치와 각도는 화면 비율이 아니라 `ABalhwajeomEvidenceActor`의 `StoryAnchor` Scene Component가 정한다. 파생 Blueprint에서도, 레벨에 배치된 인스턴스에서도 기즈모로 옮길 수 있다. 에디터에서는 하늘색 화살표가 읽는 방향(+X)을 표시하며 게임에서는 보이지 않는다.
+- `Story Faces Player`를 켜면 작성한 Pitch/Roll은 유지하고 Yaw만 플레이어 쪽으로 돌린다. 끄면 배치한 각도를 그대로 쓴다.
+- Evidence Actor의 스케일은 텍스트 크기에 영향을 주지 않는다. `StoryAnchor`의 월드 Transform에서 스케일만 1로 고정해 스폰한다.
+- 상호작용은 사진 카메라를 들고 있는 동안 막혀 있으므로 이 연출은 항상 3인칭에서 읽힌다. 그래서 스폰 직후 `TransitionToThirdPersonScale()`로 확대한 폰트를 적용한다.
+- `WorldStory` 상태는 2D 상호작용 문구를 띄우지 않는다. 3D 텍스트와 중복되기 때문이다.
+- 촬영한 상태에 `PostCaptureStateID`가 지정되어 있으면 **촬영 직후 연출을 생략한다.** 그 사진의 스토리는 전환된 상태에서 상호작용으로 재생되므로, 두 번 띄우지 않기 위해서다. 판정은 촬영 시점의 스냅샷 `StateID`로 한다. 사진 등록 시 이미 상태가 넘어간 뒤이기 때문이다.
+- 촬영 경로와 상호작용 경로는 `APhotoWorldStoryActor::SpawnAndStart()`라는 같은 스폰 함수를 쓴다. 다만 "재생 중인 스토리 하나만 유지"는 아직 각 경로가 따로 관리한다.
+
+### 상태별 비주얼 연출 (오브젝트 교체 · Niagara)
+
+기본 수단은 `DT_EvidenceStates`의 두 컬럼이다. Blueprint 작업 없이 상태 행에서 직접 지정한다.
+
+- `StateMesh` — 이 상태에서 보여줄 메시. 교체하면 `CameraTargetBounds`(촬영·상호작용 트레이스 볼륨)와 상태 아이콘 위치를 함께 갱신하고, 3D 인스펙션도 새 메시로 다시 구성한다. 로드로 상태를 복원할 때도 적용한다.
+- `StateEffect` — 이 상태로 **전환될 때 1회** 재생할 Niagara System. `EvidenceMesh`에 Attach되고, 상태가 또 바뀌면 이전 이펙트를 정지한다. 로드 복원 시에는 재생하지 않는다.
+
+둘 다 CSV에서 전체 에셋 경로로 적는다.
+
+```csv
+/Game/Balhwajeom/Meshes/SM_PhotoClean.SM_PhotoClean
+/Game/Balhwajeom/VFX/NS_MemoryGlow.NS_MemoryGlow
+```
+
+두 컬럼으로 표현되지 않는 연출 — 자식 액터 통째 교체, 머티리얼 파라미터 구동, 사운드 — 은 `ABalhwajeomEvidenceActor::OnEvidenceStateApplied(PreviousStateID, NewStateID, bInitialApply)` BlueprintImplementableEvent에서 처리한다. 상태가 완전히 적용된 뒤 마지막에 호출된다.
+
+`bInitialApply`는 BeginPlay가 이미 진행된 상태를 복원할 때 true다. **1회성 연출은 이때 건너뛰어야 한다.** 그러지 않으면 레벨을 다시 열 때마다 이펙트가 재생된다. 비주얼(메시/가시성)은 반대로 `bInitialApply`에서도 적용해야 복원이 맞는다.
+
 관련 코드:
 
 - `CameraSystem/PhotoWorldStoryActor.h/.cpp`
 - `CameraSystem/PhotoWorldStoryWidget.h/.cpp`
 - `CameraSystem/BalhwajeomPhotoCameraComponent.h/.cpp`
+- `CameraSystem/BalhwajeomEvidenceActor.h/.cpp`
 
 - `.uasset`(카메라 Blueprint)과 `.umap` 수정은 상호작용/월드 트랙과 겹칠 수 있으므로 동시 편집 전 확인한다.
 - 사진 등록·저장 관련 상태는 이 트랙에서 별도로 들고 있지 않고 항상 [Subsystem-Handoff.md](./Subsystem-Handoff.md)의 InvestigationSubsystem을 통해서만 다룬다.

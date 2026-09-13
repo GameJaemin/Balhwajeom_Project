@@ -22,6 +22,17 @@ class BALHWAJEOM_API APhotoWorldStoryActor : public AActor
 public:
 	APhotoWorldStoryActor();
 
+	/**
+	 * Spawns one presentation at SpawnTransform and starts it. Returns nullptr when the photo has
+	 * nothing to present, so both the capture flow and evidence interaction share a single spawn path.
+	 */
+	static APhotoWorldStoryActor* SpawnAndStart(
+		UWorld* World,
+		TSubclassOf<APhotoWorldStoryActor> StoryClass,
+		const FTransform& SpawnTransform,
+		const FPhotoDefinition& PhotoDefinition,
+		AActor* Owner);
+
 	/** Starts loading and playing one story. Legacy lines are only used while old tables migrate. */
 	void StartStory(
 		const TArray<FPhotoStoryCue>& InCues,
