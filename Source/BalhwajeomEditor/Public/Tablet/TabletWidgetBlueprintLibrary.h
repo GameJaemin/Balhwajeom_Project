@@ -33,6 +33,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool InstallTabletPersonFolderWidget();
 
+	/** Creates the editable folder button, file tile, folder section, statement, and photo templates. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool CreateTabletDesignerWidgets();
+
+	/** Rebuilds only the statement detail WBP from the 1274x907 statement reference art. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool RedesignTabletStatementWidget();
+
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool InspectTabletWidgetBlueprint();
 

@@ -1,6 +1,61 @@
 #include "Story/StoryStateSubsystem.h"
 
+#include "Engine/GameInstance.h"
+#include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Story/StoryStateTags.h"
+
+
+void UStoryStateSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+
+	Collection.InitializeDependency<UBalhwajeomInvestigationSubsystem>();
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		InvestigationSubsystem =
+			GameInstance->GetSubsystem<UBalhwajeomInvestigationSubsystem>();
+	}
+
+	if (!InvestigationSubsystem)
+	{
+		return;
+	}
+
+	InvestigationSubsystem->OnPhotoCaptured.AddUniqueDynamic(
+		this,
+		&ThisClass::HandlePhotoCaptured
+	);
+	InvestigationSubsystem->OnSentenceSolved.AddUniqueDynamic(
+		this,
+		&ThisClass::HandleSentenceSolved
+	);
+
+	TArray<FCapturedPhotoRecord> CapturedPhotos;
+	InvestigationSubsystem->GetCapturedPhotos(CapturedPhotos);
+	for (const FCapturedPhotoRecord& PhotoRecord : CapturedPhotos)
+	{
+		AddPhotographedEvidenceTag(PhotoRecord.ObjectID);
+	}
+}
+
+
+void UStoryStateSubsystem::Deinitialize()
+{
+	if (InvestigationSubsystem)
+	{
+		InvestigationSubsystem->OnPhotoCaptured.RemoveDynamic(
+			this,
+			&ThisClass::HandlePhotoCaptured
+		);
+		InvestigationSubsystem->OnSentenceSolved.RemoveDynamic(
+			this,
+			&ThisClass::HandleSentenceSolved
+		);
+		InvestigationSubsystem = nullptr;
+	}
+
+	Super::Deinitialize();
+}
 
 
 bool UStoryStateSubsystem::AddStateTag(FGameplayTag StateTag)
@@ -153,4 +208,71 @@ bool UStoryStateSubsystem::ClearStateTags()
 	}
 
 	return true;
+}
+
+
+void UStoryStateSubsystem::HandlePhotoCaptured(
+	const FCapturedPhotoRecord& PhotoRecord
+)
+{
+	AddPhotographedEvidenceTag(PhotoRecord.ObjectID);
+}
+
+
+void UStoryStateSubsystem::HandleSentenceSolved(FName SentenceID)
+{
+	if (!InvestigationSubsystem)
+	{
+		return;
+	}
+
+	FPhotoDefinition PhotoDefinition;
+	if (InvestigationSubsystem->GetPhotoDefinitionBySentenceID(
+		SentenceID,
+		PhotoDefinition))
+	{
+		AddSentenceSolvedEvidenceTag(PhotoDefinition.PhotoID);
+	}
+}
+
+
+void UStoryStateSubsystem::AddPhotographedEvidenceTag(FName ObjectID)
+{
+	if (ObjectID.IsNone())
+	{
+		return;
+	}
+
+	const FGameplayTag PhotographedTag = FGameplayTag::RequestGameplayTag(
+		FName(*FString::Printf(
+			TEXT("Evidence.Photographed.%s"),
+			*ObjectID.ToString()
+		)),
+		false
+	);
+	if (PhotographedTag.IsValid())
+	{
+		AddStateTag(PhotographedTag);
+	}
+}
+
+
+void UStoryStateSubsystem::AddSentenceSolvedEvidenceTag(FName PhotoID)
+{
+	if (PhotoID.IsNone())
+	{
+		return;
+	}
+
+	const FGameplayTag SentenceSolvedTag = FGameplayTag::RequestGameplayTag(
+		FName(*FString::Printf(
+			TEXT("Evidence.SentenceSolved.%s"),
+			*PhotoID.ToString()
+		)),
+		false
+	);
+	if (SentenceSolvedTag.IsValid())
+	{
+		AddStateTag(SentenceSolvedTag);
+	}
 }

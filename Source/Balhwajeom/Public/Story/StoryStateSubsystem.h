@@ -2,8 +2,12 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
+#include "Investigation/InvestigationRuntimeTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "StoryStateSubsystem.generated.h"
+
+
+class UBalhwajeomInvestigationSubsystem;
 
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
@@ -19,6 +23,9 @@ class BALHWAJEOM_API UStoryStateSubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
+
 	UFUNCTION(BlueprintCallable, Category = "Story State")
 	bool AddStateTag(FGameplayTag StateTag);
 
@@ -68,6 +75,18 @@ public:
 	FOnStoryStateTagChanged OnStateTagRemoved;
 
 private:
+	UFUNCTION()
+	void HandlePhotoCaptured(const FCapturedPhotoRecord& PhotoRecord);
+
+	UFUNCTION()
+	void HandleSentenceSolved(FName SentenceID);
+
+	void AddPhotographedEvidenceTag(FName ObjectID);
+	void AddSentenceSolvedEvidenceTag(FName PhotoID);
+
 	UPROPERTY(Transient)
 	FGameplayTagContainer CurrentStateTags;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UBalhwajeomInvestigationSubsystem> InvestigationSubsystem;
 };

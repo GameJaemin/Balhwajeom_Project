@@ -297,6 +297,57 @@ bool FInvestigationDefinitionLookupTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInvestigationPhotoSentenceLookupRejectsStatementTest,
+	"Balhwajeom.Investigation.PhotoSentenceLookup.RejectsStatement",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FInvestigationPhotoSentenceLookupRejectsStatementTest::RunTest(
+	const FString& Parameters)
+{
+	const InvestigationSubsystemTests::FFixture Fixture;
+	FPhotoDefinition Photo;
+	Fixture.Subsystem->GetPhotoDefinition(
+		InvestigationSubsystemTests::PhotoID,
+		Photo);
+	Photo.PhotoSentenceID = InvestigationSubsystemTests::StatementID;
+	Fixture.Photos->RemoveRow(InvestigationSubsystemTests::PhotoID);
+	Fixture.Photos->AddRow(InvestigationSubsystemTests::PhotoID, Photo);
+
+	FPhotoDefinition ResolvedPhoto;
+	TestFalse(
+		TEXT("A Statement sentence must not resolve as a photo-analysis sentence"),
+		Fixture.Subsystem->GetPhotoDefinitionBySentenceID(
+			InvestigationSubsystemTests::StatementID,
+			ResolvedPhoto));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInvestigationPhotoSentenceLookupRejectsDuplicateTest,
+	"Balhwajeom.Investigation.PhotoSentenceLookup.RejectsDuplicate",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FInvestigationPhotoSentenceLookupRejectsDuplicateTest::RunTest(
+	const FString& Parameters)
+{
+	const InvestigationSubsystemTests::FFixture Fixture;
+	FPhotoDefinition DuplicatePhoto;
+	Fixture.Subsystem->GetPhotoDefinition(
+		InvestigationSubsystemTests::PhotoID,
+		DuplicatePhoto);
+	DuplicatePhoto.PhotoID = TEXT("PHOTO_TEST_DUPLICATE");
+	Fixture.Photos->AddRow(DuplicatePhoto.PhotoID, DuplicatePhoto);
+
+	FPhotoDefinition ResolvedPhoto;
+	TestFalse(
+		TEXT("A duplicated PhotoSentenceID must not resolve nondeterministically"),
+		Fixture.Subsystem->GetPhotoDefinitionBySentenceID(
+			InvestigationSubsystemTests::SentenceID,
+			ResolvedPhoto));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FInvestigationConfiguredDataValidationTest,
 	"Balhwajeom.Investigation.ConfiguredDataValidation",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
