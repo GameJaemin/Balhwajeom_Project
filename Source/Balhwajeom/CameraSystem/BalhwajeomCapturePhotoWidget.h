@@ -10,6 +10,7 @@ class UImage;
 class UTextBlock;
 class UTexture2D;
 class UVerticalBox;
+class UWrapBox;
 class UFont;
 class UWidget;
 
@@ -26,7 +27,8 @@ public:
 	void PresentCapture(
 		UTexture2D* CapturedTexture,
 		const FText& SentenceText,
-		const TArray<FText>& GrantedKeywords);
+		const TArray<FText>& GrantedKeywords,
+		bool bIsAnalysisSentence);
 
 	void ApplyFlyToTab(float LinearAlpha);
 	bool IsFlightReady() const { return bAnimationOriginsCached; }
@@ -42,6 +44,10 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> SentenceTextBlock;
+
+	/** Read-only reconstruction of a photo-analysis sentence with visible blank boxes. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWrapBox> SentenceBuilder;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UVerticalBox> KeywordList;
@@ -99,6 +105,27 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Keyword Style")
 	FLinearColor KeywordBackgroundColor = FLinearColor(0.96f, 0.96f, 0.96f, 1.0f);
+
+	/** Background used when the captured photo has a keyword-analysis sentence. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Theme")
+	TObjectPtr<UTexture2D> AnalysisBackgroundTexture;
+
+	/** Background used when the captured photo only has a natural-language description. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Theme")
+	TObjectPtr<UTexture2D> NaturalBackgroundTexture;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Theme")
+	FLinearColor AnalysisPhotoTint = FLinearColor::White;
+
+	/** #E0D8C8, matching the supplied natural-language photo guide. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Theme")
+	FLinearColor NaturalPhotoTint = FLinearColor::FromSRGBColor(FColor(0xE0, 0xD8, 0xC8));
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Theme", meta = (ClampMin = "1"))
+	int32 AnalysisSentenceFontSize = 24;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Theme", meta = (ClampMin = "1"))
+	int32 NaturalSentenceFontSize = 25;
 
 private:
 #if WITH_DEV_AUTOMATION_TESTS

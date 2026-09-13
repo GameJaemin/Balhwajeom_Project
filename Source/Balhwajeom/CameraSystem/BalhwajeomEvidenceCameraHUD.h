@@ -38,7 +38,8 @@ public:
 	void TriggerCapturePhotoPresentation(
 		UTexture2D* CapturedTexture,
 		const FText& SentenceText,
-		const TArray<FText>& GrantedKeywords);
+		const TArray<FText>& GrantedKeywords,
+		bool bIsAnalysisSentence = false);
 
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.01"))

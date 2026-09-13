@@ -47,7 +47,11 @@ bool FCapturePhotoFlightTest::RunTest(const FString& Parameters)
 		{
 			TArray<FText> Words;
 			for (int32 I = 0; I < Capture; ++I) Words.Add(FText::FromString(TEXT("Keyword")));
-			Widget->PresentCapture(nullptr, FText::FromString(TEXT("Sentence")), Words);
+			Widget->PresentCapture(
+				nullptr,
+				FText::FromString(TEXT("Sentence")),
+				Words,
+				Capture % 2 == 0);
 			TestFalse(TEXT("Previous capture geometry is invalidated"), Widget->IsFlightReady());
 			// Include an ancestor scale/translation to exercise local vs viewport units.
 			FWidgetTransform Ancestor;

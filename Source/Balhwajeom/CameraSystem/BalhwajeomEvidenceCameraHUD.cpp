@@ -410,14 +410,16 @@ bool ABalhwajeomEvidenceCameraHUD::EnsureCapturePhotoWidget()
 void ABalhwajeomEvidenceCameraHUD::TriggerCapturePhotoPresentation(
 	UTexture2D* CapturedTexture,
 	const FText& SentenceText,
-	const TArray<FText>& GrantedKeywords)
+	const TArray<FText>& GrantedKeywords,
+	const bool bIsAnalysisSentence)
 {
 	if (!GetWorld() || !EnsureCapturePhotoWidget())
 	{
 		return;
 	}
 
-	CapturePhotoWidget->PresentCapture(CapturedTexture, SentenceText, GrantedKeywords);
+	CapturePhotoWidget->PresentCapture(
+		CapturedTexture, SentenceText, GrantedKeywords, bIsAnalysisSentence);
 	EvidenceSavedAnimationStartTime = GetWorld()->GetTimeSeconds();
 	CapturePhotoLayoutWaitStartTime = EvidenceSavedAnimationStartTime;
 	if (PlayerOwner && !bCapturePhotoMovementLocked)

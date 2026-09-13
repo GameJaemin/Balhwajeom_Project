@@ -3,16 +3,20 @@
 #include "Components/Border.h"
 #include "Components/CanvasPanel.h"
 #include "Components/Image.h"
+#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
+#include "Components/WrapBox.h"
+#include "Components/WrapBoxSlot.h"
 #include "Engine/Font.h"
 #include "Engine/Texture2D.h"
 
 void UBalhwajeomCapturePhotoWidget::PresentCapture(
 	UTexture2D* CapturedTexture,
 	const FText& SentenceText,
-	const TArray<FText>& GrantedKeywords)
+	const TArray<FText>& GrantedKeywords,
+	const bool bIsAnalysisSentence)
 {
 	if (!CardBackground)
 	{
@@ -25,15 +29,89 @@ void UBalhwajeomCapturePhotoWidget::PresentCapture(
 	TabFlyTarget = GetWidgetFromName(TEXT("TabFlyTarget"));
 	ResetPresentation();
 
+	if (!AnalysisBackgroundTexture)
+	{
+		AnalysisBackgroundTexture = LoadObject<UTexture2D>(nullptr,
+			TEXT("/Game/Balhwajeom/UI/Camera/photo_black_bg_v2.photo_black_bg_v2"));
+	}
+	if (!NaturalBackgroundTexture)
+	{
+		NaturalBackgroundTexture = LoadObject<UTexture2D>(nullptr,
+			TEXT("/Game/Balhwajeom/UI/Camera/photo_yellow_bg_v2.photo_yellow_bg_v2"));
+	}
+	if (CardBackground)
+	{
+		CardBackground->SetBrushFromTexture(
+			bIsAnalysisSentence ? AnalysisBackgroundTexture.Get() : NaturalBackgroundTexture.Get());
+		CardBackground->SetBrushColor(FLinearColor::White);
+	}
+
 	if (CapturedPhotoImage)
 	{
 		CapturedPhotoImage->SetBrushFromTexture(CapturedTexture, false);
+		CapturedPhotoImage->SetColorAndOpacity(
+			bIsAnalysisSentence ? AnalysisPhotoTint : NaturalPhotoTint);
 	}
 	if (SentenceTextBlock)
 	{
 		SentenceTextBlock->SetText(SentenceText);
+		SentenceTextBlock->SetColorAndOpacity(FSlateColor(
+			bIsAnalysisSentence ? FLinearColor::White : FLinearColor::Black));
+		FSlateFontInfo SentenceFont = SentenceTextBlock->GetFont();
+		SentenceFont.Size = bIsAnalysisSentence
+			? AnalysisSentenceFontSize
+			: NaturalSentenceFontSize;
+		SentenceTextBlock->SetFont(SentenceFont);
 		SentenceTextBlock->SetVisibility(
-			SentenceText.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+			SentenceText.IsEmpty() || bIsAnalysisSentence
+				? ESlateVisibility::Collapsed
+				: ESlateVisibility::HitTestInvisible);
+	}
+	if (SentenceBuilder)
+	{
+		SentenceBuilder->ClearChildren();
+		if (bIsAnalysisSentence && !SentenceText.IsEmpty())
+		{
+			TArray<FString> Segments;
+			SentenceText.ToString().ParseIntoArray(Segments, TEXT("[]"), false);
+			for (int32 SegmentIndex = 0; SegmentIndex < Segments.Num(); ++SegmentIndex)
+			{
+				if (!Segments[SegmentIndex].IsEmpty())
+				{
+					UTextBlock* Segment = NewObject<UTextBlock>(SentenceBuilder);
+					Segment->SetText(FText::FromString(Segments[SegmentIndex]));
+					Segment->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+					FSlateFontInfo SegmentFont = SentenceTextBlock
+						? SentenceTextBlock->GetFont()
+						: Segment->GetFont();
+					SegmentFont.Size = AnalysisSentenceFontSize;
+					Segment->SetFont(SegmentFont);
+					if (UWrapBoxSlot* SegmentSlot = SentenceBuilder->AddChildToWrapBox(Segment))
+					{
+						SegmentSlot->SetVerticalAlignment(VAlign_Center);
+					}
+				}
+
+				if (SegmentIndex < Segments.Num() - 1)
+				{
+					UBorder* BlankBackground = NewObject<UBorder>(SentenceBuilder);
+					BlankBackground->SetBrushColor(FLinearColor::White);
+					USizeBox* BlankSize = NewObject<USizeBox>(SentenceBuilder);
+					BlankSize->SetWidthOverride(83.0f);
+					BlankSize->SetHeightOverride(36.0f);
+					BlankSize->SetContent(BlankBackground);
+					if (UWrapBoxSlot* BlankSlot = SentenceBuilder->AddChildToWrapBox(BlankSize))
+					{
+						BlankSlot->SetPadding(FMargin(4.0f, 0.0f));
+						BlankSlot->SetVerticalAlignment(VAlign_Center);
+					}
+				}
+			}
+		}
+		SentenceBuilder->SetVisibility(
+			bIsAnalysisSentence && !SentenceText.IsEmpty()
+				? ESlateVisibility::HitTestInvisible
+				: ESlateVisibility::Collapsed);
 	}
 
 	if (KeywordList)
