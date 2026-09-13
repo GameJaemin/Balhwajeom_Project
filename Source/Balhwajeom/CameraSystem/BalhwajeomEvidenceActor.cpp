@@ -200,7 +200,17 @@ void ABalhwajeomEvidenceActor::BeginPlay()
 {
 	Super::BeginPlay();
 
+	bActorBaselineHidden = IsHidden();
+	bActorBaselineCollisionEnabled = GetActorEnableCollision();
 	FitCameraTargetBoundsToMesh();
+	if (CameraTargetBounds)
+	{
+		CameraTargetBoundsBaselineCollisionEnabled =
+			CameraTargetBounds->GetCollisionEnabled();
+		CameraTargetBoundsBaselineVisibilityResponse =
+			CameraTargetBounds->GetCollisionResponseToChannel(ECC_Visibility);
+		bCameraTargetBoundsBaselineCaptured = true;
+	}
 
 	if (ObjectLabelWidget)
 	{
@@ -219,9 +229,22 @@ void ABalhwajeomEvidenceActor::BeginPlay()
 		Investigation->OnPhotoCaptured.AddUniqueDynamic(
 			this, &ABalhwajeomEvidenceActor::HandlePhotoCaptured);
 	}
+	if (const UWorld* World = GetWorld())
+	{
+		if (UGameInstance* GameInstance = World->GetGameInstance())
+		{
+			if (UStoryStateSubsystem* StoryState =
+				GameInstance->GetSubsystem<UStoryStateSubsystem>())
+			{
+				StoryState->OnStateTagAdded.AddUniqueDynamic(
+					this, &ThisClass::HandleStoryStateTagChanged);
+				StoryState->OnStateTagRemoved.AddUniqueDynamic(
+					this, &ThisClass::HandleStoryStateTagChanged);
+			}
+		}
+	}
 
 	RegisterWithInvestigationSystem();
-	ConfigureItemInspection();
 }
 
 void ABalhwajeomEvidenceActor::ConfigureItemInspection()
@@ -231,10 +254,14 @@ void ABalhwajeomEvidenceActor::ConfigureItemInspection()
 		return;
 	}
 
-	ItemInspectionComponent->bInspectionEnabled = bEnable3DInspection;
+	ItemInspectionComponent->bInspectionEnabled =
+		bEnable3DInspection && bProgressionAvailable &&
+		!bProgressionCleared && !bProgressionRemovalPending;
 	ItemInspectionComponent->InspectionData = nullptr;
 	RuntimeItemInspectionData = nullptr;
-	if (!bEnable3DInspection || !EvidenceMesh || !EvidenceMesh->GetStaticMesh())
+	if (!bEnable3DInspection || !bProgressionAvailable ||
+		bProgressionCleared || bProgressionRemovalPending ||
+		!EvidenceMesh || !EvidenceMesh->GetStaticMesh())
 	{
 		return;
 	}
@@ -281,6 +308,20 @@ void ABalhwajeomEvidenceActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		Investigation->OnPhotoCaptured.RemoveDynamic(
 			this, &ABalhwajeomEvidenceActor::HandlePhotoCaptured);
 	}
+	if (const UWorld* World = GetWorld())
+	{
+		if (UGameInstance* GameInstance = World->GetGameInstance())
+		{
+			if (UStoryStateSubsystem* StoryState =
+				GameInstance->GetSubsystem<UStoryStateSubsystem>())
+			{
+				StoryState->OnStateTagAdded.RemoveDynamic(
+					this, &ThisClass::HandleStoryStateTagChanged);
+				StoryState->OnStateTagRemoved.RemoveDynamic(
+					this, &ThisClass::HandleStoryStateTagChanged);
+			}
+		}
+	}
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -293,6 +334,16 @@ void ABalhwajeomEvidenceActor::ConfigureInvestigationObject(FName InObjectID)
 bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplayText)
 {
 	OutDisplayText = FText::GetEmpty();
+	if (!bProgressionAvailable || bProgressionCleared || bProgressionRemovalPending)
+	{
+		return false;
+	}
+	if (CanClearForProgression())
+	{
+		bProgressionRemovalPending = true;
+		BeginProgressionRemoval();
+		return true;
+	}
 	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
 	FEvidenceInteractionViewData ViewData;
 	if (!Investigation || !Investigation->BeginEvidenceInteraction(EvidenceInstanceID, ViewData))
@@ -358,7 +409,8 @@ void ABalhwajeomEvidenceActor::LogBlockedWorldStory(const TCHAR* Reason) const
 
 bool ABalhwajeomEvidenceActor::PlayWorldStory()
 {
-	return PlayWorldStoryForState(CurrentStateID);
+	return bProgressionAvailable && !bProgressionCleared &&
+		!bProgressionRemovalPending && PlayWorldStoryForState(CurrentStateID);
 }
 
 void ABalhwajeomEvidenceActor::StopWorldStory()
@@ -397,6 +449,11 @@ FTransform ABalhwajeomEvidenceActor::GetWorldStoryTransform() const
 
 bool ABalhwajeomEvidenceActor::PlayWorldStoryForState(FName StateID)
 {
+	if (!bProgressionAvailable || bProgressionCleared || bProgressionRemovalPending)
+	{
+		return false;
+	}
+
 	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
 	FEvidenceStateDefinition State;
 	if (!Investigation || !Investigation->GetEvidenceStateDefinition(StateID, State))
@@ -458,6 +515,15 @@ bool ABalhwajeomEvidenceActor::PlayWorldStoryForState(FName StateID)
 
 bool ABalhwajeomEvidenceActor::CanRequestInvestigationInteraction() const
 {
+	if (!bProgressionAvailable || bProgressionCleared || bProgressionRemovalPending)
+	{
+		return false;
+	}
+	if (CanClearForProgression())
+	{
+		return true;
+	}
+
 	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
 	FEvidenceInteractionViewData ViewData;
 	return Investigation &&
@@ -538,10 +604,15 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID, bool bInit
 	{
 		EvidenceData.EvidenceID = ObjectID;
 		EvidenceData.EvidenceName = ObjectDefinition.ObjectName;
+		RequiredActivationTag = ObjectDefinition.RequiredActivationTag;
+		ClearRequiredTag = ObjectDefinition.ClearRequiredTag;
+		GrantedTagOnClear = ObjectDefinition.GrantedTagOnClear;
 	}
 	ApplyStateVisuals(State, bInitialApply);
-	// After the swap, so the rotating inspector captures the state's mesh.
-	ConfigureItemInspection();
+	// After the swap, so the rotating inspector captures the state's mesh and the
+	// progression gate can disable every interaction surface together.
+	RefreshProgressionAvailability();
+	RefreshProgressionClearedState();
 
 	// Last, so Blueprint reacts to a fully applied state. Use it for anything the DataTable
 	// columns cannot express, such as swapping a whole child actor or driving a material.
@@ -555,6 +626,132 @@ void ABalhwajeomEvidenceActor::HandlePlayerDistanceStateChanged(
 	ApplyInspectionDistanceState(NewState);
 }
 
+void ABalhwajeomEvidenceActor::HandleStoryStateTagChanged(FGameplayTag StateTag)
+{
+	if (StateTag == RequiredActivationTag)
+	{
+		RefreshProgressionAvailability();
+	}
+	if (StateTag == GrantedTagOnClear)
+	{
+		RefreshProgressionClearedState();
+	}
+}
+
+bool ABalhwajeomEvidenceActor::CanClearForProgression() const
+{
+	if (!ClearRequiredTag.IsValid() || !GrantedTagOnClear.IsValid())
+	{
+		return false;
+	}
+
+	const UWorld* World = GetWorld();
+	const UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+	const UStoryStateSubsystem* StoryState = GameInstance
+		? GameInstance->GetSubsystem<UStoryStateSubsystem>()
+		: nullptr;
+	return StoryState && StoryState->HasStateTagExact(ClearRequiredTag);
+}
+
+void ABalhwajeomEvidenceActor::BeginProgressionRemoval_Implementation()
+{
+	FinalizeProgressionRemoval();
+}
+
+void ABalhwajeomEvidenceActor::FinalizeProgressionRemoval()
+{
+	if (bProgressionCleared)
+	{
+		return;
+	}
+
+	bProgressionRemovalPending = false;
+	bProgressionCleared = true;
+	SetInspectionLabel(FText::GetEmpty(), false);
+	StopWorldStory();
+	SetActorHiddenInGame(true);
+	SetActorEnableCollision(false);
+	ConfigureItemInspection();
+
+	const UWorld* World = GetWorld();
+	UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+	if (UStoryStateSubsystem* StoryState = GameInstance
+		? GameInstance->GetSubsystem<UStoryStateSubsystem>()
+		: nullptr)
+	{
+		StoryState->AddStateTag(GrantedTagOnClear);
+	}
+}
+
+void ABalhwajeomEvidenceActor::RefreshProgressionAvailability()
+{
+	bool bShouldBeAvailable = !RequiredActivationTag.IsValid();
+	if (!bShouldBeAvailable)
+	{
+		const UWorld* World = GetWorld();
+		const UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+		const UStoryStateSubsystem* StoryState = GameInstance
+			? GameInstance->GetSubsystem<UStoryStateSubsystem>()
+			: nullptr;
+		bShouldBeAvailable = StoryState &&
+			StoryState->HasStateTagExact(RequiredActivationTag);
+	}
+
+	bProgressionAvailable = bShouldBeAvailable;
+	if (CameraTargetBounds && bCameraTargetBoundsBaselineCaptured)
+	{
+		CameraTargetBounds->SetCollisionEnabled(
+			bProgressionAvailable
+				? CameraTargetBoundsBaselineCollisionEnabled
+				: ECollisionEnabled::NoCollision);
+		CameraTargetBounds->SetCollisionResponseToChannel(
+			ECC_Visibility,
+			bProgressionAvailable
+				? CameraTargetBoundsBaselineVisibilityResponse
+				: ECR_Ignore);
+	}
+
+	if (!bProgressionAvailable)
+	{
+		SetInspectionLabel(FText::GetEmpty(), false);
+		StopWorldStory();
+	}
+
+	ConfigureItemInspection();
+	ApplyInspectionDistanceState(LastInspectionDistanceState);
+}
+
+void ABalhwajeomEvidenceActor::RefreshProgressionClearedState()
+{
+	bool bShouldBeCleared = false;
+	if (GrantedTagOnClear.IsValid())
+	{
+		const UWorld* World = GetWorld();
+		const UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+		const UStoryStateSubsystem* StoryState = GameInstance
+			? GameInstance->GetSubsystem<UStoryStateSubsystem>()
+			: nullptr;
+		bShouldBeCleared = StoryState &&
+			StoryState->HasStateTagExact(GrantedTagOnClear);
+	}
+
+	bProgressionCleared = bShouldBeCleared;
+	if (bProgressionCleared)
+	{
+		bProgressionRemovalPending = false;
+		SetInspectionLabel(FText::GetEmpty(), false);
+		StopWorldStory();
+		SetActorHiddenInGame(true);
+		SetActorEnableCollision(false);
+		ConfigureItemInspection();
+		return;
+	}
+
+	SetActorHiddenInGame(bActorBaselineHidden);
+	SetActorEnableCollision(bActorBaselineCollisionEnabled);
+	RefreshProgressionAvailability();
+}
+
 void ABalhwajeomEvidenceActor::SetInspectionLabelSuppressed(bool bSuppressed)
 {
 	bInspectionLabelSuppressed = bSuppressed;
@@ -565,6 +762,11 @@ void ABalhwajeomEvidenceActor::ApplyInspectionDistanceState(
 	EPlayerInspectionDistanceState DistanceState)
 {
 	if (bInspectionLabelSuppressed)
+	{
+		SetInspectionLabel(FText::GetEmpty(), false);
+		return;
+	}
+	if (!bProgressionAvailable || bProgressionCleared || bProgressionRemovalPending)
 	{
 		SetInspectionLabel(FText::GetEmpty(), false);
 		return;
@@ -600,7 +802,8 @@ void ABalhwajeomEvidenceActor::ApplyInspectionDistanceState(
 void ABalhwajeomEvidenceActor::HandlePhotoCaptured(
 	const FCapturedPhotoRecord& PhotoRecord)
 {
-	if (!EvidenceInstanceID.IsValid() ||
+	if (!bProgressionAvailable || bProgressionCleared ||
+		bProgressionRemovalPending || !EvidenceInstanceID.IsValid() ||
 		PhotoRecord.EvidenceInstanceID != EvidenceInstanceID)
 	{
 		return;
@@ -709,6 +912,11 @@ void ABalhwajeomEvidenceActor::MarkAsCollected()
 bool ABalhwajeomEvidenceActor::RequestCameraTargetInfo_Implementation(
 	FBalhwajeomCameraTargetInfo& OutInfo) const
 {
+	if (!bProgressionAvailable || bProgressionCleared || bProgressionRemovalPending)
+	{
+		return false;
+	}
+
 	if (UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem())
 	{
 		FEvidenceStateDefinition State;
@@ -751,5 +959,8 @@ UPrimitiveComponent* ABalhwajeomEvidenceActor::RequestCameraFramingComponent_Imp
 
 void ABalhwajeomEvidenceActor::NotifyCameraCaptureSucceeded_Implementation()
 {
-	MarkAsCollected();
+	if (bProgressionAvailable && !bProgressionCleared && !bProgressionRemovalPending)
+	{
+		MarkAsCollected();
+	}
 }

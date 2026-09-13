@@ -4,6 +4,7 @@
 #include "Engine/DataTable.h"
 #include "Engine/GameInstance.h"
 #include "Misc/AutomationTest.h"
+#include "Story/StoryStateTags.h"
 
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -383,6 +384,112 @@ bool FInvestigationConfiguredDataValidationTest::RunTest(const FString& Paramete
 			StoryPhoto.WorldStoryCues[1].StartTimeSeconds >
 			StoryPhoto.WorldStoryCues[0].StartTimeSeconds);
 	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInvestigationChapter01PhaseActivationDataTest,
+	"Balhwajeom.Investigation.Progression.Chapter01ActivationData",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FInvestigationChapter01PhaseActivationDataTest::RunTest(
+	const FString& Parameters)
+{
+	const UBalhwajeomInvestigationSettings* Settings =
+		GetDefault<UBalhwajeomInvestigationSettings>();
+	UDataTable* Definitions = Settings
+		? Settings->EvidenceDefinitionsTable.LoadSynchronous()
+		: nullptr;
+	if (!TestNotNull(TEXT("Configured evidence definitions should load"), Definitions))
+	{
+		return false;
+	}
+
+	const TArray<FName> Phase01Objects = {
+		TEXT("OBJ_01_019"), TEXT("OBJ_01_005"), TEXT("OBJ_01_020")
+	};
+	const TArray<FName> Phase02Objects = {
+		TEXT("OBJ_01_004"), TEXT("OBJ_01_022"), TEXT("OBJ_01_021"),
+		TEXT("OBJ_01_025"), TEXT("OBJ_01_015"), TEXT("OBJ_01_023")
+	};
+	const TArray<FName> Phase03Objects = {
+		TEXT("OBJ_01_017"), TEXT("OBJ_01_016")
+	};
+
+	for (const FName ObjectID : Phase01Objects)
+	{
+		const FEvidenceDefinition* Definition =
+			Definitions->FindRow<FEvidenceDefinition>(ObjectID, TEXT("PhaseActivationTest"));
+		if (TestNotNull(
+			FString::Printf(TEXT("%s definition should exist"), *ObjectID.ToString()),
+			Definition))
+		{
+			TestFalse(
+				FString::Printf(TEXT("%s should be active from phase 01 start"), *ObjectID.ToString()),
+				Definition->RequiredActivationTag.IsValid());
+		}
+	}
+
+	for (const FName ObjectID : Phase02Objects)
+	{
+		const FEvidenceDefinition* Definition =
+			Definitions->FindRow<FEvidenceDefinition>(ObjectID, TEXT("PhaseActivationTest"));
+		if (TestNotNull(
+			FString::Printf(TEXT("%s definition should exist"), *ObjectID.ToString()),
+			Definition))
+		{
+			TestTrue(
+				FString::Printf(TEXT("%s should require phase 02 unlock"), *ObjectID.ToString()),
+				Definition->RequiredActivationTag ==
+					BalhwajeomGameplayTags::Story_Chapter_01_Phase_02_Unlocked);
+		}
+	}
+
+	for (const FName ObjectID : Phase03Objects)
+	{
+		const FEvidenceDefinition* Definition =
+			Definitions->FindRow<FEvidenceDefinition>(ObjectID, TEXT("PhaseActivationTest"));
+		if (TestNotNull(
+			FString::Printf(TEXT("%s definition should exist"), *ObjectID.ToString()),
+			Definition))
+		{
+			TestTrue(
+				FString::Printf(TEXT("%s should require phase 03 unlock"), *ObjectID.ToString()),
+				Definition->RequiredActivationTag ==
+					BalhwajeomGameplayTags::Story_Chapter_01_Phase_03_Unlocked);
+		}
+	}
+
+	const FEvidenceDefinition* Phase01Obstacle =
+		Definitions->FindRow<FEvidenceDefinition>(
+			TEXT("Obstacle_Phase01"), TEXT("PhaseActivationTest"));
+	if (TestNotNull(TEXT("Phase 01 obstacle definition should exist"), Phase01Obstacle))
+	{
+		TestTrue(
+			TEXT("Phase 01 obstacle should require phase 01 completion before clearing"),
+			Phase01Obstacle->ClearRequiredTag ==
+				BalhwajeomGameplayTags::Story_Chapter_01_Phase_01_Completed);
+		TestTrue(
+			TEXT("Phase 01 obstacle should unlock phase 02 after clearing"),
+			Phase01Obstacle->GrantedTagOnClear ==
+				BalhwajeomGameplayTags::Story_Chapter_01_Phase_02_Unlocked);
+	}
+
+	const FEvidenceDefinition* Phase02Obstacle =
+		Definitions->FindRow<FEvidenceDefinition>(
+			TEXT("Obstacle_Phase02"), TEXT("PhaseActivationTest"));
+	if (TestNotNull(TEXT("Phase 02 obstacle definition should exist"), Phase02Obstacle))
+	{
+		TestTrue(
+			TEXT("Phase 02 obstacle should require phase 02 completion before clearing"),
+			Phase02Obstacle->ClearRequiredTag ==
+				BalhwajeomGameplayTags::Story_Chapter_01_Phase_02_Completed);
+		TestTrue(
+			TEXT("Phase 02 obstacle should unlock phase 03 after clearing"),
+			Phase02Obstacle->GrantedTagOnClear ==
+				BalhwajeomGameplayTags::Story_Chapter_01_Phase_03_Unlocked);
+	}
+
 	return true;
 }
 

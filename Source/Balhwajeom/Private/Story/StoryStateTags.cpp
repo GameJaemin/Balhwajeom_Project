@@ -45,4 +45,34 @@ namespace BalhwajeomGameplayTags
 		"Runtime.Lock.Tablet",
 		"Blocks opening the tablet UI."
 	);
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Story_Chapter_01_Phase_01_Completed,
+		"Story.Chapter.01.Phase.01.Completed",
+		"All required photo sentences in chapter 01 phase 01 are solved."
+	);
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Story_Chapter_01_Phase_02_Unlocked,
+		"Story.Chapter.01.Phase.02.Unlocked",
+		"Chapter 01 phase 02 becomes interactable after the first obstacle is cleared."
+	);
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Story_Chapter_01_Phase_02_Completed,
+		"Story.Chapter.01.Phase.02.Completed",
+		"All required photo sentences in chapter 01 phase 02 are solved."
+	);
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Story_Chapter_01_Phase_03_Unlocked,
+		"Story.Chapter.01.Phase.03.Unlocked",
+		"Chapter 01 phase 03 becomes interactable after the second obstacle is cleared."
+	);
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Story_Chapter_01_Phase_03_Completed,
+		"Story.Chapter.01.Phase.03.Completed",
+		"All required photo sentences in chapter 01 phase 03 are solved."
+	);
 }

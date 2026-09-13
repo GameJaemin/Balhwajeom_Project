@@ -116,6 +116,7 @@ private:
 
 	void AddPhotographedEvidenceTag(FName ObjectID);
 	void AddSentenceSolvedEvidenceTag(FName PhotoID);
+	void EvaluateChapter01PhaseProgress();
 
 	/** Adds "Evidence.State.<StateID>". Unregistered tags are silently ignored. */
 	void AddEvidenceStateTag(FName StateID);

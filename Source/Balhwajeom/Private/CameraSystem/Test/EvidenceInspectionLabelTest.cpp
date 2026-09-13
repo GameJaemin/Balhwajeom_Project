@@ -4,6 +4,7 @@
 
 #include "Blueprint/UserWidget.h"
 #include "CameraSystem/BalhwajeomEvidenceActor.h"
+#include "Components/BoxComponent.h"
 #include "Components/Image.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
@@ -15,6 +16,8 @@
 #include "ItemInspection/JMInspectableComponent.h"
 #include "ItemInspection/JMItemInspectionData.h"
 #include "Kismet/GameplayStatics.h"
+#include "Story/StoryStateSubsystem.h"
+#include "Story/StoryStateTags.h"
 #include "UObject/Script.h"
 
 
@@ -71,6 +74,40 @@ struct FEvidenceActorTestAccessor
 		return Investigation->OnPhotoCaptured.IsAlreadyBound(
 			Evidence,
 			&ABalhwajeomEvidenceActor::HandlePhotoCaptured);
+	}
+
+	static void SetRequiredActivationTag(
+		ABalhwajeomEvidenceActor* Evidence,
+		FGameplayTag RequiredTag)
+	{
+		Evidence->RequiredActivationTag = RequiredTag;
+	}
+
+	static void RefreshProgressionAvailability(ABalhwajeomEvidenceActor* Evidence)
+	{
+		Evidence->RefreshProgressionAvailability();
+	}
+
+	static bool IsProgressionAvailable(const ABalhwajeomEvidenceActor* Evidence)
+	{
+		return Evidence->bProgressionAvailable;
+	}
+
+	static ECollisionEnabled::Type GetCameraBoundsCollision(
+		const ABalhwajeomEvidenceActor* Evidence)
+	{
+		return Evidence->CameraTargetBounds
+			? Evidence->CameraTargetBounds->GetCollisionEnabled()
+			: ECollisionEnabled::NoCollision;
+	}
+
+	static bool IsStoryStateHandlerBound(
+		const UStoryStateSubsystem* StoryState,
+		ABalhwajeomEvidenceActor* Evidence)
+	{
+		return StoryState->OnStateTagAdded.IsAlreadyBound(
+			Evidence,
+			&ABalhwajeomEvidenceActor::HandleStoryStateTagChanged);
 	}
 
 };
@@ -308,6 +345,272 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 			FEvidenceActorTestAccessor::GetStatusIconResource(Evidence),
 			static_cast<UObject*>(CapturedIcon));
 	}
+
+	GameInstance->Shutdown();
+	GEngine->DestroyWorldContext(World);
+	World->DestroyWorld(false);
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FEvidenceProgressionGateTest,
+	"Balhwajeom.Camera.Evidence.ProgressionGate.DisablesAndRestoresInteraction",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FEvidenceProgressionGateTest::RunTest(const FString& Parameters)
+{
+	UGameInstance* GameInstance = NewObject<UGameInstance>(GEngine);
+	GameInstance->InitializeStandalone();
+	UWorld* World = GameInstance->GetWorld();
+	if (!TestNotNull(TEXT("Standalone GameInstance should create a World"), World))
+	{
+		GameInstance->Shutdown();
+		return false;
+	}
+
+	UStoryStateSubsystem* StoryState =
+		GameInstance->GetSubsystem<UStoryStateSubsystem>();
+	if (!TestNotNull(TEXT("StoryState subsystem should exist"), StoryState))
+	{
+		GameInstance->Shutdown();
+		return false;
+	}
+	StoryState->ClearStateTags();
+
+	ABalhwajeomEvidenceActor* Evidence =
+		World->SpawnActorDeferred<ABalhwajeomEvidenceActor>(
+			ABalhwajeomEvidenceActor::StaticClass(),
+			FTransform::Identity);
+	if (!TestNotNull(TEXT("Evidence actor should spawn"), Evidence))
+	{
+		GameInstance->Shutdown();
+		return false;
+	}
+
+	FEvidenceActorTestAccessor::Enable3DInspection(Evidence);
+	Evidence->ConfigureInvestigationObject(TEXT("OBJ_01_004"));
+	UGameplayStatics::FinishSpawningActor(Evidence, FTransform::Identity);
+	if (!World->HasBegunPlay())
+	{
+		World->BeginPlay();
+	}
+	if (!Evidence->HasActorBegunPlay())
+	{
+		Evidence->DispatchBeginPlay();
+	}
+	FEvidenceActorTestAccessor::SetRequiredActivationTag(
+		Evidence,
+		BalhwajeomGameplayTags::Story_Chapter_01_Phase_01_Completed);
+	FEvidenceActorTestAccessor::RefreshProgressionAvailability(Evidence);
+
+	TestFalse(
+		TEXT("Evidence requiring an absent phase tag should be progression-locked"),
+		FEvidenceActorTestAccessor::IsProgressionAvailable(Evidence));
+	TestTrue(
+		TEXT("A progression lock should keep the visible mesh enabled"),
+		Evidence->FindComponentByClass<UStaticMeshComponent>()->IsVisible());
+	TestTrue(
+		TEXT("A progression lock should keep the visible mesh collision enabled"),
+		Evidence->FindComponentByClass<UStaticMeshComponent>()->GetCollisionEnabled() !=
+			ECollisionEnabled::NoCollision);
+	TestFalse(
+		TEXT("A progression-locked evidence actor should reject F interaction"),
+		Evidence->CanRequestInvestigationInteraction());
+	TestFalse(
+		TEXT("A progression-locked evidence actor should not expose 3D inspection"),
+		Evidence->GetItemInspectionComponent()->bInspectionEnabled);
+	TestEqual(
+		TEXT("A progression lock should disable the interaction-only camera bounds"),
+		FEvidenceActorTestAccessor::GetCameraBoundsCollision(Evidence),
+		ECollisionEnabled::NoCollision);
+
+	FBalhwajeomCameraTargetInfo TargetInfo;
+	TestFalse(
+		TEXT("A progression-locked evidence actor should reject camera targeting"),
+		Evidence->RequestCameraTargetInfo_Implementation(TargetInfo));
+
+	TestTrue(
+		TEXT("Evidence should bind to story tag additions during BeginPlay"),
+		FEvidenceActorTestAccessor::IsStoryStateHandlerBound(StoryState, Evidence));
+	{
+		FEditorScriptExecutionGuard ScriptExecutionGuard;
+		TestTrue(
+			TEXT("The required phase completion tag should be newly added"),
+			StoryState->AddStateTag(
+				BalhwajeomGameplayTags::Story_Chapter_01_Phase_01_Completed));
+	}
+
+	TestTrue(
+		TEXT("Adding the required phase tag should unlock the same actor immediately"),
+		FEvidenceActorTestAccessor::IsProgressionAvailable(Evidence));
+	TestTrue(
+		TEXT("Unlocking should restore authored 3D inspection"),
+		Evidence->GetItemInspectionComponent()->bInspectionEnabled);
+	TestEqual(
+		TEXT("Unlocking should restore the camera bounds collision"),
+		FEvidenceActorTestAccessor::GetCameraBoundsCollision(Evidence),
+		ECollisionEnabled::QueryOnly);
+	TestTrue(
+		TEXT("Unlocked evidence should be available to the photo camera"),
+		Evidence->RequestCameraTargetInfo_Implementation(TargetInfo));
+
+	GameInstance->Shutdown();
+	GEngine->DestroyWorldContext(World);
+	World->DestroyWorld(false);
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FEvidenceProgressionObstacleClearTest,
+	"Balhwajeom.Camera.Evidence.ProgressionObstacle.ClearsAndUnlocksNextPhase",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FEvidenceProgressionObstacleClearTest::RunTest(const FString& Parameters)
+{
+	UGameInstance* GameInstance = NewObject<UGameInstance>(GEngine);
+	GameInstance->InitializeStandalone();
+	UWorld* World = GameInstance->GetWorld();
+	if (!TestNotNull(TEXT("Standalone GameInstance should create a World"), World))
+	{
+		GameInstance->Shutdown();
+		return false;
+	}
+
+	UStoryStateSubsystem* StoryState =
+		GameInstance->GetSubsystem<UStoryStateSubsystem>();
+	if (!TestNotNull(TEXT("StoryState subsystem should exist"), StoryState))
+	{
+		GameInstance->Shutdown();
+		return false;
+	}
+	StoryState->ClearStateTags();
+
+	const FGameplayTag Phase01Completed =
+		BalhwajeomGameplayTags::Story_Chapter_01_Phase_01_Completed;
+	const FGameplayTag Phase02Unlocked =
+		BalhwajeomGameplayTags::Story_Chapter_01_Phase_02_Unlocked;
+	const FGameplayTag Phase02Completed =
+		BalhwajeomGameplayTags::Story_Chapter_01_Phase_02_Completed;
+	const FGameplayTag Phase03Unlocked =
+		BalhwajeomGameplayTags::Story_Chapter_01_Phase_03_Unlocked;
+	TestTrue(
+		TEXT("Chapter 01 phase 02 unlocked tag should be registered"),
+		Phase02Unlocked.IsValid());
+	TestTrue(
+		TEXT("Chapter 01 phase 03 unlocked tag should be registered"),
+		Phase03Unlocked.IsValid());
+
+	ABalhwajeomEvidenceActor* Obstacle =
+		World->SpawnActorDeferred<ABalhwajeomEvidenceActor>(
+			ABalhwajeomEvidenceActor::StaticClass(),
+			FTransform::Identity);
+	if (!TestNotNull(TEXT("Progression obstacle should spawn"), Obstacle))
+	{
+		GameInstance->Shutdown();
+		return false;
+	}
+
+	Obstacle->ConfigureInvestigationObject(TEXT("Obstacle_Phase01"));
+	UGameplayStatics::FinishSpawningActor(Obstacle, FTransform::Identity);
+	if (!World->HasBegunPlay())
+	{
+		World->BeginPlay();
+	}
+	if (!Obstacle->HasActorBegunPlay())
+	{
+		Obstacle->DispatchBeginPlay();
+	}
+
+	FText InteractionText;
+	TestTrue(
+		TEXT("Before phase completion the obstacle should keep its normal repeatable interaction"),
+		Obstacle->RequestInvestigationInteraction(InteractionText));
+	TestEqual(
+		TEXT("Before phase completion the obstacle should explain why it remains"),
+		InteractionText.ToString(),
+		FString(TEXT("아직 모든 의문이 해결되지 않았다.")));
+	TestFalse(
+		TEXT("The obstacle should remain visible before its completion condition"),
+		Obstacle->IsHidden());
+	TestTrue(
+		TEXT("The obstacle should continue blocking movement before it is cleared"),
+		Obstacle->GetActorEnableCollision());
+
+	{
+		FEditorScriptExecutionGuard ScriptExecutionGuard;
+		StoryState->AddStateTag(Phase01Completed);
+	}
+
+	InteractionText = FText::GetEmpty();
+	TestTrue(
+		TEXT("After phase completion F interaction should clear the obstacle"),
+		Obstacle->RequestInvestigationInteraction(InteractionText));
+	TestTrue(
+		TEXT("Clearing the obstacle should not show the previous inspection text"),
+		InteractionText.IsEmpty());
+	TestTrue(
+		TEXT("A cleared obstacle should be hidden"),
+		Obstacle->IsHidden());
+	TestFalse(
+		TEXT("A cleared obstacle should stop blocking movement"),
+		Obstacle->GetActorEnableCollision());
+	TestTrue(
+		TEXT("Clearing the phase 01 obstacle should unlock phase 02"),
+		StoryState->HasStateTagExact(Phase02Unlocked));
+	TestFalse(
+		TEXT("A cleared phase 01 obstacle should reject repeated interaction"),
+		Obstacle->RequestInvestigationInteraction(InteractionText));
+
+	ABalhwajeomEvidenceActor* Phase02Obstacle =
+		World->SpawnActorDeferred<ABalhwajeomEvidenceActor>(
+			ABalhwajeomEvidenceActor::StaticClass(),
+			FTransform::Identity);
+	if (!TestNotNull(TEXT("Phase 02 progression obstacle should spawn"), Phase02Obstacle))
+	{
+		GameInstance->Shutdown();
+		return false;
+	}
+	Phase02Obstacle->ConfigureInvestigationObject(TEXT("Obstacle_Phase02"));
+	UGameplayStatics::FinishSpawningActor(Phase02Obstacle, FTransform::Identity);
+	if (!Phase02Obstacle->HasActorBegunPlay())
+	{
+		Phase02Obstacle->DispatchBeginPlay();
+	}
+
+	InteractionText = FText::GetEmpty();
+	TestTrue(
+		TEXT("Before phase 02 completion the second obstacle should keep its normal interaction"),
+		Phase02Obstacle->RequestInvestigationInteraction(InteractionText));
+	TestEqual(
+		TEXT("Before phase 02 completion the second obstacle should explain why it remains"),
+		InteractionText.ToString(),
+		FString(TEXT("아직 모든 의문이 해결되지 않았다.")));
+
+	{
+		FEditorScriptExecutionGuard ScriptExecutionGuard;
+		StoryState->AddStateTag(Phase02Completed);
+	}
+	InteractionText = FText::GetEmpty();
+	TestTrue(
+		TEXT("After phase 02 completion F interaction should clear the second obstacle"),
+		Phase02Obstacle->RequestInvestigationInteraction(InteractionText));
+	TestTrue(
+		TEXT("The cleared phase 02 obstacle should be hidden"),
+		Phase02Obstacle->IsHidden());
+	TestFalse(
+		TEXT("The cleared phase 02 obstacle should stop blocking movement"),
+		Phase02Obstacle->GetActorEnableCollision());
+	TestTrue(
+		TEXT("Clearing the phase 02 obstacle should unlock phase 03"),
+		StoryState->HasStateTagExact(Phase03Unlocked));
 
 	GameInstance->Shutdown();
 	GEngine->DestroyWorldContext(World);

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "GameplayTagContainer.h"
 #include "BalhwajeomEvidenceTypes.h"
 #include "BalhwajeomCameraTargetInterface.h"
 #include "Investigation/InvestigationRuntimeTypes.h"
@@ -23,6 +24,7 @@ class UJMItemInspectionData;
 class UTexture2D;
 class UWidgetComponent;
 class UBalhwajeomInvestigationSubsystem;
+class UStoryStateSubsystem;
 struct FEvidenceActorTestAccessor;
 
 /** A simple Blueprint-placeable object that can be discovered with the camera trace. */
@@ -62,6 +64,14 @@ public:
 	/** Read-only availability check used by the player's interaction prompt. */
 	UFUNCTION(BlueprintPure, Category = "Evidence|Investigation")
 	bool CanRequestInvestigationInteraction() const;
+
+	/** False while the evidence is waiting for its data-authored story progression tag. */
+	UFUNCTION(BlueprintPure, Category = "Evidence|Progression")
+	bool IsProgressionAvailable() const { return bProgressionAvailable; }
+
+	/** Completes a progression removal. A future Blueprint animation override calls this at its end. */
+	UFUNCTION(BlueprintCallable, Category = "Evidence|Progression")
+	void FinalizeProgressionRemoval();
 
 	/**
 	 * Plays the current state's photo story as world-locked 3D text at StoryAnchor.
@@ -138,11 +148,22 @@ protected:
 	UFUNCTION()
 	void HandlePlayerDistanceStateChanged(EPlayerInspectionDistanceState NewState);
 
+	UFUNCTION()
+	void HandleStoryStateTagChanged(FGameplayTag StateTag);
+
+	/** Defaults to immediate removal; a Blueprint can override it to play an animation first. */
+	UFUNCTION(BlueprintNativeEvent, Category = "Evidence|Progression")
+	void BeginProgressionRemoval();
+	virtual void BeginProgressionRemoval_Implementation();
+
 	bool PlayWorldStoryForState(FName StateID);
 	/** Warns only when the current state actually asks for a WorldStory, so ordinary states stay quiet. */
 	void LogBlockedWorldStory(const TCHAR* Reason) const;
 	void SetInspectionLabel(const FText& LabelText, bool bVisible);
 	void ApplyInspectionDistanceState(EPlayerInspectionDistanceState DistanceState);
+	bool CanClearForProgression() const;
+	void RefreshProgressionAvailability();
+	void RefreshProgressionClearedState();
 	void RegisterWithInvestigationSystem();
 	void ApplyInvestigationState(FName StateID, bool bInitialApply = false);
 	void ConfigureItemInspection();
@@ -200,6 +221,33 @@ protected:
 	EPlayerInspectionDistanceState LastInspectionDistanceState =
 		EPlayerInspectionDistanceState::OutOfRange;
 	bool bInspectionLabelSuppressed = false;
+
+	/** Loaded from DT_EvidenceDefinitions; empty means this object is always available. */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Evidence|Progression")
+	FGameplayTag RequiredActivationTag;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Evidence|Progression")
+	bool bProgressionAvailable = true;
+
+	/** Completion condition that changes this object's normal F interaction into removal. */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Evidence|Progression")
+	FGameplayTag ClearRequiredTag;
+
+	/** Added after removal, normally unlocking the next phase's evidence actors. */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Evidence|Progression")
+	FGameplayTag GrantedTagOnClear;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Evidence|Progression")
+	bool bProgressionCleared = false;
+
+	bool bProgressionRemovalPending = false;
+	bool bActorBaselineHidden = false;
+	bool bActorBaselineCollisionEnabled = true;
+
+	ECollisionEnabled::Type CameraTargetBoundsBaselineCollisionEnabled =
+		ECollisionEnabled::QueryOnly;
+	ECollisionResponse CameraTargetBoundsBaselineVisibilityResponse = ECR_Block;
+	bool bCameraTargetBoundsBaselineCaptured = false;
 
 	/** Move this point in a derived Blueprint to choose the precise focus/guide location. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera Target")

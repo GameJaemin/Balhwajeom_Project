@@ -403,6 +403,17 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 	{
 		const FEvidenceDefinition* Definition =
 			reinterpret_cast<const FEvidenceDefinition*>(Pair.Value);
+		if (Definition->ClearRequiredTag.IsValid() !=
+			Definition->GrantedTagOnClear.IsValid())
+		{
+			UE_LOG(
+				LogBalhwajeomInvestigation,
+				Error,
+				TEXT("EvidenceDefinition '%s' must configure both ClearRequiredTag and GrantedTagOnClear, or neither."),
+				*Definition->ObjectID.ToString());
+			bIsValid = false;
+		}
+
 		const FEvidenceStateDefinition* InitialState = FindEvidenceState(Definition->InitialStateID);
 		if (InitialState == nullptr || InitialState->ObjectID != Definition->ObjectID)
 		{

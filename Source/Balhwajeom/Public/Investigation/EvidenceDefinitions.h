@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
+#include "GameplayTagContainer.h"
 #include "Investigation/InvestigationEnums.h"
 #include "EvidenceDefinitions.generated.h"
 
@@ -21,6 +22,18 @@ struct BALHWAJEOM_API FEvidenceDefinition : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Evidence")
 	FName InitialStateID = NAME_None;
+
+	/** Story state tag that must be active before this evidence can be inspected or photographed. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Evidence|Progression")
+	FGameplayTag RequiredActivationTag;
+
+	/** When active, F interaction clears this object instead of running its normal interaction. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Evidence|Progression")
+	FGameplayTag ClearRequiredTag;
+
+	/** Story state tag granted when this object finishes its progression removal. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Evidence|Progression")
+	FGameplayTag GrantedTagOnClear;
 };
 
 USTRUCT(BlueprintType)

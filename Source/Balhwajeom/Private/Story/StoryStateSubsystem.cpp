@@ -330,6 +330,41 @@ void UStoryStateSubsystem::AddSentenceSolvedEvidenceTag(FName PhotoID)
 	if (SentenceSolvedTag.IsValid())
 	{
 		AddStateTag(SentenceSolvedTag);
+		EvaluateChapter01PhaseProgress();
+	}
+}
+
+
+void UStoryStateSubsystem::EvaluateChapter01PhaseProgress()
+{
+	const FGameplayTag Phase01Sentence = FGameplayTag::RequestGameplayTag(
+		TEXT("Evidence.SentenceSolved.PHOTO_01_005"), false);
+	const FGameplayTag Phase02DiarySentence = FGameplayTag::RequestGameplayTag(
+		TEXT("Evidence.SentenceSolved.PHOTO_01_004"), false);
+	const FGameplayTag Phase02BatterySentence = FGameplayTag::RequestGameplayTag(
+		TEXT("Evidence.SentenceSolved.PHOTO_01_015"), false);
+	const FGameplayTag Phase03NoteSentence = FGameplayTag::RequestGameplayTag(
+		TEXT("Evidence.SentenceSolved.PHOTO_01_016"), false);
+
+	if (HasStateTagExact(Phase01Sentence))
+	{
+		AddStateTag(BalhwajeomGameplayTags::Story_Chapter_01_Phase_01_Completed);
+	}
+
+	if (HasStateTagExact(BalhwajeomGameplayTags::Story_Chapter_01_Phase_01_Completed) &&
+		HasStateTagExact(Phase02DiarySentence) &&
+		HasStateTagExact(Phase02BatterySentence))
+	{
+		AddStateTag(BalhwajeomGameplayTags::Story_Chapter_01_Phase_02_Completed);
+	}
+
+	if (HasStateTagExact(BalhwajeomGameplayTags::Story_Chapter_01_Phase_02_Completed) &&
+		HasStateTagExact(Phase03NoteSentence))
+	{
+		if (AddStateTag(BalhwajeomGameplayTags::Story_Chapter_01_Phase_03_Completed))
+		{
+			UE_LOG(LogTemp, Display, TEXT("게임 완료"));
+		}
 	}
 }
 

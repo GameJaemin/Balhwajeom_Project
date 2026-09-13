@@ -13,4 +13,10 @@ namespace BalhwajeomGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Runtime_Lock);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Runtime_Lock_PhotoCamera);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Runtime_Lock_Tablet);
+
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Story_Chapter_01_Phase_01_Completed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Story_Chapter_01_Phase_02_Unlocked);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Story_Chapter_01_Phase_02_Completed);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Story_Chapter_01_Phase_03_Unlocked);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Story_Chapter_01_Phase_03_Completed);
 }
