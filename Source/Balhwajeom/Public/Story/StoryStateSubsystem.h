@@ -78,7 +78,11 @@ private:
 	UFUNCTION()
 	void HandlePhotoCaptured(const FCapturedPhotoRecord& PhotoRecord);
 
+	UFUNCTION()
+	void HandleSentenceSolved(FName SentenceID);
+
 	void AddPhotographedEvidenceTag(FName ObjectID);
+	void AddSentenceSolvedEvidenceTag(FName PhotoID);
 
 	UPROPERTY(Transient)
 	FGameplayTagContainer CurrentStateTags;

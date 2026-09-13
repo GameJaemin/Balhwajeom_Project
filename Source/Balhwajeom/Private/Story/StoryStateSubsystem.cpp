@@ -25,6 +25,10 @@ void UStoryStateSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		this,
 		&ThisClass::HandlePhotoCaptured
 	);
+	InvestigationSubsystem->OnSentenceSolved.AddUniqueDynamic(
+		this,
+		&ThisClass::HandleSentenceSolved
+	);
 
 	TArray<FCapturedPhotoRecord> CapturedPhotos;
 	InvestigationSubsystem->GetCapturedPhotos(CapturedPhotos);
@@ -42,6 +46,10 @@ void UStoryStateSubsystem::Deinitialize()
 		InvestigationSubsystem->OnPhotoCaptured.RemoveDynamic(
 			this,
 			&ThisClass::HandlePhotoCaptured
+		);
+		InvestigationSubsystem->OnSentenceSolved.RemoveDynamic(
+			this,
+			&ThisClass::HandleSentenceSolved
 		);
 		InvestigationSubsystem = nullptr;
 	}
@@ -211,6 +219,23 @@ void UStoryStateSubsystem::HandlePhotoCaptured(
 }
 
 
+void UStoryStateSubsystem::HandleSentenceSolved(FName SentenceID)
+{
+	if (!InvestigationSubsystem)
+	{
+		return;
+	}
+
+	FPhotoDefinition PhotoDefinition;
+	if (InvestigationSubsystem->GetPhotoDefinitionBySentenceID(
+		SentenceID,
+		PhotoDefinition))
+	{
+		AddSentenceSolvedEvidenceTag(PhotoDefinition.PhotoID);
+	}
+}
+
+
 void UStoryStateSubsystem::AddPhotographedEvidenceTag(FName ObjectID)
 {
 	if (ObjectID.IsNone())
@@ -228,5 +253,26 @@ void UStoryStateSubsystem::AddPhotographedEvidenceTag(FName ObjectID)
 	if (PhotographedTag.IsValid())
 	{
 		AddStateTag(PhotographedTag);
+	}
+}
+
+
+void UStoryStateSubsystem::AddSentenceSolvedEvidenceTag(FName PhotoID)
+{
+	if (PhotoID.IsNone())
+	{
+		return;
+	}
+
+	const FGameplayTag SentenceSolvedTag = FGameplayTag::RequestGameplayTag(
+		FName(*FString::Printf(
+			TEXT("Evidence.SentenceSolved.%s"),
+			*PhotoID.ToString()
+		)),
+		false
+	);
+	if (SentenceSolvedTag.IsValid())
+	{
+		AddStateTag(SentenceSolvedTag);
 	}
 }
