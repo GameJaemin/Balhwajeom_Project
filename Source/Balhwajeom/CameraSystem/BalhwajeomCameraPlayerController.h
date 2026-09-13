@@ -4,10 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "Investigation/InvestigationRuntimeTypes.h"
 #include "BalhwajeomCameraPlayerController.generated.h"
 
 class UUserWidget;
 class UWidget;
+class UBalhwajeomInvestigationSubsystem;
+class UBalhwajeomKeywordCounterWidget;
 
 /** Owns mouse-look input and forwards it to the possessed Project Self character. */
 UCLASS(Blueprintable)
@@ -74,8 +77,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI")
 	bool IsGameplayPresentationEnabled() const { return bGameplayPresentationEnabled; }
 
+	/** Applies a photo-capture keyword count after its card has reached the TAB HUD. */
+	void FlushPendingPhotoKeywordCount();
+
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupInputComponent() override;
 
@@ -86,6 +93,10 @@ protected:
 	/** The single live HUD instance owned by this local PlayerController. */
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "UI")
 	TObjectPtr<UUserWidget> PlayerHUDWidget;
+
+	/** Live acquired/total keyword count shown above the bottom-right TAB hint. */
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "UI|Keywords")
+	TObjectPtr<UBalhwajeomKeywordCounterWidget> KeywordCounterWidget;
 
 	/** Alternate HUD shown while the player is resting on a bed. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Bed Memory")
@@ -132,6 +143,11 @@ private:
 #endif
 
 	void HandleMouseYaw(float Value);
+	void EnsureKeywordCounter();
+	void RefreshKeywordCounter();
+
+	UFUNCTION()
+	void HandleWordAcquired(const FAcquiredWordRecord& WordRecord);
 	bool ShouldShowInteractionPrompt() const;
 	bool IsInteractionPromptSuppressedByTablet() const;
 	bool IsInteractionPromptSuppressedByPhotoCamera() const;
@@ -144,4 +160,8 @@ private:
 	float BedMemoryHUDAlpha = 0.0f;
 	bool bBedMemoryHUDActive = false;
 	bool bGameplayPresentationEnabled = true;
+	bool bPhotoKeywordCountRefreshPending = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UBalhwajeomInvestigationSubsystem> BoundInvestigationSubsystem;
 };

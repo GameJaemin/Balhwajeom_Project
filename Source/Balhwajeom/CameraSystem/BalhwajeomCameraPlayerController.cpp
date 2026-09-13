@@ -11,9 +11,11 @@
 #include "Interaction/DoorInteractionComponent.h"
 #include "Interaction/InspectionComponent.h"
 #include "Interaction/PlayerInteractionComponent.h"
+#include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Tablet/BalhwajeomTabletComponent.h"
 #include "Tutorial/BalhwajeomTutorialDirector.h"
 #include "Tutorial/BalhwajeomTutorialFocusWidget.h"
+#include "UI/BalhwajeomKeywordCounterWidget.h"
 #include "UObject/ConstructorHelpers.h"
 
 ABalhwajeomCameraPlayerController::ABalhwajeomCameraPlayerController()
@@ -54,9 +56,28 @@ void ABalhwajeomCameraPlayerController::BeginPlay()
 	}
 
 	EnsurePlayerHUD();
+	EnsureKeywordCounter();
 	EnsureBedMemoryHUD();
 	EnsureTutorialFocusLayer();
 	EnsureInteractionPrompt();
+}
+
+void ABalhwajeomCameraPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (BoundInvestigationSubsystem)
+	{
+		BoundInvestigationSubsystem->OnWordAcquired.RemoveDynamic(
+			this, &ABalhwajeomCameraPlayerController::HandleWordAcquired);
+	}
+	BoundInvestigationSubsystem = nullptr;
+
+	if (KeywordCounterWidget)
+	{
+		KeywordCounterWidget->RemoveFromParent();
+	}
+	KeywordCounterWidget = nullptr;
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void ABalhwajeomCameraPlayerController::EnsurePlayerHUD()
@@ -75,6 +96,76 @@ void ABalhwajeomCameraPlayerController::EnsurePlayerHUD()
 	}
 }
 
+void ABalhwajeomCameraPlayerController::EnsureKeywordCounter()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	if (!KeywordCounterWidget)
+	{
+		KeywordCounterWidget = CreateWidget<UBalhwajeomKeywordCounterWidget>(
+			this, UBalhwajeomKeywordCounterWidget::StaticClass());
+		if (KeywordCounterWidget)
+		{
+			KeywordCounterWidget->SetVisibility(
+				bGameplayPresentationEnabled && !bBedMemoryHUDActive
+					? ESlateVisibility::HitTestInvisible
+					: ESlateVisibility::Collapsed);
+			KeywordCounterWidget->AddToViewport(2);
+		}
+	}
+
+	UBalhwajeomInvestigationSubsystem* Investigation = GetGameInstance()
+		? GetGameInstance()->GetSubsystem<UBalhwajeomInvestigationSubsystem>()
+		: nullptr;
+	if (Investigation && BoundInvestigationSubsystem != Investigation)
+	{
+		if (BoundInvestigationSubsystem)
+		{
+			BoundInvestigationSubsystem->OnWordAcquired.RemoveDynamic(
+				this, &ABalhwajeomCameraPlayerController::HandleWordAcquired);
+		}
+		BoundInvestigationSubsystem = Investigation;
+		BoundInvestigationSubsystem->OnWordAcquired.AddUniqueDynamic(
+			this, &ABalhwajeomCameraPlayerController::HandleWordAcquired);
+		RefreshKeywordCounter();
+	}
+}
+
+void ABalhwajeomCameraPlayerController::RefreshKeywordCounter()
+{
+	if (KeywordCounterWidget)
+	{
+		KeywordCounterWidget->RefreshCount();
+	}
+}
+
+void ABalhwajeomCameraPlayerController::HandleWordAcquired(
+	const FAcquiredWordRecord& WordRecord)
+{
+	if (WordRecord.SourceType == EWordAcquisitionSource::PhotoCapture)
+	{
+		// The investigation state changes immediately, but the HUD should not reveal
+		// that change before the captured-photo card finishes flying into TAB.
+		bPhotoKeywordCountRefreshPending = true;
+		return;
+	}
+	RefreshKeywordCounter();
+}
+
+void ABalhwajeomCameraPlayerController::FlushPendingPhotoKeywordCount()
+{
+	if (!bPhotoKeywordCountRefreshPending)
+	{
+		return;
+	}
+
+	bPhotoKeywordCountRefreshPending = false;
+	RefreshKeywordCounter();
+}
+
 void ABalhwajeomCameraPlayerController::SetGameplayPresentationEnabled(bool bEnabled)
 {
 	bGameplayPresentationEnabled = bEnabled;
@@ -83,6 +174,13 @@ void ABalhwajeomCameraPlayerController::SetGameplayPresentationEnabled(bool bEna
 	{
 		PlayerHUDWidget->SetVisibility(
 			bEnabled && !bBedMemoryHUDActive ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	if (KeywordCounterWidget)
+	{
+		KeywordCounterWidget->SetVisibility(
+			bEnabled && !bBedMemoryHUDActive
+				? ESlateVisibility::HitTestInvisible
+				: ESlateVisibility::Collapsed);
 	}
 	if (BedMemoryHUDWidget)
 	{
@@ -147,6 +245,7 @@ float ABalhwajeomCameraPlayerController::GetInteractionPromptAlpha() const
 void ABalhwajeomCameraPlayerController::SetBedMemoryHUDActive(bool bActive)
 {
 	EnsurePlayerHUD();
+	EnsureKeywordCounter();
 	EnsureBedMemoryHUD();
 	bBedMemoryHUDActive = bActive;
 
@@ -155,6 +254,10 @@ void ABalhwajeomCameraPlayerController::SetBedMemoryHUDActive(bool bActive)
 	if (PlayerHUDWidget)
 	{
 		PlayerHUDWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+	if (KeywordCounterWidget)
+	{
+		KeywordCounterWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 	if (BedMemoryHUDWidget)
 	{
@@ -179,6 +282,14 @@ void ABalhwajeomCameraPlayerController::ApplyBedMemoryHUDAlpha(float Alpha)
 			PlayerHUDWidget->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
+	if (KeywordCounterWidget)
+	{
+		KeywordCounterWidget->SetRenderOpacity(1.0f - ClampedAlpha);
+		if (ClampedAlpha >= 1.0f - KINDA_SMALL_NUMBER)
+		{
+			KeywordCounterWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
 	if (BedMemoryHUDWidget)
 	{
 		BedMemoryHUDWidget->SetRenderOpacity(ClampedAlpha);
@@ -194,6 +305,7 @@ void ABalhwajeomCameraPlayerController::UpdateBedMemoryHUD(float DeltaSeconds)
 	if (!bGameplayPresentationEnabled)
 	{
 		if (PlayerHUDWidget) PlayerHUDWidget->SetVisibility(ESlateVisibility::Collapsed);
+		if (KeywordCounterWidget) KeywordCounterWidget->SetVisibility(ESlateVisibility::Collapsed);
 		if (BedMemoryHUDWidget) BedMemoryHUDWidget->SetVisibility(ESlateVisibility::Collapsed);
 		return;
 	}
@@ -209,6 +321,10 @@ void ABalhwajeomCameraPlayerController::UpdateBedMemoryHUD(float DeltaSeconds)
 	if (PlayerHUDWidget)
 	{
 		PlayerHUDWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+	if (KeywordCounterWidget)
+	{
+		KeywordCounterWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 	if (BedMemoryHUDWidget)
 	{
@@ -273,6 +389,7 @@ void ABalhwajeomCameraPlayerController::Tick(float DeltaSeconds)
 	// Possession/local-player assignment can complete after BeginPlay in travel
 	// and test worlds, so keep creation idempotent and retry when needed.
 	EnsurePlayerHUD();
+	EnsureKeywordCounter();
 	EnsureBedMemoryHUD();
 	EnsureTutorialFocusLayer();
 	EnsureInteractionPrompt();

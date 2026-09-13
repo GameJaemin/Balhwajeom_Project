@@ -8,6 +8,7 @@
 #include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
 #include "BalhwajeomPhotoCameraComponent.h"
+#include "BalhwajeomCameraPlayerController.h"
 #include "BalhwajeomEvidenceActor.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Image.h"
@@ -474,4 +475,12 @@ void ABalhwajeomEvidenceCameraHUD::FinishCapturePhotoPresentation()
 		PlayerOwner->SetIgnoreMoveInput(false);
 	}
 	bCapturePhotoMovementLocked = false;
+
+	// Photo keywords are already present in the subsystem at capture time. Reveal
+	// their new HUD count only now, when the card has visually arrived at TAB.
+	if (ABalhwajeomCameraPlayerController* CameraController =
+		Cast<ABalhwajeomCameraPlayerController>(PlayerOwner))
+	{
+		CameraController->FlushPendingPhotoKeywordCount();
+	}
 }
