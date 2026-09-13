@@ -2391,11 +2391,19 @@ void UBalhwajeomTabletPhotoSlot::Configure(
 	Background->SetContent(Layout);
 	if (bStatementStyle)
 	{
-		USizeBox* ButtonSize = WidgetTree->ConstructWidget<USizeBox>();
-		ButtonSize->SetWidthOverride(101.0f);
-		ButtonSize->SetHeightOverride(38.0f);
-		ButtonSize->SetContent(Background);
-		WidgetTree->RootWidget = ButtonSize;
+		USizeBox* ClickArea = WidgetTree->ConstructWidget<USizeBox>();
+		ClickArea->SetWidthOverride(101.0f);
+		ClickArea->SetHeightOverride(38.0f);
+		UOverlay* CenteringOverlay = WidgetTree->ConstructWidget<UOverlay>();
+		ClickArea->SetContent(CenteringOverlay);
+		USizeBox* ButtonVisualSize = WidgetTree->ConstructWidget<USizeBox>();
+		ButtonVisualSize->SetWidthOverride(78.0f);
+		ButtonVisualSize->SetHeightOverride(29.0f);
+		ButtonVisualSize->SetContent(Background);
+		UOverlaySlot* VisualSlot = CenteringOverlay->AddChildToOverlay(ButtonVisualSize);
+		VisualSlot->SetHorizontalAlignment(HAlign_Center);
+		VisualSlot->SetVerticalAlignment(VAlign_Center);
+		WidgetTree->RootWidget = ClickArea;
 	}
 	else
 	{
@@ -2426,6 +2434,21 @@ void UBalhwajeomTabletPhotoSlot::SetEmpty()
 void UBalhwajeomTabletPhotoSlot::SetFilled(const FText& PhotoLabel, UTexture2D* Thumbnail)
 {
 	bFilled = true;
+	// The statement already shows the selected evidence at full size in IMG_StatementIllustration.
+	// Keep this slot as the unchanged browse/replace button instead of drawing a duplicate thumbnail
+	// and filename on top of that full-size photo.
+	if (bStatementStyle)
+	{
+		if (ThumbnailBox)
+		{
+			ThumbnailBox->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		if (DisplayText)
+		{
+			DisplayText->SetText(FText::GetEmpty());
+		}
+		return;
+	}
 	if (ThumbnailBox && ThumbnailImage)
 	{
 		if (Thumbnail)
