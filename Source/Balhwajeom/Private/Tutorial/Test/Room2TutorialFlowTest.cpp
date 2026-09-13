@@ -8,7 +8,6 @@
 #include "Investigation/InvestigationRuntimeTypes.h"
 #include "Story/StoryStateSubsystem.h"
 #include "Story/StoryStateTags.h"
-#include "Tablet/BalhwajeomTabletComponent.h"
 #include "Tutorial/BalhwajeomTutorialDirector.h"
 #include "Tutorial/BalhwajeomTutorialFlow.h"
 #include "UObject/ConstructorHelpers.h"
@@ -138,8 +137,6 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 
 	UBalhwajeomPhotoCameraComponent* PhotoCamera =
 		Character->FindComponentByClass<UBalhwajeomPhotoCameraComponent>();
-	UBalhwajeomTabletComponent* Tablet =
-		Character->FindComponentByClass<UBalhwajeomTabletComponent>();
 
 	// The exit door is gated on the three family conversations having been heard. The tag
 	// is per object, not per state, so it does not matter whether the player heard the
@@ -177,8 +174,6 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 			EBalhwajeomTutorialHintTarget::InteractPrompt);
 	TestTrue(TEXT("The photo camera starts locked"),
 		PhotoCamera && PhotoCamera->IsLockedByStoryState());
-	TestTrue(TEXT("The tablet starts locked"),
-		Tablet && Tablet->IsLockedByStoryState());
 	TestFalse(TEXT("The exit door starts locked"), Door->IsUnlocked());
 
 	// --- Dusting: F on each photo advances its evidence state --------------------------
@@ -240,8 +235,6 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 	}
 
 	// --- PhotoPrompt: the camera is unlocked and its icon is the only bright thing ----
-	TestTrue(TEXT("The tablet is still locked"),
-		Tablet && Tablet->IsLockedByStoryState());
 	TestTrue(TEXT("PhotoPrompt dims the screen"),
 		ABalhwajeomTutorialDirector::GetTutorialDimOpacity(Character) > 0.0f);
 
@@ -299,8 +292,6 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 
 	TestEqual(TEXT("Hearing all three conversations reaches Done"),
 		Director->GetCurrentStepID(), FName(TEXT("Done")));
-	TestFalse(TEXT("Done unlocks the tablet"),
-		Tablet && Tablet->IsLockedByStoryState());
 	TestTrue(TEXT("Done unlocks the exit door"), Door->IsUnlocked());
 	TestTrue(TEXT("An unlocked door offers its interaction"), Door->CanInteract());
 	TestEqual(TEXT("Done leaves no dim on screen"),

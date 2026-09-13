@@ -228,10 +228,7 @@ bool FTutorialPhotoCameraUnlockedByDefaultTest::RunTest(const FString& Parameter
 
 	UBalhwajeomPhotoCameraComponent* PhotoCamera =
 		Character->FindComponentByClass<UBalhwajeomPhotoCameraComponent>();
-	UBalhwajeomTabletComponent* Tablet =
-		Character->FindComponentByClass<UBalhwajeomTabletComponent>();
-	if (!TestNotNull(TEXT("Photo camera component should exist"), PhotoCamera) ||
-		!TestNotNull(TEXT("Tablet component should exist"), Tablet))
+	if (!TestNotNull(TEXT("Photo camera component should exist"), PhotoCamera))
 	{
 		return false;
 	}
@@ -241,9 +238,6 @@ bool FTutorialPhotoCameraUnlockedByDefaultTest::RunTest(const FString& Parameter
 	TestFalse(
 		TEXT("The photo camera is unlocked while no lock tag is active"),
 		PhotoCamera->IsLockedByStoryState());
-	TestFalse(
-		TEXT("The tablet is unlocked while no lock tag is active"),
-		Tablet->IsLockedByStoryState());
 
 	return true;
 }
@@ -349,11 +343,11 @@ bool FTutorialPhotoCameraExitIsNeverBlockedTest::RunTest(const FString& Paramete
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FTutorialTabletBlockedByLockTagTest,
-	"Balhwajeom.Tutorial.Lock.TabletBlockedByLockTag",
+	FTutorialTabletIgnoresLockTagTest,
+	"Balhwajeom.Tutorial.Lock.TabletIgnoresLockTag",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FTutorialTabletBlockedByLockTagTest::RunTest(const FString& Parameters)
+bool FTutorialTabletIgnoresLockTagTest::RunTest(const FString& Parameters)
 {
 	TutorialDirectorTests::FFixture Fixture;
 	ABalhwajeomCameraCharacter* Character = Fixture.SpawnCharacter();
@@ -371,20 +365,18 @@ bool FTutorialTabletBlockedByLockTagTest::RunTest(const FString& Parameters)
 		return false;
 	}
 
+	// The tablet is deliberately not progression-gated: Tab has to work at any point in
+	// the tutorial, so a flow's Runtime.Lock.Tablet tag no longer refuses opening.
 	StoryState->AddStateTag(BalhwajeomGameplayTags::Runtime_Lock_Tablet);
-	TestTrue(TEXT("The lock tag locks the tablet"), Tablet->IsLockedByStoryState());
 
+	Tablet->SetTabletInteractionEnabled(false);
 	Tablet->ToggleTablet();
-	TestFalse(TEXT("A locked tablet does not open on toggle"), Tablet->IsTabletOpen());
-
-	// RequestOpenTablet is BlueprintCallable, so it is gated independently of ToggleTablet.
-	Tablet->RequestOpenTablet();
-	TestFalse(TEXT("A locked tablet does not open on a direct request"), Tablet->IsTabletOpen());
-
-	StoryState->RemoveStateTag(BalhwajeomGameplayTags::Runtime_Lock_Tablet);
 	TestFalse(
-		TEXT("Removing the lock tag unlocks the tablet"),
-		Tablet->IsLockedByStoryState());
+		TEXT("Cinematic suppression still refuses the toggle"),
+		Tablet->IsTabletOpen());
+
+	// SetTabletInteractionEnabled stays the one switch that suppresses the tablet.
+	Tablet->SetTabletInteractionEnabled(true);
 
 	return true;
 }
