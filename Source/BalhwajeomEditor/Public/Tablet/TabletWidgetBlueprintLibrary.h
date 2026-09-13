@@ -45,6 +45,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool RedesignTabletStatementWidget();
 
+	/** Rebuilds only the photo-analysis detail WBP from the 1274x907 reference art. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool RedesignTabletPhotoWidget();
+
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool InspectTabletWidgetBlueprint();
 
