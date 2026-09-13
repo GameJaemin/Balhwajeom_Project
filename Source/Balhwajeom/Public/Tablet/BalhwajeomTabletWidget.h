@@ -257,16 +257,25 @@ class BALHWAJEOM_API UBalhwajeomTabletWordChip : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void Configure(FName InWordID, const FText& InLabel);
+	void Configure(FName InWordID, const FText& InLabel, bool bInStatementStyle = false);
 	FName GetWordID() const { return WordID; }
 
 protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
+	virtual void NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 
 private:
 	FName WordID = NAME_None;
 	FText DisplayLabel;
+	bool bStatementStyle = false;
+
+	UPROPERTY()
+	TObjectPtr<UBorder> Background;
+
+	UPROPERTY()
+	TObjectPtr<UTextBlock> LabelText;
 };
 
 /**
@@ -281,7 +290,7 @@ class BALHWAJEOM_API UBalhwajeomTabletSentenceBlank : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void Configure(int32 InSlotIndex);
+	void Configure(int32 InSlotIndex, bool bInStatementStyle = false);
 	void SetFilled(FName InWordID, const FText& WordText);
 	void SetEmpty();
 	int32 GetSlotIndex() const { return SlotIndex; }
@@ -297,6 +306,10 @@ protected:
 private:
 	int32 SlotIndex = 0;
 	FName FilledWordID = NAME_None;
+	bool bStatementStyle = false;
+
+	UPROPERTY()
+	TObjectPtr<UBorder> Background;
 
 	UPROPERTY()
 	TObjectPtr<UTextBlock> DisplayText;
@@ -345,7 +358,7 @@ class BALHWAJEOM_API UBalhwajeomTabletPhotoSlot : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void Configure(int32 InSlotIndex);
+	void Configure(int32 InSlotIndex, bool bInStatementStyle = false);
 	void SetFilled(const FText& PhotoLabel, UTexture2D* Thumbnail = nullptr);
 	void SetEmpty();
 	int32 GetSlotIndex() const { return SlotIndex; }
@@ -365,6 +378,10 @@ protected:
 private:
 	int32 SlotIndex = 0;
 	bool bFilled = false;
+	bool bStatementStyle = false;
+
+	UPROPERTY()
+	TObjectPtr<UBorder> Background;
 
 	UPROPERTY()
 	TObjectPtr<UTextBlock> DisplayText;
@@ -486,13 +503,14 @@ private:
 	 * failure feedback ("잘못된 증거인 것 같다") only appears after the puzzle is fully filled in,
 	 * not after every single drop. */
 	void EvaluatePuzzleIfComplete();
-	void ShowPopup(
+	bool ShowPopup(
 		const FText& Title,
 		const FText& Body,
 		UTexture2D* PhotoTexture = nullptr,
 		bool bStatementDetail = false);
 	bool ActivateDetailWidget(bool bStatementDetail);
 	void BindActiveDetailWidgets();
+	void ClearActiveDetailWidgets();
 	void HidePopup();
 	void UpdateUnreadBadge();
 
