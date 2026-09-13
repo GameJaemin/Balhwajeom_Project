@@ -15,6 +15,7 @@ class UMediaSource;
 class UMediaTexture;
 class USoundBase;
 class UBalhwajeomCinematicVideoWidget;
+struct FIntroFlowActorTestAccessor;
 
 UENUM(BlueprintType)
 enum class EBalhwajeomIntroState : uint8
@@ -93,6 +94,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Gameplay")
 	bool bOpenStatementAfterIntro = true;
 
+	/** Starts a new run without photographs left by a previous play session. */
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadOnly,
+		Category = "Intro|Gameplay",
+		meta = (DisplayName = "시작 시 촬영 사진 초기화"))
+	bool bResetInvestigationPhotosOnStart = true;
+
 	/** Optional ending MP4 setup. All three media fields must be assigned; otherwise EndingSequence is used. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Ending")
 	TObjectPtr<UMediaSource> EndingMediaSource;
@@ -107,6 +116,8 @@ protected:
 	TObjectPtr<ULevelSequence> EndingSequence;
 
 private:
+	friend struct FIntroFlowActorTestAccessor;
+
 	UFUNCTION()
 	void HandleStartRequested();
 
@@ -129,6 +140,7 @@ private:
 	void HandleMediaEndReached();
 
 	void SetGameplayEnabled(bool bEnabled);
+	void ResetInvestigationPhotosIfRequested();
 	void StartCinematic();
 	bool StartMediaCinematic();
 	void StartSequenceCinematic();

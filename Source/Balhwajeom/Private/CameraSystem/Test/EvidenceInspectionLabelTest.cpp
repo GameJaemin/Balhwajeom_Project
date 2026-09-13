@@ -354,6 +354,72 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FEvidencePhotoGalleryResetRefreshesCapturedStateTest,
+	"Balhwajeom.Camera.Evidence.PhotoGalleryReset.RefreshesCapturedState",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FEvidencePhotoGalleryResetRefreshesCapturedStateTest::RunTest(
+	const FString& Parameters)
+{
+	UGameInstance* GameInstance = NewObject<UGameInstance>(GEngine);
+	GameInstance->InitializeStandalone();
+	UWorld* World = GameInstance->GetWorld();
+	if (!TestNotNull(TEXT("Standalone GameInstance should create a World"), World))
+	{
+		GameInstance->Shutdown();
+		return false;
+	}
+
+	ABalhwajeomEvidenceActor* Evidence =
+		World->SpawnActorDeferred<ABalhwajeomEvidenceActor>(
+			ABalhwajeomEvidenceActor::StaticClass(),
+			FTransform::Identity);
+	if (!TestNotNull(TEXT("Evidence actor should spawn"), Evidence))
+	{
+		GameInstance->Shutdown();
+		return false;
+	}
+	Evidence->ConfigureInvestigationObject(TEXT("OBJ_01_005"));
+	UGameplayStatics::FinishSpawningActor(Evidence, FTransform::Identity);
+	if (!World->HasBegunPlay())
+	{
+		World->BeginPlay();
+	}
+	if (!Evidence->HasActorBegunPlay())
+	{
+		Evidence->DispatchBeginPlay();
+	}
+
+	Evidence->MarkAsCollected();
+	TestTrue(
+		TEXT("The evidence actor should begin in a captured visual state"),
+		Evidence->GetEvidenceData().bAlreadyCollected);
+
+	UBalhwajeomInvestigationSubsystem* Investigation =
+		GameInstance->GetSubsystem<UBalhwajeomInvestigationSubsystem>();
+	bool bResetSucceeded = false;
+	{
+		FEditorScriptExecutionGuard ScriptExecutionGuard;
+		bResetSucceeded = Investigation->ResetPersistentPhotoGallery();
+	}
+	TestTrue(
+		TEXT("The photo gallery reset should succeed"),
+		bResetSucceeded);
+	TestFalse(
+		TEXT("A gallery reset should refresh the evidence actor to not captured"),
+		Evidence->GetEvidenceData().bAlreadyCollected);
+
+	GameInstance->Shutdown();
+	GEngine->DestroyWorldContext(World);
+	World->DestroyWorld(false);
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FEvidenceProgressionGateTest,
 	"Balhwajeom.Camera.Evidence.ProgressionGate.DisablesAndRestoresInteraction",
 	EAutomationTestFlags::EditorContext |

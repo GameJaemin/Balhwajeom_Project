@@ -77,6 +77,52 @@ bool FStoryStateInitialStateTest::RunTest(const FString& Parameters)
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FStoryStateResetPhotographedEvidenceTagsTest,
+	"Balhwajeom.StoryState.Evidence.ResetPhotographedTagsOnly",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FStoryStateResetPhotographedEvidenceTagsTest::RunTest(
+	const FString& Parameters
+)
+{
+	const StoryStateSubsystemTests::FFixture Fixture;
+	const FGameplayTag EvidencePhotographedTag = FGameplayTag::RequestGameplayTag(
+		TEXT("Evidence.Photographed.OBJ_01_005"), false);
+	const FGameplayTag UnrelatedTag = FGameplayTag::RequestGameplayTag(
+		TEXT("Runtime.Player.Mode.Exploration"), false);
+
+	if (!TestTrue(
+		TEXT("The photographed evidence tag should be registered"),
+		EvidencePhotographedTag.IsValid()) ||
+		!TestTrue(
+			TEXT("The unrelated runtime tag should be registered"),
+			UnrelatedTag.IsValid()))
+	{
+		return false;
+	}
+
+	Fixture.Subsystem->AddStateTag(EvidencePhotographedTag);
+	Fixture.Subsystem->AddStateTag(UnrelatedTag);
+
+	TestEqual(
+		TEXT("Reset should report one removed photographed tag"),
+		Fixture.Subsystem->ResetPhotographedEvidenceTags(),
+		1);
+	TestFalse(
+		TEXT("The photographed evidence tag should be removed"),
+		Fixture.Subsystem->HasStateTagExact(EvidencePhotographedTag));
+	TestTrue(
+		TEXT("Photo reset should preserve unrelated story state"),
+		Fixture.Subsystem->HasStateTagExact(UnrelatedTag));
+
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FStoryStatePlayerModeTagsRegisteredTest,
 	"Balhwajeom.StoryState.PlayerMode.TagsRegistered",
 	EAutomationTestFlags::EditorContext |

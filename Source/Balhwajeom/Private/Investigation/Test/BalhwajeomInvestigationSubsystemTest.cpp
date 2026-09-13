@@ -1,9 +1,14 @@
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
+#include "Investigation/BalhwajeomInvestigationSaveGame.h"
 #include "Investigation/BalhwajeomInvestigationSettings.h"
 
 #include "Engine/DataTable.h"
 #include "Engine/GameInstance.h"
+#include "HAL/FileManager.h"
+#include "Kismet/GameplayStatics.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "Story/StoryStateTags.h"
 
 
@@ -35,6 +40,20 @@ struct FInvestigationSubsystemTestAccessor
 	static bool Validate(const UBalhwajeomInvestigationSubsystem* Subsystem)
 	{
 		return Subsystem->ValidateLoadedDataTables();
+	}
+
+	static void SeedPersistentPhotoState(
+		UBalhwajeomInvestigationSubsystem* Subsystem,
+		const FCapturedPhotoRecord& PhotoRecord,
+		FName WordID)
+	{
+		Subsystem->CapturedPhotos.Add(PhotoRecord.PhotoID, PhotoRecord);
+
+		FAcquiredWordRecord WordRecord;
+		WordRecord.WordID = WordID;
+		WordRecord.SourceType = EWordAcquisitionSource::PhotoCapture;
+		WordRecord.SourceID = PhotoRecord.PhotoID;
+		Subsystem->AcquiredWords.Add(WordID, WordRecord);
 	}
 };
 
@@ -584,6 +603,75 @@ bool FInvestigationDuplicatePhotoTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Registered PhotoID should be reported as captured"), Fixture.Subsystem->HasCapturedPhoto(Record.PhotoID));
 	TestTrue(TEXT("Photo capture should grant its configured word"), Fixture.Subsystem->HasAcquiredWord(InvestigationSubsystemTests::WordID));
 	TestFalse(TEXT("The same PhotoID should not register twice"), Fixture.Subsystem->RegisterCapturedPhoto(Record));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInvestigationResetPersistentPhotoGalleryTest,
+	"Balhwajeom.Investigation.PhotoGallery.ResetPersistentState",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FInvestigationResetPersistentPhotoGalleryTest::RunTest(
+	const FString& Parameters)
+{
+	const FString AutomationPhotoDirectory = FPaths::ConvertRelativePathToFull(
+		FPaths::Combine(
+			FPaths::ProjectSavedDir(),
+			TEXT("Investigation"),
+			TEXT("Photos"),
+			TEXT("Automation")));
+	const FString TestPhotoPath = FPaths::Combine(
+		AutomationPhotoDirectory, TEXT("ResetPersistentState.png"));
+	const FString AutomationSaveSlot = TEXT("BalhwajeomInvestigation_Automation");
+
+	IFileManager::Get().DeleteDirectory(*AutomationPhotoDirectory, false, true);
+	UGameplayStatics::DeleteGameInSlot(AutomationSaveSlot, 0);
+	IFileManager::Get().MakeDirectory(*AutomationPhotoDirectory, true);
+	if (!TestTrue(
+		TEXT("The isolated automation photo should be created"),
+		FFileHelper::SaveStringToFile(TEXT("test-photo"), *TestPhotoPath)))
+	{
+		return false;
+	}
+
+	UBalhwajeomInvestigationSaveGame* SaveGame =
+		NewObject<UBalhwajeomInvestigationSaveGame>();
+	if (!TestTrue(
+		TEXT("The isolated automation gallery save should be created"),
+		UGameplayStatics::SaveGameToSlot(SaveGame, AutomationSaveSlot, 0)))
+	{
+		IFileManager::Get().DeleteDirectory(*AutomationPhotoDirectory, false, true);
+		return false;
+	}
+
+	const InvestigationSubsystemTests::FFixture Fixture;
+	FCapturedPhotoRecord PhotoRecord =
+		Fixture.MakePhotoRecord(Fixture.RegisterTestEvidence());
+	PhotoRecord.ImageRelativePath =
+		TEXT("Investigation/Photos/Automation/ResetPersistentState.png");
+	FInvestigationSubsystemTestAccessor::SeedPersistentPhotoState(
+		Fixture.Subsystem,
+		PhotoRecord,
+		InvestigationSubsystemTests::WordID);
+
+	TestTrue(
+		TEXT("Resetting the persistent gallery should report success"),
+		Fixture.Subsystem->ResetPersistentPhotoGallery());
+	TestFalse(
+		TEXT("The captured photo should be removed from runtime state"),
+		Fixture.Subsystem->HasCapturedPhoto(PhotoRecord.PhotoID));
+	TestFalse(
+		TEXT("A word restored only from that photo should be removed"),
+		Fixture.Subsystem->HasAcquiredWord(InvestigationSubsystemTests::WordID));
+	TestFalse(
+		TEXT("The persisted image should be deleted"),
+		IFileManager::Get().FileExists(*TestPhotoPath));
+	TestFalse(
+		TEXT("The gallery SaveGame slot should be deleted"),
+		UGameplayStatics::DoesSaveGameExist(AutomationSaveSlot, 0));
+
+	IFileManager::Get().DeleteDirectory(*AutomationPhotoDirectory, false, true);
+	UGameplayStatics::DeleteGameInSlot(AutomationSaveSlot, 0);
 	return true;
 }
 

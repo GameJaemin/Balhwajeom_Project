@@ -26,6 +26,21 @@ const FString& GetPhotoGallerySaveSlot()
 	return PhotoGallerySaveSlot;
 }
 
+FString GetPhotoGalleryDirectory()
+{
+	FString Directory = FPaths::Combine(
+		FPaths::ProjectSavedDir(),
+		TEXT("Investigation"),
+		TEXT("Photos"));
+#if WITH_DEV_AUTOMATION_TESTS
+	if (GIsAutomationTesting)
+	{
+		Directory = FPaths::Combine(Directory, TEXT("Automation"));
+	}
+#endif
+	return FPaths::ConvertRelativePathToFull(Directory);
+}
+
 template <typename RowType>
 const RowType* FindInvestigationRow(
 	const UDataTable* Table,
@@ -292,6 +307,60 @@ bool UBalhwajeomInvestigationSubsystem::SavePersistentPhotoGallery() const
 		return A.PhotoID.LexicalLess(B.PhotoID);
 	});
 	return UGameplayStatics::SaveGameToSlot(SaveGame, GetPhotoGallerySaveSlot(), 0);
+}
+
+bool UBalhwajeomInvestigationSubsystem::ResetPersistentPhotoGallery()
+{
+	FString SavedDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir());
+	FString PhotoDirectory = GetPhotoGalleryDirectory();
+	FPaths::NormalizeDirectoryName(SavedDirectory);
+	FPaths::NormalizeDirectoryName(PhotoDirectory);
+	if (!FPaths::IsUnderDirectory(PhotoDirectory, SavedDirectory))
+	{
+		UE_LOG(
+			LogBalhwajeomInvestigation,
+			Error,
+			TEXT("Refusing to reset photo gallery outside Saved: '%s'."),
+			*PhotoDirectory);
+		return false;
+	}
+
+	const int32 RemovedPhotoCount = CapturedPhotos.Num();
+	CapturedPhotos.Empty();
+	for (auto WordIterator = AcquiredWords.CreateIterator(); WordIterator; ++WordIterator)
+	{
+		if (WordIterator.Value().SourceType == EWordAcquisitionSource::PhotoCapture)
+		{
+			WordIterator.RemoveCurrent();
+		}
+	}
+	OnPhotoGalleryReset.Broadcast();
+
+	const bool bFilesDeleted =
+		!IFileManager::Get().DirectoryExists(*PhotoDirectory) ||
+		IFileManager::Get().DeleteDirectory(*PhotoDirectory, false, true);
+	const bool bSaveDeleted =
+		!UGameplayStatics::DoesSaveGameExist(GetPhotoGallerySaveSlot(), 0) ||
+		UGameplayStatics::DeleteGameInSlot(GetPhotoGallerySaveSlot(), 0);
+
+	if (!bFilesDeleted || !bSaveDeleted)
+	{
+		UE_LOG(
+			LogBalhwajeomInvestigation,
+			Warning,
+			TEXT("Photo gallery reset was incomplete. FilesDeleted=%s SaveDeleted=%s Directory='%s'."),
+			bFilesDeleted ? TEXT("true") : TEXT("false"),
+			bSaveDeleted ? TEXT("true") : TEXT("false"),
+			*PhotoDirectory);
+		return false;
+	}
+
+	UE_LOG(
+		LogBalhwajeomInvestigation,
+		Log,
+		TEXT("Reset persistent photo gallery (%d runtime record(s))."),
+		RemovedPhotoCount);
+	return true;
 }
 
 bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const

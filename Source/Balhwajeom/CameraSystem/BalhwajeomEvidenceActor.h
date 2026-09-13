@@ -146,6 +146,9 @@ protected:
 	void HandlePhotoCaptured(const FCapturedPhotoRecord& PhotoRecord);
 
 	UFUNCTION()
+	void HandlePhotoGalleryReset();
+
+	UFUNCTION()
 	void HandlePlayerDistanceStateChanged(EPlayerInspectionDistanceState NewState);
 
 	UFUNCTION()

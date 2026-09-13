@@ -15,6 +15,7 @@
 #include "MediaTexture.h"
 #include "MovieSceneSequencePlaybackSettings.h"
 #include "Sound/SoundBase.h"
+#include "Story/StoryStateSubsystem.h"
 #include "Tablet/BalhwajeomTabletComponent.h"
 #include "UI/BalhwajeomMainMenuWidget.h"
 #include "UI/BalhwajeomScreenFadeWidget.h"
@@ -122,9 +123,45 @@ void ABalhwajeomIntroFlowActor::HandleStartRequested()
 	{
 		return;
 	}
+	ResetInvestigationPhotosIfRequested();
 	State = EBalhwajeomIntroState::TransitionToCinematic;
 	if (BGMAudioComponent->IsPlaying()) BGMAudioComponent->FadeOut(BGMFadeDuration, 0.0f);
 	ScreenFadeWidget->FadeToBlack(TransitionFadeDuration);
+}
+
+void ABalhwajeomIntroFlowActor::ResetInvestigationPhotosIfRequested()
+{
+	if (!bResetInvestigationPhotosOnStart)
+	{
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+	UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+	if (!GameInstance)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: Cannot reset photos without a GameInstance."), *GetName());
+		return;
+	}
+
+	if (UBalhwajeomInvestigationSubsystem* Investigation =
+		GameInstance->GetSubsystem<UBalhwajeomInvestigationSubsystem>())
+	{
+		if (!Investigation->ResetPersistentPhotoGallery())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("%s: Failed to fully reset investigation photos."), *GetName());
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: Investigation subsystem is unavailable."), *GetName());
+	}
+
+	if (UStoryStateSubsystem* StoryState =
+		GameInstance->GetSubsystem<UStoryStateSubsystem>())
+	{
+		StoryState->ResetPhotographedEvidenceTags();
+	}
 }
 
 void ABalhwajeomIntroFlowActor::HandleFadeToBlackFinished()

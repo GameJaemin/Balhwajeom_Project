@@ -31,6 +31,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FOnSentenceSolved,
 	FName, SentenceID);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnPhotoGalleryReset);
+
 /** Central access point for investigation definitions and mutable play-session state. */
 UCLASS()
 class BALHWAJEOM_API UBalhwajeomInvestigationSubsystem : public UGameInstanceSubsystem
@@ -129,6 +131,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Photos")
 	bool GetCapturedPhoto(FName PhotoID, FCapturedPhotoRecord& OutRecord) const;
 
+	/** Clears persisted photo files, gallery metadata, and runtime state derived from photos. */
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Photos")
+	bool ResetPersistentPhotoGallery();
+
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Sentences")
 	bool ValidateSentence(
 		FName SentenceID,
@@ -156,6 +162,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "Investigation|Events")
 	FOnPhotoCaptured OnPhotoCaptured;
+
+	UPROPERTY(BlueprintAssignable, Category = "Investigation|Events")
+	FOnPhotoGalleryReset OnPhotoGalleryReset;
 
 	UPROPERTY(BlueprintAssignable, Category = "Investigation|Events")
 	FOnSentenceSolved OnSentenceSolved;

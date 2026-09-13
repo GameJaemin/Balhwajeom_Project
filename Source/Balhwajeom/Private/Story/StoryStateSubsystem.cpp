@@ -219,6 +219,29 @@ bool UStoryStateSubsystem::ClearStateTags()
 }
 
 
+int32 UStoryStateSubsystem::ResetPhotographedEvidenceTags()
+{
+	const FGameplayTag PhotographedRootTag = FGameplayTag::RequestGameplayTag(
+		TEXT("Evidence.Photographed"), false);
+	if (!PhotographedRootTag.IsValid())
+	{
+		return 0;
+	}
+
+	TArray<FGameplayTag> ActiveTags;
+	CurrentStateTags.GetGameplayTagArray(ActiveTags);
+	int32 RemovedCount = 0;
+	for (const FGameplayTag ActiveTag : ActiveTags)
+	{
+		if (ActiveTag.MatchesTag(PhotographedRootTag) && RemoveStateTag(ActiveTag))
+		{
+			++RemovedCount;
+		}
+	}
+	return RemovedCount;
+}
+
+
 void UStoryStateSubsystem::HandlePhotoCaptured(
 	const FCapturedPhotoRecord& PhotoRecord
 )

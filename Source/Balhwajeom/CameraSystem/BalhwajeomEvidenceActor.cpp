@@ -228,6 +228,8 @@ void ABalhwajeomEvidenceActor::BeginPlay()
 	{
 		Investigation->OnPhotoCaptured.AddUniqueDynamic(
 			this, &ABalhwajeomEvidenceActor::HandlePhotoCaptured);
+		Investigation->OnPhotoGalleryReset.AddUniqueDynamic(
+			this, &ABalhwajeomEvidenceActor::HandlePhotoGalleryReset);
 	}
 	if (const UWorld* World = GetWorld())
 	{
@@ -307,6 +309,8 @@ void ABalhwajeomEvidenceActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			this, &ABalhwajeomEvidenceActor::HandleEvidenceStateChanged);
 		Investigation->OnPhotoCaptured.RemoveDynamic(
 			this, &ABalhwajeomEvidenceActor::HandlePhotoCaptured);
+		Investigation->OnPhotoGalleryReset.RemoveDynamic(
+			this, &ABalhwajeomEvidenceActor::HandlePhotoGalleryReset);
 	}
 	if (const UWorld* World = GetWorld())
 	{
@@ -815,6 +819,12 @@ void ABalhwajeomEvidenceActor::HandlePhotoCaptured(
 		// No-op unless the captured state names a PostCaptureStateID.
 		Investigation->AdvanceEvidenceStateAfterCapture(EvidenceInstanceID);
 	}
+}
+
+void ABalhwajeomEvidenceActor::HandlePhotoGalleryReset()
+{
+	EvidenceData.bAlreadyCollected = false;
+	ApplyInspectionDistanceState(LastInspectionDistanceState);
 }
 
 FText ABalhwajeomEvidenceActor::FormatInspectionLabel(

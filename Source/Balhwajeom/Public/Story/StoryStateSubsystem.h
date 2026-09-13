@@ -68,6 +68,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Story State")
 	bool ClearStateTags();
 
+	/** Removes only Evidence.Photographed.* tags and preserves all unrelated state. */
+	UFUNCTION(BlueprintCallable, Category = "Story State|Evidence")
+	int32 ResetPhotographedEvidenceTags();
+
 	/**
 	 * Records that an evidence state's world story has been presented, as
 	 * "Evidence.StoryPlayed.<StateID>".
