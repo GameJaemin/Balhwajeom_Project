@@ -4,6 +4,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/ButtonSlot.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
@@ -91,6 +92,14 @@ namespace TabletDesigner
 	const TCHAR* PersonFolderAssetName = TEXT("WBP_TabletPersonFolder");
 	const TCHAR* PersonFolderAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletPersonFolder.WBP_TabletPersonFolder");
 	const TCHAR* PersonFolderClassPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletPersonFolder.WBP_TabletPersonFolder_C");
+	const TCHAR* FolderButtonAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletFolderButton.WBP_TabletFolderButton");
+	const TCHAR* FileTileAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletFileTile.WBP_TabletFileTile");
+	const TCHAR* FolderSectionAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletFolderSection.WBP_TabletFolderSection");
+	const TCHAR* StatementDetailAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/WBP_TabletStatement.WBP_TabletStatement");
+	const TCHAR* PhotoDetailAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletPhoto.WBP_TabletPhoto");
+	const TCHAR* StatementBackgroundPath = TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/final_sentence_sister_BG.final_sentence_sister_BG");
+	const TCHAR* StatementSubmitPath = TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/final_button.final_button");
+	const TCHAR* StatementSubmitHoverPath = TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/final_button_hover.final_button_hover");
 
 	const TCHAR* TabletBodyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Tablet_Body.Tablet_Body");
 	const TCHAR* FamilyPath = TEXT("/Game/Balhwajeom/UI/Tablet/Family.Family");
@@ -516,6 +525,238 @@ namespace TabletDesigner
 			Place(Page, RecordArea, 120, 220, 1200, 750, 5);
 
 			Tree->RootWidget = Scale;
+		}
+
+		void BuildFolderButtonWidget() const
+		{
+			UButton* Button = MakeTransparentButton(TEXT("BTN_Folder"));
+			UVerticalBox* Layout = Make<UVerticalBox>(TEXT("VB_FolderLayout"));
+			USizeBox* IconSize = Make<USizeBox>(TEXT("SB_FolderIcon"));
+			IconSize->SetWidthOverride(64.0f);
+			IconSize->SetHeightOverride(60.0f);
+			IconSize->SetContent(Make<UImage>(TEXT("IMG_FolderIcon"), true));
+			UVerticalBoxSlot* IconSlot = Layout->AddChildToVerticalBox(IconSize);
+			IconSlot->SetHorizontalAlignment(HAlign_Center);
+			IconSlot->SetPadding(FMargin(0, 0, 0, 6));
+			UTextBlock* Label = MakeText(TEXT("TXT_FolderLabel"), TEXT("폴더"), 18, WarmWhite, true);
+			Label->SetJustification(ETextJustify::Center);
+			Label->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
+			Layout->AddChildToVerticalBox(Label)->SetHorizontalAlignment(HAlign_Fill);
+			Button->SetContent(Layout);
+			Tree->RootWidget = Button;
+		}
+
+		void BuildFileTileWidget() const
+		{
+			UButton* Button = MakeTransparentButton(TEXT("BTN_File"));
+			UVerticalBox* Layout = Make<UVerticalBox>(TEXT("VB_FileLayout"));
+			USizeBox* ThumbnailSize = Make<USizeBox>(TEXT("SB_Thumbnail"), true);
+			ThumbnailSize->SetWidthOverride(96.0f);
+			ThumbnailSize->SetHeightOverride(64.0f);
+			ThumbnailSize->SetContent(Make<UImage>(TEXT("IMG_Thumbnail"), true));
+			UVerticalBoxSlot* ThumbnailSlot = Layout->AddChildToVerticalBox(ThumbnailSize);
+			ThumbnailSlot->SetHorizontalAlignment(HAlign_Center);
+			ThumbnailSlot->SetPadding(FMargin(0, 0, 0, 4));
+			UTextBlock* Label = MakeText(TEXT("TXT_Label"), TEXT("파일"), 18, WarmWhite, true);
+			Label->SetJustification(ETextJustify::Center);
+			Label->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
+			Layout->AddChildToVerticalBox(Label)->SetHorizontalAlignment(HAlign_Fill);
+			Button->SetContent(Layout);
+			Tree->RootWidget = Button;
+		}
+
+		void BuildFolderSectionWidget() const
+		{
+			UVerticalBox* Root = Make<UVerticalBox>(TEXT("VB_SectionRoot"));
+			UButton* Header = MakeTransparentButton(TEXT("HeaderButton"));
+			UHorizontalBox* HeaderRow = Make<UHorizontalBox>(TEXT("HB_SectionHeader"));
+			UTextBlock* Arrow = MakeText(TEXT("ArrowText"), TEXT("▼"), 20, WarmWhite, true);
+			UHorizontalBoxSlot* ArrowSlot = HeaderRow->AddChildToHorizontalBox(Arrow);
+			ArrowSlot->SetPadding(FMargin(0, 0, 10, 0));
+			ArrowSlot->SetVerticalAlignment(VAlign_Center);
+			HeaderRow->AddChildToHorizontalBox(
+				MakeText(TEXT("TitleText"), TEXT("분류 (0)"), 22, WarmWhite, true));
+			if (UButtonSlot* HeaderContentSlot = Cast<UButtonSlot>(Header->SetContent(HeaderRow)))
+			{
+				HeaderContentSlot->SetHorizontalAlignment(HAlign_Left);
+			}
+			UVerticalBoxSlot* HeaderSlot = Root->AddChildToVerticalBox(Header);
+			HeaderSlot->SetPadding(FMargin(0, 6, 0, 10));
+			UWrapBox* Content = Make<UWrapBox>(TEXT("ContentWrapBox"), true);
+			Content->SetInnerSlotPadding(FVector2D(12, 12));
+			Root->AddChildToVerticalBox(Content)->SetPadding(FMargin(0, 0, 0, 14));
+			Tree->RootWidget = Root;
+		}
+
+		void BuildDetailWidget(const bool bStatement) const
+		{
+			if (bStatement)
+			{
+				UScaleBox* Scale = Make<UScaleBox>(TEXT("ScaleBox_Wrapper"));
+				Scale->SetStretch(EStretch::ScaleToFit);
+				USizeBox* Size = Make<USizeBox>(TEXT("SizeBox_Wrapper"));
+				Size->SetWidthOverride(1274.0f);
+				Size->SetHeightOverride(907.0f);
+				Scale->SetContent(Size);
+
+				UCanvasPanel* Canvas = Make<UCanvasPanel>(TEXT("Canvas_Detail"));
+				Size->SetContent(Canvas);
+				FillCanvas(Canvas, MakeTextureImage(TEXT("IMG_StatementBackground"), StatementBackgroundPath, false), 0);
+
+				// The authored background already contains the title and close glyph. These transparent
+				// runtime widgets preserve the existing binding/click contract without duplicating the art.
+				UTextBlock* Title = MakeText(
+					TEXT("TXT_PopupTitle"), TEXT("진술서"), 1, FLinearColor::Transparent, true);
+				Title->SetRenderOpacity(0.0f);
+				Place(Canvas, Title, 500.0f, 10.0f, 274.0f, 34.0f, 2);
+				Place(Canvas, MakeTransparentButton(TEXT("BTN_PopupClose")), 1208.0f, 0.0f, 66.0f, 54.0f, 10);
+
+				// First gray block on the right-hand page: statement reconstruction / solved text.
+				UTextBlock* Body = MakeText(
+					TEXT("TXT_PopupBody"), TEXT("내용"), 16, FLinearColor::Black, true);
+				Body->SetJustification(ETextJustify::Center);
+				Body->SetAutoWrapText(true);
+				Body->SetShadowOffset(FVector2D::ZeroVector);
+				Place(Canvas, Body, 592.0f, 293.0f, 350.0f, 78.0f, 4);
+
+				UWrapBox* SentenceBuilder = Make<UWrapBox>(TEXT("WB_SentenceBuilder"), true);
+				SentenceBuilder->SetInnerSlotPadding(FVector2D(2.0f, 3.0f));
+				SentenceBuilder->SetVisibility(ESlateVisibility::Collapsed);
+				Place(Canvas, SentenceBuilder, 592.0f, 293.0f, 350.0f, 78.0f, 5);
+
+				// Second gray block is replaced by the captured evidence texture at runtime.
+				UImage* Illustration = Make<UImage>(TEXT("IMG_StatementIllustration"), true);
+				Illustration->SetVisibility(ESlateVisibility::Collapsed);
+				Place(Canvas, Illustration, 574.0f, 404.0f, 385.0f, 216.0f, 3);
+
+				UTextBlock* PhotoLabel = MakeText(
+					TEXT("TXT_PuzzlePhotoLabel"), TEXT("증거사진"), 14, FLinearColor::Black, true);
+				PhotoLabel->SetJustification(ETextJustify::Center);
+				PhotoLabel->SetVisibility(ESlateVisibility::Collapsed);
+				Place(Canvas, PhotoLabel, 600.0f, 632.0f, 334.0f, 24.0f, 5);
+
+				UWrapBox* PuzzlePhotos = Make<UWrapBox>(TEXT("WB_PuzzlePhotos"), true);
+				PuzzlePhotos->SetInnerSlotPadding(FVector2D(5.0f, 5.0f));
+				PuzzlePhotos->SetVisibility(ESlateVisibility::Collapsed);
+				Place(Canvas, PuzzlePhotos, 584.0f, 414.0f, 365.0f, 196.0f, 7);
+
+				UWrapBox* PhotoSlots = Make<UWrapBox>(TEXT("WB_PhotoSlots"), true);
+				PhotoSlots->SetInnerSlotPadding(FVector2D::ZeroVector);
+				PhotoSlots->SetVisibility(ESlateVisibility::Collapsed);
+				Place(Canvas, PhotoSlots, 716.0f, 499.0f, 101.0f, 38.0f, 8);
+
+				UTextBlock* Feedback = MakeText(
+					TEXT("TXT_PuzzleFeedback"), TEXT("잘못된 증거인 것 같다."), 14,
+					FLinearColor(0.65f, 0.08f, 0.06f, 1.0f), true);
+				Feedback->SetJustification(ETextJustify::Center);
+				Feedback->SetVisibility(ESlateVisibility::Collapsed);
+				Feedback->SetShadowOffset(FVector2D::ZeroVector);
+				Place(Canvas, Feedback, 574.0f, 662.0f, 385.0f, 26.0f, 8);
+
+				// The right-side grid is baked into the background. Runtime chips occupy two 106px columns;
+				// their supplied hover texture is applied by UBalhwajeomTabletWordChip.
+				UScrollBox* WordScroll = Make<UScrollBox>(TEXT("SB_PuzzleWords"));
+				UWrapBox* WordWrap = Make<UWrapBox>(TEXT("WB_PuzzleWords"), true);
+				WordWrap->SetInnerSlotPadding(FVector2D::ZeroVector);
+				WordScroll->AddChild(WordWrap);
+				Place(Canvas, WordScroll, 1044.0f, 169.0f, 212.0f, 598.0f, 6);
+
+				UButton* Submit = Make<UButton>(TEXT("BTN_StatementSubmit"), true);
+				FButtonStyle SubmitStyle;
+				auto MakeButtonBrush = [](const TCHAR* TexturePath)
+				{
+					FSlateBrush Brush;
+					Brush.DrawAs = ESlateBrushDrawType::Image;
+					Brush.TintColor = FSlateColor(FLinearColor::White);
+					if (UTexture2D* Texture = LoadObject<UTexture2D>(nullptr, TexturePath))
+					{
+						Brush.SetResourceObject(Texture);
+						Brush.ImageSize = FVector2D(Texture->GetSizeX(), Texture->GetSizeY());
+					}
+					return Brush;
+				};
+				const FSlateBrush SubmitNormal = MakeButtonBrush(StatementSubmitPath);
+				const FSlateBrush SubmitHover = MakeButtonBrush(StatementSubmitHoverPath);
+				SubmitStyle.SetNormal(SubmitNormal);
+				SubmitStyle.SetHovered(SubmitHover);
+				SubmitStyle.SetPressed(SubmitHover);
+				SubmitStyle.SetDisabled(SubmitNormal);
+				SubmitStyle.SetNormalPadding(FMargin(0.0f));
+				SubmitStyle.SetPressedPadding(FMargin(0.0f));
+				Submit->SetStyle(SubmitStyle);
+				Submit->SetVisibility(ESlateVisibility::Collapsed);
+				Place(Canvas, Submit, 703.0f, 704.0f, 109.0f, 35.0f, 9);
+
+				Tree->RootWidget = Scale;
+				return;
+			}
+
+			UOverlay* Root = Make<UOverlay>(TEXT("Overlay_DetailRoot"));
+			FillOverlay(Root, MakeColorImage(TEXT("IMG_DetailShade"), FLinearColor(0, 0, 0, 0.72f)));
+
+			USizeBox* PopupSize = Make<USizeBox>(TEXT("SB_DetailPanel"));
+			PopupSize->SetWidthOverride(820.0f);
+			PopupSize->SetHeightOverride(860.0f);
+			UOverlaySlot* PopupSlot = Root->AddChildToOverlay(PopupSize);
+			PopupSlot->SetHorizontalAlignment(HAlign_Center);
+			PopupSlot->SetVerticalAlignment(VAlign_Center);
+
+			UBorder* Panel = MakeBorder(TEXT("BRD_DetailPanel"), PageBackground, FMargin(30));
+			PopupSize->SetContent(Panel);
+			UCanvasPanel* Canvas = Make<UCanvasPanel>(TEXT("Canvas_Detail"));
+			Panel->SetContent(Canvas);
+			Place(Canvas, MakeText(TEXT("TXT_PopupTitle"), bStatement ? TEXT("진술서") : TEXT("증거 사진"), 30, WarmWhite, true), 20, 15, 650, 55);
+			Place(Canvas, MakeTextButton(TEXT("BTN_PopupClose"), TEXT("×"), 36), 700, 5, 58, 58);
+
+			UBorder* Preview = MakeBorder(TEXT("BRD_DetailPreview"), PagePanel);
+			Place(Canvas, Preview, 20, 95, 450, 330);
+			UImage* PreviewImage = Make<UImage>(
+				bStatement ? TEXT("IMG_StatementIllustration") : TEXT("IMG_PopupPhoto"), true);
+			PreviewImage->SetVisibility(ESlateVisibility::Collapsed);
+			Preview->SetContent(PreviewImage);
+
+			Place(Canvas, MakeText(TEXT("TXT_PuzzleKeywordLabel"), TEXT("획득 키워드"), 18, WarmMuted), 500, 95, 240, 34);
+			UScrollBox* WordScroll = Make<UScrollBox>(TEXT("SB_PuzzleWords"));
+			UWrapBox* WordWrap = Make<UWrapBox>(TEXT("WB_PuzzleWords"), true);
+			WordWrap->SetInnerSlotPadding(FVector2D(8, 8));
+			WordScroll->AddChild(WordWrap);
+			Place(Canvas, WordScroll, 500, 135, 240, 330);
+
+			UWrapBox* SentenceBuilder = Make<UWrapBox>(TEXT("WB_SentenceBuilder"), true);
+			SentenceBuilder->SetInnerSlotPadding(FVector2D(4, 6));
+			SentenceBuilder->SetVisibility(ESlateVisibility::Collapsed);
+			Place(Canvas, SentenceBuilder, 40, 450, 700, 85);
+			UTextBlock* Body = MakeText(TEXT("TXT_PopupBody"), TEXT("내용"), 22, WarmMuted, true);
+			Body->SetJustification(ETextJustify::Center);
+			Body->SetAutoWrapText(true);
+			Place(Canvas, Body, 40, 450, 700, 85);
+
+			UTextBlock* PhotoLabel = MakeText(TEXT("TXT_PuzzlePhotoLabel"), TEXT("증거 사진"), 18, WarmMuted, true);
+			PhotoLabel->SetVisibility(ESlateVisibility::Collapsed);
+			Place(Canvas, PhotoLabel, 40, 550, 300, 30);
+			UWrapBox* PuzzlePhotos = Make<UWrapBox>(TEXT("WB_PuzzlePhotos"), true);
+			PuzzlePhotos->SetInnerSlotPadding(FVector2D(8, 8));
+			PuzzlePhotos->SetVisibility(ESlateVisibility::Collapsed);
+			Place(Canvas, PuzzlePhotos, 40, 582, 700, 75);
+			UWrapBox* PhotoSlots = Make<UWrapBox>(TEXT("WB_PhotoSlots"), true);
+			PhotoSlots->SetInnerSlotPadding(FVector2D(8, 8));
+			PhotoSlots->SetVisibility(ESlateVisibility::Collapsed);
+			Place(Canvas, PhotoSlots, 40, 660, 700, 75);
+
+			UTextBlock* Feedback = MakeText(TEXT("TXT_PuzzleFeedback"), TEXT("잘못된 증거인 것 같다."), 20, FLinearColor(0.82f, 0.30f, 0.24f, 1), true);
+			Feedback->SetJustification(ETextJustify::Center);
+			Feedback->SetVisibility(ESlateVisibility::Collapsed);
+			Place(Canvas, Feedback, 40, 740, 700, 28);
+
+			if (bStatement)
+			{
+				Place(Canvas, MakeTextButton(TEXT("BTN_StatementSubmit"), TEXT("자백 반증"), 23), 530, 775, 210, 62);
+			}
+			else
+			{
+				Place(Canvas, MakeTextButton(TEXT("BTN_PlayStoryVoice"), TEXT("음성 재생"), 20), 530, 775, 210, 62);
+			}
+			Tree->RootWidget = Root;
 		}
 
 		UCanvasPanel* BuildAppPage(
@@ -1386,13 +1627,15 @@ namespace TabletDesigner
 
 		if (!Blueprint)
 		{
+			const FString TargetPackageName = FPackageName::ObjectPathToPackageName(FString(InAssetPath));
+			const FString TargetAssetFolder = FPackageName::GetLongPackagePath(TargetPackageName);
 			UWidgetBlueprintFactory* Factory = NewObject<UWidgetBlueprintFactory>();
 			Factory->ParentClass = ParentClass;
 			IAssetTools& AssetTools =
 				FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 			Blueprint = Cast<UWidgetBlueprint>(AssetTools.CreateAsset(
 				InAssetName,
-				AssetFolder,
+				TargetAssetFolder,
 				UWidgetBlueprint::StaticClass(),
 				Factory));
 		}
@@ -1426,6 +1669,40 @@ namespace TabletDesigner
 			bSaved ? TEXT("Success") : TEXT("Failure"),
 			InAssetPath);
 		return bSaved;
+	}
+
+	bool BuildTabletDesignerWidgets(const bool bRedesignExisting)
+	{
+		return BuildWidgetBlueprint(
+			TEXT("WBP_TabletFolderButton"),
+			FolderButtonAssetPath,
+			UBalhwajeomTabletFolderButton::StaticClass(),
+			bRedesignExisting,
+			[](const FBuilder& Builder) { Builder.BuildFolderButtonWidget(); })
+			&& BuildWidgetBlueprint(
+				TEXT("WBP_TabletFileTile"),
+				FileTileAssetPath,
+				UBalhwajeomTabletPhotoButton::StaticClass(),
+				bRedesignExisting,
+				[](const FBuilder& Builder) { Builder.BuildFileTileWidget(); })
+			&& BuildWidgetBlueprint(
+				TEXT("WBP_TabletFolderSection"),
+				FolderSectionAssetPath,
+				UBalhwajeomTabletFolderSection::StaticClass(),
+				bRedesignExisting,
+				[](const FBuilder& Builder) { Builder.BuildFolderSectionWidget(); })
+			&& BuildWidgetBlueprint(
+				TEXT("WBP_TabletStatement"),
+				StatementDetailAssetPath,
+				UBalhwajeomTabletDetailWidget::StaticClass(),
+				bRedesignExisting,
+				[](const FBuilder& Builder) { Builder.BuildDetailWidget(true); })
+			&& BuildWidgetBlueprint(
+				TEXT("WBP_TabletPhoto"),
+				PhotoDetailAssetPath,
+				UBalhwajeomTabletDetailWidget::StaticClass(),
+				bRedesignExisting,
+				[](const FBuilder& Builder) { Builder.BuildDetailWidget(false); });
 	}
 
 	bool BuildMessengerWidgetBlueprints(const bool bRedesignExisting)
@@ -1795,6 +2072,22 @@ bool UTabletWidgetBlueprintLibrary::InstallInternetBrowser()
 	const bool bSaved = SaveAndCompile(TabletBlueprint);
 	UE_LOG(LogTemp, Display, TEXT("INTERNET_INSTALL Result=%s AlreadyEmbedded=false"), bSaved ? TEXT("Success") : TEXT("Failure"));
 	return bSaved;
+}
+
+bool UTabletWidgetBlueprintLibrary::CreateTabletDesignerWidgets()
+{
+	return TabletDesigner::BuildTabletDesignerWidgets(false);
+}
+
+bool UTabletWidgetBlueprintLibrary::RedesignTabletStatementWidget()
+{
+	using namespace TabletDesigner;
+	return BuildWidgetBlueprint(
+		TEXT("WBP_TabletStatement"),
+		StatementDetailAssetPath,
+		UBalhwajeomTabletDetailWidget::StaticClass(),
+		true,
+		[](const FBuilder& Builder) { Builder.BuildDetailWidget(true); });
 }
 
 bool UTabletWidgetBlueprintLibrary::InstallTabletPersonFolderWidget()
@@ -2339,6 +2632,7 @@ bool UTabletWidgetBlueprintLibrary::CreateTabletWidgetBlueprint()
 	if (!CreateMessengerDataAssetsInternal()
 		|| !BuildMessengerWidgetBlueprints(false)
 		|| !BuildInternetWidgetBlueprints(false)
+		|| !BuildTabletDesignerWidgets(false)
 		|| !BuildWidgetBlueprint(
 			PersonFolderAssetName,
 			PersonFolderAssetPath,
@@ -2373,6 +2667,7 @@ bool UTabletWidgetBlueprintLibrary::RedesignTabletWidgetBlueprint()
 	if (!CreateMessengerDataAssetsInternal()
 		|| !BuildMessengerWidgetBlueprints(true)
 		|| !BuildInternetWidgetBlueprints(true)
+		|| !BuildTabletDesignerWidgets(false)
 		|| !BuildWidgetBlueprint(
 			PersonFolderAssetName,
 			PersonFolderAssetPath,
@@ -2706,7 +3001,12 @@ bool UTabletWidgetBlueprintLibrary::RunTabletWidgetSmokeTest()
 		{
 			if (USizeBox* FirstEntry = Cast<USizeBox>(PersonFolders->GetChildAt(0)))
 			{
-				FirstFolderButton = Cast<UButton>(FirstEntry->GetContent());
+				if (UBalhwajeomTabletFolderButton* FolderWidget =
+					Cast<UBalhwajeomTabletFolderButton>(FirstEntry->GetContent()))
+				{
+					FirstFolderButton = Cast<UButton>(
+						FolderWidget->GetWidgetFromName(TEXT("BTN_Folder")));
+				}
 			}
 		}
 		bPassed &= Require(FirstFolderButton != nullptr, TEXT("home page has at least one DT_Characters folder button"));

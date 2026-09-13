@@ -715,6 +715,47 @@ bool UBalhwajeomInvestigationSubsystem::GetPhotoDefinition(
 	return true;
 }
 
+bool UBalhwajeomInvestigationSubsystem::GetPhotoDefinitionBySentenceID(
+	FName SentenceID,
+	FPhotoDefinition& OutDefinition) const
+{
+	OutDefinition = FPhotoDefinition{};
+	if (SentenceID.IsNone() ||
+		!IsValid(PhotosTable) ||
+		PhotosTable->GetRowStruct() != FPhotoDefinition::StaticStruct())
+	{
+		return false;
+	}
+	const FSentenceDefinition* Sentence = FindSentenceDefinition(SentenceID);
+	if (Sentence == nullptr || Sentence->SentenceType != ESentenceType::PhotoAnalysis)
+	{
+		return false;
+	}
+
+	const FPhotoDefinition* MatchingPhoto = nullptr;
+	for (const TPair<FName, uint8*>& Pair : PhotosTable->GetRowMap())
+	{
+		const FPhotoDefinition* Photo =
+			reinterpret_cast<const FPhotoDefinition*>(Pair.Value);
+		if (Photo->PhotoSentenceID == SentenceID)
+		{
+			if (MatchingPhoto != nullptr)
+			{
+				return false;
+			}
+			MatchingPhoto = Photo;
+		}
+	}
+
+	if (MatchingPhoto == nullptr)
+	{
+		return false;
+	}
+
+	OutDefinition = *MatchingPhoto;
+	return true;
+}
+
 bool UBalhwajeomInvestigationSubsystem::GetCharacterDefinition(
 	FName CharacterID,
 	FCharacterDefinition& OutDefinition) const
