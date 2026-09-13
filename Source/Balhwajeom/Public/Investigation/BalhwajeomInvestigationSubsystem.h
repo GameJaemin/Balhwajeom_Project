@@ -62,6 +62,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
 	bool GetWordDefinition(FName WordID, FWordDefinition& OutDefinition) const;
 
+	/** Every DT_Words row in the table's authored row order. */
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
+	void GetAllWordDefinitions(TArray<FWordDefinition>& OutDefinitions) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
 	bool GetSentenceDefinition(FName SentenceID, FSentenceDefinition& OutDefinition) const;
 
