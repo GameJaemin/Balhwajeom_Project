@@ -24,7 +24,10 @@ enum class EBalhwajeomIntroState : uint8
 	TransitionToCinematic,
 	Cinematic,
 	TransitionToGameplay,
-	Gameplay
+	Gameplay,
+	TransitionToEnding,
+	Ending,
+	TransitionToTitle
 };
 
 /** Coordinates title, fades, BGM, optional Level Sequence, and gameplay input. */
@@ -86,6 +89,23 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Audio", meta = (ClampMin = "0.0"))
 	float BGMVolume = 1.0f;
 
+	/** Opens the tablet directly on the default person's statement when the intro enters gameplay. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Gameplay")
+	bool bOpenStatementAfterIntro = true;
+
+	/** Optional ending MP4 setup. All three media fields must be assigned; otherwise EndingSequence is used. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Ending")
+	TObjectPtr<UMediaSource> EndingMediaSource;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Ending")
+	TObjectPtr<UMediaPlayer> EndingMediaPlayer;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Ending")
+	TObjectPtr<UMediaTexture> EndingMediaTexture;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Ending")
+	TObjectPtr<ULevelSequence> EndingSequence;
+
 private:
 	UFUNCTION()
 	void HandleStartRequested();
@@ -114,6 +134,12 @@ private:
 	void StartSequenceCinematic();
 	void BeginGameplayTransition();
 	void EnterGameplayAtBlack();
+	void HandleTabletClosed();
+	void StartEndingCinematic();
+	bool StartEndingMediaCinematic();
+	void StartEndingSequenceCinematic();
+	void BeginTitleTransition();
+	void ReturnToTitle();
 
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UAudioComponent> BGMAudioComponent;
@@ -134,4 +160,5 @@ private:
 	TObjectPtr<ALevelSequenceActor> SequenceActor;
 
 	EBalhwajeomIntroState State = EBalhwajeomIntroState::Boot;
+	bool bEndingTriggered = false;
 };

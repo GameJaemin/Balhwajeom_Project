@@ -119,7 +119,7 @@ private:
  * Collapsible group header for the folder page's file list (like Windows Explorer's date groups):
  * a clickable title row ("{Title} ({Count})" with a ▼/▶ fold arrow) above a WrapBox of file tiles.
  * Built entirely at runtime; RefreshFolderContents() clears and rebuilds one of these per bucket
- * (진술서/분석 문장/완성 문장) every time a folder is opened.
+ * (단서와 정보/증거 사진/추억 사진) every time a folder is opened.
  */
 UCLASS()
 class BALHWAJEOM_API UBalhwajeomTabletFolderSection : public UUserWidget
@@ -521,6 +521,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Tablet|Family")
 	FName GetActiveCharacterID() const { return ActiveCharacterID; }
 
+	/** Opens the default person's folder and its first statement. Returns false when none exists. */
+	bool OpenInitialStatement();
+
 #if WITH_EDITOR
 	/** Commandlet-created widgets have no local player, so UMG skips NativeOnInitialized. */
 	void InitializeForAutomatedTest();
@@ -763,7 +766,7 @@ private:
 	TObjectPtr<UButton> BTN_PhysicalHome;
 
 	/** Folder file list container. RefreshFolderContents() clears it and adds up to three
-	 * UBalhwajeomTabletFolderSection children (진술서/분석 문장/완성 문장), each holding its own tiles --
+	 * UBalhwajeomTabletFolderSection children (단서와 정보/증거 사진/추억 사진), each holding its own tiles --
 	 * replaces the old single flat WB_EvidencePhotos WrapBox + separate SB_StatementTile slot. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UScrollBox> SB_EvidencePhotos;

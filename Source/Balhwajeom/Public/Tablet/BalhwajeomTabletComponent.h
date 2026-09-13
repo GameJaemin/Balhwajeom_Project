@@ -12,6 +12,8 @@ class UEnhancedInputComponent;
 class UInputAction;
 class UInputMappingContext;
 
+DECLARE_MULTICAST_DELEGATE(FOnBalhwajeomTabletClosed);
+
 /**
  * Reusable local-player tablet controller.
  *
@@ -27,11 +29,18 @@ class BALHWAJEOM_API UBalhwajeomTabletComponent : public UActorComponent
 public:
 	UBalhwajeomTabletComponent();
 
+	/** Fired after the close animation has finished and tablet input has been restored. */
+	FOnBalhwajeomTabletClosed OnTabletClosed;
+
 	UFUNCTION(BlueprintCallable, Category = "Tablet")
 	void ToggleTablet();
 
 	UFUNCTION(BlueprintCallable, Category = "Tablet")
 	void RequestOpenTablet();
+
+	/** Opens the tablet and immediately navigates to the first statement in the default person folder. */
+	UFUNCTION(BlueprintCallable, Category = "Tablet")
+	void RequestOpenTabletToStatement();
 
 	UFUNCTION(BlueprintCallable, Category = "Tablet")
 	void CloseTablet();
@@ -108,4 +117,5 @@ private:
 	bool bSavedEnableClickEvents = false;
 	bool bSavedEnableMouseOverEvents = false;
 	bool bTabletInteractionEnabled = true;
+	bool bOpenStatementWhenReady = false;
 };

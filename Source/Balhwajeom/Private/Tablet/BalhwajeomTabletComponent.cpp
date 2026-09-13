@@ -281,10 +281,22 @@ void UBalhwajeomTabletComponent::SetTabletInteractionEnabled(bool bEnabled)
 	bTabletInteractionEnabled = bEnabled;
 	if (!bEnabled && (bTabletOpen || bPendingOpenAfterPhotoMode))
 	{
+		bOpenStatementWhenReady = false;
 		bPendingOpenAfterPhotoMode = false;
 		bTabletClosing = false;
 		FinishCloseTablet();
 	}
+}
+
+void UBalhwajeomTabletComponent::RequestOpenTabletToStatement()
+{
+	if (bTabletOpen && TabletWidget)
+	{
+		TabletWidget->OpenInitialStatement();
+		return;
+	}
+	bOpenStatementWhenReady = true;
+	RequestOpenTablet();
 }
 
 void UBalhwajeomTabletComponent::RequestOpenTablet()
@@ -406,6 +418,11 @@ void UBalhwajeomTabletComponent::OpenTabletNow()
 
 	TabletWidget->SetVisibility(ESlateVisibility::Visible);
 	TabletWidget->PlayTabletOpenAnimation();
+	if (bOpenStatementWhenReady)
+	{
+		bOpenStatementWhenReady = false;
+		TabletWidget->OpenInitialStatement();
+	}
 
 	PlayerController->bShowMouseCursor = true;
 	PlayerController->bEnableClickEvents = true;
@@ -420,6 +437,7 @@ void UBalhwajeomTabletComponent::OpenTabletNow()
 
 void UBalhwajeomTabletComponent::CloseTablet()
 {
+	bOpenStatementWhenReady = false;
 	bPendingOpenAfterPhotoMode = false;
 	if (!bTabletOpen || bTabletClosing)
 	{
@@ -476,6 +494,10 @@ void UBalhwajeomTabletComponent::FinishCloseTablet()
 		}
 	}
 	SetGameplayInputBlocked(false);
+	if (bWasTabletOpen)
+	{
+		OnTabletClosed.Broadcast();
+	}
 }
 
 void UBalhwajeomTabletComponent::HandleTabletCloseAnimationFinished()
