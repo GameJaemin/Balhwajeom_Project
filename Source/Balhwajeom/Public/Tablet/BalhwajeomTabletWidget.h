@@ -371,6 +371,7 @@ public:
 		int32 InStatementFontSize = 16);
 	void SetFilled(FName InWordID, const FText& WordText);
 	void SetEmpty();
+	void SetErrorStyle(bool bInError);
 	int32 GetSlotIndex() const { return SlotIndex; }
 
 	UPROPERTY()
@@ -385,6 +386,7 @@ private:
 	int32 SlotIndex = 0;
 	FName FilledWordID = NAME_None;
 	bool bStatementStyle = false;
+	bool bErrorStyle = false;
 
 	UPROPERTY()
 	TObjectPtr<UBorder> Background;
@@ -581,6 +583,7 @@ private:
 	void PreparePuzzle(FName SentenceID);
 	void RefreshPuzzleControls();
 	void BuildSentenceBuilder(const FSentenceDefinition& Sentence);
+	void SetPhotoPuzzleErrorStyle(bool bError);
 	void BuildPhotoSlots(const FSentenceDefinition& Sentence);
 	void HidePuzzleControls();
 	void ValidateActivePuzzle(bool bExplicitStatementSubmit);

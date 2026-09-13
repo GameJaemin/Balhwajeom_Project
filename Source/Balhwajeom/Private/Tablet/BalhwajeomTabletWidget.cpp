@@ -55,6 +55,31 @@ namespace
 		Style.SetPressedPadding(FMargin(0.0f));
 		Button->SetStyle(Style);
 	}
+
+	/** Uses only the painted 106x39 area of the 144x47 source, excluding its right/bottom padding. */
+	void ApplyKeywordHoverBrush(UBorder* Border)
+	{
+		if (!Border)
+		{
+			return;
+		}
+		UTexture2D* HoverTexture = LoadObject<UTexture2D>(
+			nullptr,
+			TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/keyword_hover.keyword_hover"));
+		if (!HoverTexture)
+		{
+			return;
+		}
+
+		FSlateBrush Brush;
+		Brush.DrawAs = ESlateBrushDrawType::Image;
+		Brush.SetResourceObject(HoverTexture);
+		const float UMax = FMath::Clamp(106.0f / HoverTexture->GetSizeX(), 0.0f, 1.0f);
+		const float VMax = FMath::Clamp(39.0f / HoverTexture->GetSizeY(), 0.0f, 1.0f);
+		Brush.SetUVRegion(FBox2f(FVector2f::ZeroVector, FVector2f(UMax, VMax)));
+		Brush.ImageSize = FVector2D(106.0f, 39.0f);
+		Border->SetBrush(Brush);
+	}
 }
 
 UBalhwajeomTabletDetailWidget::UBalhwajeomTabletDetailWidget(const FObjectInitializer& ObjectInitializer)
@@ -681,7 +706,18 @@ void UBalhwajeomTabletWidget::OpenPhoto(const FName PhotoID)
 	}
 	// WorldStoryCues/WorldStoryLines are the timed captions shown during the in-world capture
 	// presentation only (see APhotoWorldStoryActor); the tablet never repeats that text.
-	if (!ShowPopup(Photo.PhotoName, Body, GetOrLoadCapturedPhotoTexture(PhotoID)))
+	FText PopupTitle = Photo.PhotoName;
+	FCapturedPhotoRecord CapturedPhoto;
+	FEvidenceDefinition Evidence;
+	if (Investigation->GetCapturedPhoto(PhotoID, CapturedPhoto) &&
+		Investigation->GetEvidenceDefinition(CapturedPhoto.ObjectID, Evidence) &&
+		!Evidence.ObjectName.IsEmptyOrWhitespace())
+	{
+		PopupTitle = FText::Format(
+			NSLOCTEXT("Tablet", "PhotoDetailObjectTitle", "{0}"),
+			Evidence.ObjectName);
+	}
+	if (!ShowPopup(PopupTitle, Body, GetOrLoadCapturedPhotoTexture(PhotoID)))
 	{
 		return;
 	}
@@ -810,20 +846,29 @@ void UBalhwajeomTabletWidget::RefreshPuzzleControls()
 		}
 		else
 		{
+			TArray<FWordDefinition> OrderedWords;
+			Investigation->GetAllWordDefinitions(OrderedWords);
 			WB_PuzzleWords->SetVisibility(
-				AvailablePuzzleWordIDs.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
-			for (const FName WordID : AvailablePuzzleWordIDs)
+				OrderedWords.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+			for (const FWordDefinition& Word : OrderedWords)
 			{
-				FWordDefinition Word;
-				if (!Investigation->GetWordDefinition(WordID, Word))
+				if (!AvailablePuzzleWordIDs.Contains(Word.WordID))
 				{
+					USpacer* EmptyCell = WidgetTree->ConstructWidget<USpacer>();
+					EmptyCell->SetSize(FVector2D(106.0f, 39.0f));
+					WB_PuzzleWords->AddChild(EmptyCell);
 					continue;
 				}
 				UBalhwajeomTabletWordChip* Chip = Cast<UBalhwajeomTabletWordChip>(
 					UUserWidget::CreateWidgetInstance(*WidgetTree, UBalhwajeomTabletWordChip::StaticClass(), NAME_None));
 				if (Chip)
 				{
-					Chip->Configure(WordID, Word.DisplayWord);
+					Chip->Configure(
+						Word.WordID,
+						Word.DisplayWord,
+						true,
+						ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFont() : nullptr,
+						ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFontSize() : 14);
 					WB_PuzzleWords->AddChild(Chip);
 				}
 			}
@@ -878,14 +923,14 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 			UTextBlock* SegmentText = WidgetTree->ConstructWidget<UTextBlock>();
 			SegmentText->SetText(FText::FromString(Segments[SegmentIndex]));
 			FSlateFontInfo Font = SegmentText->GetFont();
-			Font.Size = bStatementStyle ? StatementFontSize : 22;
+			Font.Size = bStatementStyle ? StatementFontSize : 27;
 			if (bStatementStyle)
 			{
 				Font.FontObject = StatementFont;
 			}
 			SegmentText->SetFont(Font);
 			SegmentText->SetColorAndOpacity(FSlateColor(
-				bStatementStyle ? FLinearColor::Black : FLinearColor(0.91f, 0.86f, 0.78f, 1.0f)));
+				bStatementStyle ? FLinearColor::Black : FLinearColor::White));
 			if (UWrapBoxSlot* WrapSlot = Cast<UWrapBoxSlot>(WB_SentenceBuilder->AddChild(SegmentText)))
 			{
 				WrapSlot->SetVerticalAlignment(VAlign_Center);
@@ -919,6 +964,30 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 	if (TXT_PopupBody && bHasBlanks)
 	{
 		TXT_PopupBody->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void UBalhwajeomTabletWidget::SetPhotoPuzzleErrorStyle(const bool bError)
+{
+	if (!WB_SentenceBuilder)
+	{
+		return;
+	}
+
+	const FLinearColor TextColor = bError
+		? FLinearColor(0.761f, 0.471f, 0.471f, 1.0f) // #C27878
+		: FLinearColor::White;
+	for (int32 ChildIndex = 0; ChildIndex < WB_SentenceBuilder->GetChildrenCount(); ++ChildIndex)
+	{
+		if (UTextBlock* Segment = Cast<UTextBlock>(WB_SentenceBuilder->GetChildAt(ChildIndex)))
+		{
+			Segment->SetColorAndOpacity(FSlateColor(TextColor));
+		}
+		else if (UBalhwajeomTabletSentenceBlank* Blank =
+			Cast<UBalhwajeomTabletSentenceBlank>(WB_SentenceBuilder->GetChildAt(ChildIndex)))
+		{
+			Blank->SetErrorStyle(bError);
+		}
 	}
 }
 
@@ -976,6 +1045,10 @@ void UBalhwajeomTabletWidget::HandleSentenceBlankDropped(
 	{
 		// Dropped back onto the same blank it came from -- nothing to do.
 		return;
+	}
+	if (Sentence.SentenceType == ESentenceType::PhotoAnalysis)
+	{
+		SetPhotoPuzzleErrorStyle(false);
 	}
 
 	// Whatever word already occupied the destination slot gets displaced by this drop.
@@ -1336,6 +1409,10 @@ void UBalhwajeomTabletWidget::ValidateActivePuzzle(const bool bExplicitStatement
 		TXT_PuzzleFeedback->SetText(
 			Result.IsEmpty() ? NSLOCTEXT("Tablet", "WrongEvidence", "잘못된 증거인 것 같다.") : Result);
 		TXT_PuzzleFeedback->SetVisibility(ESlateVisibility::Visible);
+		if (Sentence.SentenceType == ESentenceType::PhotoAnalysis)
+		{
+			SetPhotoPuzzleErrorStyle(true);
+		}
 	}
 }
 
@@ -1983,13 +2060,8 @@ void UBalhwajeomTabletWordChip::Configure(
 	Background->SetPadding(bStatementStyle ? FMargin(5.0f, 3.0f) : FMargin(10.0f, 6.0f));
 	if (bStatementStyle)
 	{
-		if (UTexture2D* HoverTexture = LoadObject<UTexture2D>(
-			nullptr,
-			TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/keyword_hover.keyword_hover")))
-		{
-			Background->SetBrushFromTexture(HoverTexture);
-			Background->SetBrushColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.0f));
-		}
+		ApplyKeywordHoverBrush(Background);
+		Background->SetBrushColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.0f));
 	}
 
 	LabelText = WidgetTree->ConstructWidget<UTextBlock>();
@@ -2060,7 +2132,7 @@ void UBalhwajeomTabletWordChip::NativeOnDragDetected(
 
 	UBalhwajeomWordDragDropOperation* Operation = NewObject<UBalhwajeomWordDragDropOperation>(this);
 	Operation->WordID = WordID;
-	Operation->Pivot = EDragPivot::MouseDown;
+	Operation->Pivot = EDragPivot::CenterCenter;
 
 	if (WidgetTree)
 	{
@@ -2072,12 +2144,8 @@ void UBalhwajeomTabletWordChip::NativeOnDragDetected(
 		DragVisual->SetPadding(bStatementStyle ? FMargin(5.0f, 3.0f) : FMargin(10.0f, 6.0f));
 		if (bStatementStyle)
 		{
-			if (UTexture2D* HoverTexture = LoadObject<UTexture2D>(
-				nullptr,
-				TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/keyword_hover.keyword_hover")))
-			{
-				DragVisual->SetBrushFromTexture(HoverTexture);
-			}
+			ApplyKeywordHoverBrush(DragVisual);
+			DragVisual->SetBrushColor(FLinearColor::FromSRGBColor(FColor(255, 237, 217, 255)));
 		}
 		UTextBlock* DragLabel = WidgetTree->ConstructWidget<UTextBlock>();
 		DragLabel->SetText(DisplayLabel);
@@ -2126,13 +2194,13 @@ void UBalhwajeomTabletSentenceBlank::Configure(
 	Background->SetBrushColor(
 		bStatementStyle
 			? FLinearColor(1.0f, 0.72f, 0.72f, 0.72f)
-			: FLinearColor(0.20f, 0.16f, 0.10f, 1.0f));
-	Background->SetPadding(bStatementStyle ? FMargin(4.0f, 1.0f) : FMargin(10.0f, 4.0f));
+			: FLinearColor::White);
+	Background->SetPadding(bStatementStyle ? FMargin(4.0f, 1.0f) : FMargin(4.0f, 1.0f));
 
 	DisplayText = WidgetTree->ConstructWidget<UTextBlock>();
 	DisplayText->SetJustification(ETextJustify::Center);
 	FSlateFontInfo Font = DisplayText->GetFont();
-	Font.Size = bStatementStyle ? InStatementFontSize : 22;
+	Font.Size = bStatementStyle ? InStatementFontSize : 27;
 	if (bStatementStyle)
 	{
 		Font.FontObject = InStatementFont;
@@ -2140,7 +2208,20 @@ void UBalhwajeomTabletSentenceBlank::Configure(
 	DisplayText->SetFont(Font);
 	Background->SetContent(DisplayText);
 
-	WidgetTree->RootWidget = Background;
+	if (bStatementStyle)
+	{
+		WidgetTree->RootWidget = Background;
+	}
+	else
+	{
+		USizeBox* BlankSize = WidgetTree->ConstructWidget<USizeBox>();
+		// Keep the authored empty-blank footprint, but allow a filled keyword to grow
+		// horizontally at the same 27px size as the surrounding photo sentence.
+		BlankSize->SetMinDesiredWidth(83.0f);
+		BlankSize->SetMinDesiredHeight(36.0f);
+		BlankSize->SetContent(Background);
+		WidgetTree->RootWidget = BlankSize;
+	}
 	SetEmpty();
 }
 
@@ -2151,9 +2232,33 @@ void UBalhwajeomTabletSentenceBlank::SetEmpty()
 	{
 		return;
 	}
-	DisplayText->SetText(NSLOCTEXT("Tablet", "SentenceBlankPlaceholder", "____"));
+	DisplayText->SetText(
+		bStatementStyle
+			? NSLOCTEXT("Tablet", "SentenceBlankPlaceholder", "____")
+			: FText::FromString(TEXT("    ")));
 	DisplayText->SetColorAndOpacity(FSlateColor(
-		bStatementStyle ? FLinearColor::Black : FLinearColor(0.62f, 0.56f, 0.46f, 1.0f)));
+		bStatementStyle ? FLinearColor::Black : FLinearColor::White));
+}
+
+void UBalhwajeomTabletSentenceBlank::SetErrorStyle(const bool bInError)
+{
+	bErrorStyle = bInError;
+	if (!Background || bStatementStyle)
+	{
+		return;
+	}
+
+	Background->SetBrushColor(
+		bErrorStyle
+			? FLinearColor::Transparent
+			: FLinearColor::White);
+	if (DisplayText)
+	{
+		DisplayText->SetColorAndOpacity(FSlateColor(
+			bErrorStyle
+				? FLinearColor(0.761f, 0.471f, 0.471f, 1.0f)
+				: (FilledWordID.IsNone() ? FLinearColor::White : FLinearColor::Black)));
+	}
 }
 
 void UBalhwajeomTabletSentenceBlank::SetFilled(const FName InWordID, const FText& WordText)
@@ -2164,8 +2269,7 @@ void UBalhwajeomTabletSentenceBlank::SetFilled(const FName InWordID, const FText
 		return;
 	}
 	DisplayText->SetText(WordText);
-	DisplayText->SetColorAndOpacity(FSlateColor(
-		bStatementStyle ? FLinearColor::Black : FLinearColor(0.96f, 0.91f, 0.82f, 1.0f)));
+	DisplayText->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
 }
 
 bool UBalhwajeomTabletSentenceBlank::NativeOnDrop(
@@ -2209,20 +2313,25 @@ void UBalhwajeomTabletSentenceBlank::NativeOnDragDetected(
 	UBalhwajeomWordDragDropOperation* Operation = NewObject<UBalhwajeomWordDragDropOperation>(this);
 	Operation->WordID = FilledWordID;
 	Operation->OriginSlotIndex = SlotIndex;
-	Operation->Pivot = EDragPivot::MouseDown;
+	Operation->Pivot = EDragPivot::CenterCenter;
 
 	if (WidgetTree && DisplayText)
 	{
 		UBorder* DragVisual = WidgetTree->ConstructWidget<UBorder>();
-		DragVisual->SetBrushColor(FLinearColor(0.30f, 0.24f, 0.16f, 0.9f));
-		DragVisual->SetPadding(FMargin(10.0f, 6.0f));
+		DragVisual->SetPadding(FMargin(4.0f, 1.0f));
+		ApplyKeywordHoverBrush(DragVisual);
+		DragVisual->SetBrushColor(FLinearColor::FromSRGBColor(FColor(255, 237, 217, 255)));
 		UTextBlock* DragLabel = WidgetTree->ConstructWidget<UTextBlock>();
 		DragLabel->SetText(DisplayText->GetText());
-		FSlateFontInfo Font = DragLabel->GetFont();
-		Font.Size = 20;
-		DragLabel->SetFont(Font);
+		DragLabel->SetFont(DisplayText->GetFont());
+		DragLabel->SetJustification(ETextJustify::Center);
+		DragLabel->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
 		DragVisual->SetContent(DragLabel);
-		Operation->DefaultDragVisual = DragVisual;
+		USizeBox* DragSize = WidgetTree->ConstructWidget<USizeBox>();
+		DragSize->SetWidthOverride(bStatementStyle ? 106.0f : 83.0f);
+		DragSize->SetHeightOverride(bStatementStyle ? 39.0f : 36.0f);
+		DragSize->SetContent(DragVisual);
+		Operation->DefaultDragVisual = DragSize;
 	}
 
 	OutOperation = Operation;

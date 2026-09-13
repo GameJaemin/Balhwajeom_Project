@@ -100,6 +100,7 @@ namespace TabletDesigner
 	const TCHAR* PhotoDetailAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletPhoto.WBP_TabletPhoto");
 	const TCHAR* StatementBackgroundPath = TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/final_sentence_sister_BG.final_sentence_sister_BG");
 	const TCHAR* StatementSubmitPath = TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/final_button.final_button");
+	const TCHAR* PhotoQuestionsBackgroundPath = TEXT("/Game/Balhwajeom/UI/Tablet/Photo/photo_questions_BG.photo_questions_BG");
 	const TCHAR* PersonFolderBackgroundPath = TEXT("/Game/Balhwajeom/UI/Tablet/PersonFolder/folder_BG.folder_BG");
 	const TCHAR* PersonFolderSisterIdlePath = TEXT("/Game/Balhwajeom/UI/Tablet/PersonFolder/folder_sis_idle.folder_sis_idle");
 	const TCHAR* PersonFolderSisterSelectedPath = TEXT("/Game/Balhwajeom/UI/Tablet/PersonFolder/folder_sis_selected.folder_sis_selected");
@@ -773,72 +774,83 @@ namespace TabletDesigner
 				return;
 			}
 
-			UOverlay* Root = Make<UOverlay>(TEXT("Overlay_DetailRoot"));
-			FillOverlay(Root, MakeColorImage(TEXT("IMG_DetailShade"), FLinearColor(0, 0, 0, 0.72f)));
+			UScaleBox* Scale = Make<UScaleBox>(TEXT("ScaleBox_Wrapper"));
+			Scale->SetStretch(EStretch::ScaleToFit);
+			USizeBox* Size = Make<USizeBox>(TEXT("SizeBox_Wrapper"));
+			Size->SetWidthOverride(1274.0f);
+			Size->SetHeightOverride(907.0f);
+			Scale->SetContent(Size);
 
-			USizeBox* PopupSize = Make<USizeBox>(TEXT("SB_DetailPanel"));
-			PopupSize->SetWidthOverride(820.0f);
-			PopupSize->SetHeightOverride(860.0f);
-			UOverlaySlot* PopupSlot = Root->AddChildToOverlay(PopupSize);
-			PopupSlot->SetHorizontalAlignment(HAlign_Center);
-			PopupSlot->SetVerticalAlignment(VAlign_Center);
-
-			UBorder* Panel = MakeBorder(TEXT("BRD_DetailPanel"), PageBackground, FMargin(30));
-			PopupSize->SetContent(Panel);
 			UCanvasPanel* Canvas = Make<UCanvasPanel>(TEXT("Canvas_Detail"));
-			Panel->SetContent(Canvas);
-			Place(Canvas, MakeText(TEXT("TXT_PopupTitle"), bStatement ? TEXT("진술서") : TEXT("증거 사진"), 30, WarmWhite, true), 20, 15, 650, 55);
-			Place(Canvas, MakeTextButton(TEXT("BTN_PopupClose"), TEXT("×"), 36), 700, 5, 58, 58);
+			Size->SetContent(Canvas);
+			FillCanvas(Canvas, MakeTextureImage(
+				TEXT("IMG_PhotoQuestionsBackground"), PhotoQuestionsBackgroundPath, false), 0);
 
-			UBorder* Preview = MakeBorder(TEXT("BRD_DetailPreview"), PagePanel);
-			Place(Canvas, Preview, 20, 95, 450, 330);
-			UImage* PreviewImage = Make<UImage>(
-				bStatement ? TEXT("IMG_StatementIllustration") : TEXT("IMG_PopupPhoto"), true);
+			UTextBlock* Title = MakeText(
+				TEXT("TXT_PopupTitle"), TEXT("오브젝트 사진"), 18, FLinearColor::White, true);
+			Title->SetJustification(ETextJustify::Center);
+			Title->SetShadowOffset(FVector2D::ZeroVector);
+			Place(Canvas, Title, 360.0f, 10.0f, 550.0f, 34.0f, 5);
+			// The close glyph is part of the reference background; this is its hit target.
+			Place(Canvas, MakeTransparentButton(TEXT("BTN_PopupClose")), 1207.0f, 0.0f, 67.0f, 54.0f, 10);
+
+			UScaleBox* PhotoScale = Make<UScaleBox>(TEXT("ScaleBox_PhotoPreview"));
+			PhotoScale->SetStretch(EStretch::ScaleToFit);
+			UImage* PreviewImage = Make<UImage>(TEXT("IMG_PopupPhoto"), true);
 			PreviewImage->SetVisibility(ESlateVisibility::Collapsed);
-			Preview->SetContent(PreviewImage);
-
-			Place(Canvas, MakeText(TEXT("TXT_PuzzleKeywordLabel"), TEXT("획득 키워드"), 18, WarmMuted), 500, 95, 240, 34);
-			UScrollBox* WordScroll = Make<UScrollBox>(TEXT("SB_PuzzleWords"));
-			UWrapBox* WordWrap = Make<UWrapBox>(TEXT("WB_PuzzleWords"), true);
-			WordWrap->SetInnerSlotPadding(FVector2D(8, 8));
-			WordScroll->AddChild(WordWrap);
-			Place(Canvas, WordScroll, 500, 135, 240, 330);
+			PhotoScale->SetContent(PreviewImage);
+			Place(Canvas, PhotoScale, 73.0f, 127.0f, 896.0f, 509.0f, 3);
 
 			UWrapBox* SentenceBuilder = Make<UWrapBox>(TEXT("WB_SentenceBuilder"), true);
-			SentenceBuilder->SetInnerSlotPadding(FVector2D(4, 6));
+			SentenceBuilder->SetInnerSlotPadding(FVector2D(2.0f, 5.0f));
 			SentenceBuilder->SetVisibility(ESlateVisibility::Collapsed);
-			Place(Canvas, SentenceBuilder, 40, 450, 700, 85);
-			UTextBlock* Body = MakeText(TEXT("TXT_PopupBody"), TEXT("내용"), 22, WarmMuted, true);
+			Place(Canvas, SentenceBuilder, 258.0f, 665.0f, 560.0f, 145.0f, 6);
+
+			UTextBlock* Body = MakeText(
+				TEXT("TXT_PopupBody"), TEXT("분석 문장"), 27, FLinearColor::White, true);
 			Body->SetJustification(ETextJustify::Center);
 			Body->SetAutoWrapText(true);
-			Place(Canvas, Body, 40, 450, 700, 85);
+			Body->SetShadowOffset(FVector2D::ZeroVector);
+			Place(Canvas, Body, 258.0f, 665.0f, 560.0f, 145.0f, 5);
 
-			UTextBlock* PhotoLabel = MakeText(TEXT("TXT_PuzzlePhotoLabel"), TEXT("증거 사진"), 18, WarmMuted, true);
-			PhotoLabel->SetVisibility(ESlateVisibility::Collapsed);
-			Place(Canvas, PhotoLabel, 40, 550, 300, 30);
-			UWrapBox* PuzzlePhotos = Make<UWrapBox>(TEXT("WB_PuzzlePhotos"), true);
-			PuzzlePhotos->SetInnerSlotPadding(FVector2D(8, 8));
-			PuzzlePhotos->SetVisibility(ESlateVisibility::Collapsed);
-			Place(Canvas, PuzzlePhotos, 40, 582, 700, 75);
-			UWrapBox* PhotoSlots = Make<UWrapBox>(TEXT("WB_PhotoSlots"), true);
-			PhotoSlots->SetInnerSlotPadding(FVector2D(8, 8));
-			PhotoSlots->SetVisibility(ESlateVisibility::Collapsed);
-			Place(Canvas, PhotoSlots, 40, 660, 700, 75);
-
-			UTextBlock* Feedback = MakeText(TEXT("TXT_PuzzleFeedback"), TEXT("잘못된 증거인 것 같다."), 20, FLinearColor(0.82f, 0.30f, 0.24f, 1), true);
+			UTextBlock* Feedback = MakeText(
+				TEXT("TXT_PuzzleFeedback"), TEXT("잘못된 증거인 것 같다."), 17,
+				FLinearColor(0.92f, 0.88f, 0.84f, 1.0f), true);
 			Feedback->SetJustification(ETextJustify::Center);
 			Feedback->SetVisibility(ESlateVisibility::Collapsed);
-			Place(Canvas, Feedback, 40, 740, 700, 28);
+			Feedback->SetShadowOffset(FVector2D::ZeroVector);
+			Place(Canvas, Feedback, 250.0f, 818.0f, 580.0f, 30.0f, 7);
 
-			if (bStatement)
-			{
-				Place(Canvas, MakeTextButton(TEXT("BTN_StatementSubmit"), TEXT("자백 반증"), 23), 530, 775, 210, 62);
-			}
-			else
-			{
-				Place(Canvas, MakeTextButton(TEXT("BTN_PlayStoryVoice"), TEXT("음성 재생"), 20), 530, 775, 210, 62);
-			}
-			Tree->RootWidget = Root;
+			// Keep the same two-column DT_Words layout and hover/drag treatment as the statement.
+			UScrollBox* WordScroll = Make<UScrollBox>(TEXT("SB_PuzzleWords"));
+			UWrapBox* WordWrap = Make<UWrapBox>(TEXT("WB_PuzzleWords"), true);
+			WordWrap->SetInnerSlotPadding(FVector2D::ZeroVector);
+			WordWrap->SetWrapSize(212.0f);
+			WordWrap->SetExplicitWrapSize(true);
+			WordScroll->AddChild(WordWrap);
+			Place(Canvas, WordScroll, 1044.0f, 169.0f, 212.0f, 702.0f, 6);
+
+			// This invisible binding makes the runtime use the same ordered/full-grid code path as
+			// the statement without drawing a count that is absent from this reference design.
+			UTextBlock* HiddenKeywordCount = MakeText(
+				TEXT("TXT_PuzzleKeywordCount"), TEXT("0/0"), 1, FLinearColor::Transparent, true);
+			HiddenKeywordCount->SetRenderOpacity(0.0f);
+			Place(Canvas, HiddenKeywordCount, 1175.0f, 132.0f, 76.0f, 20.0f, 2);
+
+			// Photo-analysis sentences do not use statement evidence-photo slots, but retain the
+			// optional bindings so the shared runtime can safely clear them.
+			UTextBlock* PhotoLabel = MakeText(
+				TEXT("TXT_PuzzlePhotoLabel"), TEXT("증거 사진"), 1, FLinearColor::Transparent, true);
+			PhotoLabel->SetVisibility(ESlateVisibility::Collapsed);
+			Place(Canvas, PhotoLabel, 0, 0, 1, 1);
+			UWrapBox* PuzzlePhotos = Make<UWrapBox>(TEXT("WB_PuzzlePhotos"), true);
+			PuzzlePhotos->SetVisibility(ESlateVisibility::Collapsed);
+			Place(Canvas, PuzzlePhotos, 0, 0, 1, 1);
+			UWrapBox* PhotoSlots = Make<UWrapBox>(TEXT("WB_PhotoSlots"), true);
+			PhotoSlots->SetVisibility(ESlateVisibility::Collapsed);
+			Place(Canvas, PhotoSlots, 0, 0, 1, 1);
+
+			Tree->RootWidget = Scale;
 		}
 
 		UCanvasPanel* BuildAppPage(
@@ -3203,55 +3215,54 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 	const FString CaptureAssetName = TEXT("WBP_CapturePhoto");
 	const FString CaptureAssetPath =
 		TEXT("/Game/Balhwajeom/UI/Camera/WBP_CapturePhoto.WBP_CapturePhoto");
-	if (UWidgetBlueprint* ExistingBlueprint = LoadObject<UWidgetBlueprint>(nullptr, *CaptureAssetPath))
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, *CaptureAssetPath);
+	if (!Blueprint)
 	{
-		if (ExistingBlueprint->WidgetTree &&
-			!ExistingBlueprint->WidgetTree->FindWidget(TEXT("ScreenDimmer")))
-		{
-			UCanvasPanel* ExistingRoot = Cast<UCanvasPanel>(
-				ExistingBlueprint->WidgetTree->RootWidget);
-			if (!ExistingRoot)
-			{
-				return false;
-			}
-
-			UBorder* Dimmer = ExistingBlueprint->WidgetTree->ConstructWidget<UBorder>(
-				UBorder::StaticClass(), TEXT("ScreenDimmer"));
-			Dimmer->bIsVariable = true;
-			Dimmer->SetBrushColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.52f));
-			UCanvasPanelSlot* DimmerSlot = ExistingRoot->AddChildToCanvas(Dimmer);
-			DimmerSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
-			DimmerSlot->SetOffsets(FMargin(0.0f));
-			DimmerSlot->SetZOrder(0);
-			return TabletDesigner::SaveAndCompile(ExistingBlueprint);
-		}
-		return true;
-	}
-
-	FAssetToolsModule& AssetToolsModule =
-		FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
-	UWidgetBlueprintFactory* Factory = NewObject<UWidgetBlueprintFactory>();
-	Factory->ParentClass = UBalhwajeomCapturePhotoWidget::StaticClass();
-	UWidgetBlueprint* Blueprint = Cast<UWidgetBlueprint>(
-		AssetToolsModule.Get().CreateAsset(
+		FAssetToolsModule& AssetToolsModule =
+			FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+		UWidgetBlueprintFactory* Factory = NewObject<UWidgetBlueprintFactory>();
+		Factory->ParentClass = UBalhwajeomCapturePhotoWidget::StaticClass();
+		Blueprint = Cast<UWidgetBlueprint>(AssetToolsModule.Get().CreateAsset(
 			CaptureAssetName,
 			AssetFolderPath,
 			UWidgetBlueprint::StaticClass(),
 			Factory));
+	}
 	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		return false;
+	}
+	if (!Blueprint->ParentClass ||
+		!Blueprint->ParentClass->IsChildOf(UBalhwajeomCapturePhotoWidget::StaticClass()))
+	{
+		return false;
+	}
+	if (Blueprint->WidgetTree->RootWidget && !TabletDesigner::ClearWidgetTree(Blueprint))
 	{
 		return false;
 	}
 
 	UWidgetTree* Tree = Blueprint->WidgetTree;
+	UScaleBox* ViewportScale = Tree->ConstructWidget<UScaleBox>(
+		UScaleBox::StaticClass(), TEXT("SB_ViewportScale"));
+	ViewportScale->SetStretch(EStretch::ScaleToFit);
+	ViewportScale->SetStretchDirection(EStretchDirection::Both);
+	Tree->RootWidget = ViewportScale;
+
+	USizeBox* DesignSize = Tree->ConstructWidget<USizeBox>(
+		USizeBox::StaticClass(), TEXT("SB_Design1920x1080"));
+	DesignSize->SetWidthOverride(1920.0f);
+	DesignSize->SetHeightOverride(1080.0f);
+	ViewportScale->SetContent(DesignSize);
+
 	UCanvasPanel* Root = Tree->ConstructWidget<UCanvasPanel>(
 		UCanvasPanel::StaticClass(), TEXT("ViewportRoot"));
-	Tree->RootWidget = Root;
+	DesignSize->SetContent(Root);
 
 	UBorder* Dimmer = Tree->ConstructWidget<UBorder>(
 		UBorder::StaticClass(), TEXT("ScreenDimmer"));
 	Dimmer->bIsVariable = true;
-	Dimmer->SetBrushColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.52f));
+	Dimmer->SetBrushColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.62f));
 	UCanvasPanelSlot* DimmerSlot = Root->AddChildToCanvas(Dimmer);
 	DimmerSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
 	DimmerSlot->SetOffsets(FMargin(0.0f));
@@ -3264,12 +3275,18 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 	CardSlot->SetAnchors(FAnchors(0.5f, 0.5f));
 	CardSlot->SetAlignment(FVector2D(0.5f, 0.5f));
 	CardSlot->SetPosition(FVector2D::ZeroVector);
-	CardSlot->SetSize(FVector2D(1000.0f, 650.0f));
+	CardSlot->SetSize(FVector2D(928.0f, 721.0f));
 	CardSlot->SetZOrder(1);
 
 	UBorder* CardBackground = Tree->ConstructWidget<UBorder>(
 		UBorder::StaticClass(), TEXT("CardBackground"));
-	CardBackground->SetBrushColor(FLinearColor(0.018f, 0.018f, 0.018f, 0.98f));
+	CardBackground->bIsVariable = true;
+	if (UTexture2D* BlackBackground = LoadObject<UTexture2D>(nullptr,
+		TEXT("/Game/Balhwajeom/UI/Camera/photo_black_bg_v2.photo_black_bg_v2")))
+	{
+		CardBackground->SetBrushFromTexture(BlackBackground);
+	}
+	CardBackground->SetBrushColor(FLinearColor::White);
 	UCanvasPanelSlot* BackgroundSlot = Card->AddChildToCanvas(CardBackground);
 	BackgroundSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
 	BackgroundSlot->SetOffsets(FMargin(0.0f));
@@ -3280,18 +3297,23 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 	Photo->bIsVariable = true;
 	Photo->SetColorAndOpacity(FLinearColor::White);
 	UCanvasPanelSlot* PhotoSlot = Card->AddChildToCanvas(Photo);
-	PhotoSlot->SetPosition(FVector2D(42.0f, 42.0f));
-	PhotoSlot->SetSize(FVector2D(720.0f, 430.0f));
+	PhotoSlot->SetPosition(FVector2D(50.0f, 40.0f));
+	PhotoSlot->SetSize(FVector2D(830.0f, 469.0f));
 	PhotoSlot->SetZOrder(1);
 
 	UBorder* SentenceBackground = Tree->ConstructWidget<UBorder>(
 		UBorder::StaticClass(), TEXT("SentenceBackground"));
-	SentenceBackground->SetBrushColor(FLinearColor(0.075f, 0.075f, 0.075f, 1.0f));
-	SentenceBackground->SetPadding(FMargin(24.0f, 15.0f));
+	SentenceBackground->bIsVariable = true;
+	SentenceBackground->SetBrushColor(FLinearColor::Transparent);
+	SentenceBackground->SetPadding(FMargin(10.0f, 6.0f));
 	UCanvasPanelSlot* SentenceSlot = Card->AddChildToCanvas(SentenceBackground);
-	SentenceSlot->SetPosition(FVector2D(42.0f, 492.0f));
-	SentenceSlot->SetSize(FVector2D(720.0f, 116.0f));
+	SentenceSlot->SetPosition(FVector2D(170.0f, 520.0f));
+	SentenceSlot->SetSize(FVector2D(588.0f, 165.0f));
 	SentenceSlot->SetZOrder(1);
+
+	UOverlay* SentenceOverlay = Tree->ConstructWidget<UOverlay>(
+		UOverlay::StaticClass(), TEXT("SentenceOverlay"));
+	SentenceBackground->SetContent(SentenceOverlay);
 
 	UTextBlock* Sentence = Tree->ConstructWidget<UTextBlock>(
 		UTextBlock::StaticClass(), TEXT("SentenceTextBlock"));
@@ -3301,17 +3323,45 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 	Sentence->SetJustification(ETextJustify::Center);
 	Sentence->SetAutoWrapText(true);
 	FSlateFontInfo SentenceFont = Sentence->GetFont();
-	SentenceFont.Size = 30;
+	SentenceFont.Size = 24;
+	if (UFont* KoreanFont = LoadObject<UFont>(nullptr,
+		TEXT("/Game/Balhwajeom/UI/JE/Freesentation-4Regular_Font.Freesentation-4Regular_Font")))
+	{
+		SentenceFont.FontObject = KoreanFont;
+	}
 	Sentence->SetFont(SentenceFont);
-	SentenceBackground->SetContent(Sentence);
+	UOverlaySlot* SentenceTextSlot = SentenceOverlay->AddChildToOverlay(Sentence);
+	SentenceTextSlot->SetHorizontalAlignment(HAlign_Fill);
+	SentenceTextSlot->SetVerticalAlignment(VAlign_Center);
+
+	UWrapBox* SentenceBuilder = Tree->ConstructWidget<UWrapBox>(
+		UWrapBox::StaticClass(), TEXT("SentenceBuilder"));
+	SentenceBuilder->bIsVariable = true;
+	SentenceBuilder->SetInnerSlotPadding(FVector2D(0.0f, 6.0f));
+	SentenceBuilder->SetVisibility(ESlateVisibility::Collapsed);
+	UOverlaySlot* SentenceBuilderSlot = SentenceOverlay->AddChildToOverlay(SentenceBuilder);
+	SentenceBuilderSlot->SetHorizontalAlignment(HAlign_Center);
+	SentenceBuilderSlot->SetVerticalAlignment(VAlign_Center);
 
 	UVerticalBox* Keywords = Tree->ConstructWidget<UVerticalBox>(
 		UVerticalBox::StaticClass(), TEXT("KeywordList"));
 	Keywords->bIsVariable = true;
 	UCanvasPanelSlot* KeywordsSlot = Card->AddChildToCanvas(Keywords);
-	KeywordsSlot->SetPosition(FVector2D(792.0f, 42.0f));
-	KeywordsSlot->SetSize(FVector2D(170.0f, 430.0f));
+	KeywordsSlot->SetPosition(FVector2D(760.0f, 40.0f));
+	KeywordsSlot->SetSize(FVector2D(120.0f, 200.0f));
 	KeywordsSlot->SetZOrder(2);
+
+	// Invisible layout marker matching the TAB HUD position. Runtime animation uses
+	// its geometry without drawing an extra TAB button in this widget.
+	USizeBox* TabTarget = Tree->ConstructWidget<USizeBox>(
+		USizeBox::StaticClass(), TEXT("TabFlyTarget"));
+	TabTarget->SetWidthOverride(110.0f);
+	TabTarget->SetHeightOverride(90.0f);
+	TabTarget->SetRenderOpacity(0.01f);
+	UCanvasPanelSlot* TabTargetSlot = Root->AddChildToCanvas(TabTarget);
+	TabTargetSlot->SetPosition(FVector2D(1800.0f, 970.0f));
+	TabTargetSlot->SetSize(FVector2D(110.0f, 90.0f));
+	TabTargetSlot->SetZOrder(2);
 
 	return TabletDesigner::SaveAndCompile(Blueprint);
 }
@@ -3934,4 +3984,15 @@ bool UTabletWidgetBlueprintLibrary::CenterItemInspectionWidget()
 	Preview->bIsVariable = true;
 	Panel->SetContent(Preview);
 	return TabletDesigner::SaveAndCompile(Blueprint);
+}
+
+bool UTabletWidgetBlueprintLibrary::RedesignTabletPhotoWidget()
+{
+	using namespace TabletDesigner;
+	return BuildWidgetBlueprint(
+		TEXT("WBP_TabletPhoto"),
+		PhotoDetailAssetPath,
+		UBalhwajeomTabletDetailWidget::StaticClass(),
+		true,
+		[](const FBuilder& Builder) { Builder.BuildDetailWidget(false); });
 }

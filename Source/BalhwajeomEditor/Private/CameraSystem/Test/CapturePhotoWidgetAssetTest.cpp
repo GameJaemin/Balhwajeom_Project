@@ -11,6 +11,7 @@
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "Components/WrapBox.h"
 #include "WidgetBlueprint.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -41,6 +42,8 @@ bool FCapturePhotoWidgetAssetTest::RunTest(const FString& Parameters)
 		Cast<UImage>(Blueprint->WidgetTree->FindWidget(TEXT("CapturedPhotoImage"))));
 	TestNotNull(TEXT("sentence text exists"),
 		Cast<UTextBlock>(Blueprint->WidgetTree->FindWidget(TEXT("SentenceTextBlock"))));
+	TestNotNull(TEXT("analysis sentence builder exists"),
+		Cast<UWrapBox>(Blueprint->WidgetTree->FindWidget(TEXT("SentenceBuilder"))));
 	TestNotNull(TEXT("keyword list exists"),
 		Cast<UVerticalBox>(Blueprint->WidgetTree->FindWidget(TEXT("KeywordList"))));
 	TestNotNull(TEXT("designer-authored TabFlyTarget exists"),

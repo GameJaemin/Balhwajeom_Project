@@ -1750,6 +1750,7 @@ void UBalhwajeomPhotoCameraComponent::CompleteImageSave(
 			if (ABalhwajeomEvidenceCameraHUD* CameraHUD = Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD()))
 			{
 				FText CaptureSentence = PhotoDefinition.CustomDescription;
+				bool bIsAnalysisSentence = false;
 				if (!PhotoDefinition.PhotoSentenceID.IsNone())
 				{
 					FSentenceDefinition SentenceDefinition;
@@ -1757,6 +1758,8 @@ void UBalhwajeomPhotoCameraComponent::CompleteImageSave(
 						PhotoDefinition.PhotoSentenceID, SentenceDefinition))
 					{
 						CaptureSentence = SentenceDefinition.SentenceTemplate;
+						bIsAnalysisSentence =
+							SentenceDefinition.SentenceType == ESentenceType::PhotoAnalysis;
 					}
 				}
 				if (CaptureSentence.IsEmpty())
@@ -1775,7 +1778,10 @@ void UBalhwajeomPhotoCameraComponent::CompleteImageSave(
 				}
 
 				CameraHUD->TriggerCapturePhotoPresentation(
-					PendingCapturePreviewTexture, CaptureSentence, GrantedKeywordTexts);
+					PendingCapturePreviewTexture,
+					CaptureSentence,
+					GrantedKeywordTexts,
+					bIsAnalysisSentence);
 			}
 		}
 
