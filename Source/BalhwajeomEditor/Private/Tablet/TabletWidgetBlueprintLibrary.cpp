@@ -3763,7 +3763,6 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		FSentenceDefinition Statement;
 		Statement.SentenceID = TEXT("SENT_STATEMENT_SISTER_01");
 		Statement.CharacterID = SisterCharacterID;
-		Statement.LieText = FText::FromString(TEXT("나는 돼지 장식이 놓인 거울을 본 적이 없어."));
 		Statement.SentenceType = ESentenceType::Statement;
 		Statement.SentenceTemplate = FText::FromString(TEXT("현장에 남은 [   ]이 그 말을 반박한다."));
 		Statement.ResultText = FText::FromString(TEXT("현장에 남은 거울과 완성된 사진이 그 말을 반박한다."));

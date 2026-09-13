@@ -2421,8 +2421,7 @@ void UBalhwajeomTabletWidget::HandleStatementTileSelected(const FName SentenceID
 	if (!ShowPopup(
 		FText::FromString(TEXT("진술서")),
 		FText::Format(
-			NSLOCTEXT("Tablet", "StatementPopup", "거짓말\n{0}\n\n반증\n{1}"),
-			Statement.LieText,
+			NSLOCTEXT("Tablet", "StatementPopup", "반증\n{0}"),
 			Answer),
 		nullptr,
 		true))
