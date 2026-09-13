@@ -1,4 +1,6 @@
 #include "Interaction/PlayerInteractionComponent.h"
+
+#include "Interaction/DoorInteractionComponent.h"
 #include "Interaction/ItemInspectionIntegration.h"
 
 #include "EnhancedInputComponent.h"
@@ -442,6 +444,16 @@ bool UPlayerInteractionComponent::RequestInspect()
 	{
 		AActor* FocusedActor = FocusedInspection->GetOwner();
 		APawn* InteractingPawn = Cast<APawn>(GetOwner());
+		if (IsValid(FocusedActor) && IsValid(InteractingPawn))
+		{
+			if (UDoorInteractionComponent* DoorInteraction =
+				FocusedActor->FindComponentByClass<UDoorInteractionComponent>())
+			{
+				return DoorInteraction->CanInteract() &&
+					DoorInteraction->RequestInteraction();
+			}
+		}
+
 		if (IsValid(FocusedActor) && IsValid(InteractingPawn) &&
 			FocusedActor->Implements<UWorldInteractable>())
 		{

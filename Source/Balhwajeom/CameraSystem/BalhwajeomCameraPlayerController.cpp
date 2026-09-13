@@ -8,6 +8,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Interaction/ItemInspectionIntegration.h"
 #include "Components/Widget.h"
+#include "Interaction/DoorInteractionComponent.h"
 #include "Interaction/InspectionComponent.h"
 #include "Interaction/PlayerInteractionComponent.h"
 #include "Tablet/BalhwajeomTabletComponent.h"
@@ -263,8 +264,14 @@ bool ABalhwajeomCameraPlayerController::ShouldShowInteractionPrompt() const
 		return false;
 	}
 
-	const ABalhwajeomEvidenceActor* EvidenceActor =
-		Cast<ABalhwajeomEvidenceActor>(FocusedInspection->GetOwner());
+	AActor* FocusedActor = FocusedInspection->GetOwner();
+	if (const UDoorInteractionComponent* DoorInteraction =
+		IsValid(FocusedActor) ? FocusedActor->FindComponentByClass<UDoorInteractionComponent>() : nullptr)
+	{
+		return DoorInteraction->CanInteract();
+	}
+
+	const ABalhwajeomEvidenceActor* EvidenceActor = Cast<ABalhwajeomEvidenceActor>(FocusedActor);
 	return IsValid(EvidenceActor) && EvidenceActor->CanRequestInvestigationInteraction();
 }
 
