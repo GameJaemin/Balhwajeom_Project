@@ -9,9 +9,11 @@ The project uses the reusable `ItemInspector`, `JMInteraction`, and `JMGameplayE
 3. The large key named `F_Key_Inspection_Test` is in front of the player. Aim the center of the screen at it and press `F`.
 4. The preview should travel from the key's projected world rect into the inspector panel while rotating to its authored front view.
 5. Drag inside the preview with the left mouse button and use the wheel to rotate and zoom.
-6. Press `Escape` or the close button. The preview should return to the key and restore movement, look, cursor, pause, and hidden state.
+6. Press `F` again (or `Escape`). The preview should return to the key and restore movement, look, cursor, pause, and hidden state. Holding `F` must not immediately close the inspector through key repeat.
 
-`F` is not hardcoded by Item Inspector. `ABalhwajeomCameraCharacter` supplies the existing `/Game/Balhwajeom/Input/IMC_Interaction` and `/Game/Balhwajeom/Input/IA_Interact` assets to `UPlayerInteractionComponent`. The editor automation test asserts that this mapping binds `F` to `IA_Interact`.
+`ABalhwajeomCameraCharacter` supplies the existing `/Game/Balhwajeom/Input/IMC_Interaction` and `/Game/Balhwajeom/Input/IA_Interact` assets to `UPlayerInteractionComponent`. The editor automation test asserts that this mapping binds `F` to `IA_Interact`. While the inspector has UI focus, its native widget handles `F` and `Escape` to close.
+
+`/ItemInspector/UI/WBP_JMItemInspection` displays only a centered square preview, with no item text or close button. The 720-unit preview scales down to fit smaller viewports. The native fallback uses the same layout. Rebuild the editable WBP with `unreal.TabletWidgetBlueprintLibrary.center_item_inspection_widget()`.
 
 ## Authoring another inspectable
 

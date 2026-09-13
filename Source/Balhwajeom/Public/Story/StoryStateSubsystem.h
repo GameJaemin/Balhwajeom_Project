@@ -68,6 +68,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Story State")
 	bool ClearStateTags();
 
+	/**
+	 * Records that an evidence state's world story has been presented, as
+	 * "Evidence.StoryPlayed.<StateID>".
+	 *
+	 * A Repeatable world story can be replayed and never changes state, so this is the
+	 * only signal that the player has actually heard it. Unregistered tags are ignored.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Story State")
+	bool AddEvidenceStoryPlayedTag(FName StateID);
+
 	UPROPERTY(BlueprintAssignable, Category = "Story State|Events")
 	FOnStoryStateTagChanged OnStateTagAdded;
 
@@ -81,8 +91,22 @@ private:
 	UFUNCTION()
 	void HandleSentenceSolved(FName SentenceID);
 
+	/**
+	 * Mirrors every evidence state transition into the story state as a tag, so
+	 * progression gates can be authored as plain FGameplayTagQuery conditions.
+	 */
+	UFUNCTION()
+	void HandleEvidenceStateChanged(
+		FGuid ChangedInstanceID,
+		FName PreviousStateID,
+		FName NewStateID
+	);
+
 	void AddPhotographedEvidenceTag(FName ObjectID);
 	void AddSentenceSolvedEvidenceTag(FName PhotoID);
+
+	/** Adds "Evidence.State.<StateID>". Unregistered tags are silently ignored. */
+	void AddEvidenceStateTag(FName StateID);
 
 	UPROPERTY(Transient)
 	FGameplayTagContainer CurrentStateTags;

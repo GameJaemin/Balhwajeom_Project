@@ -13,6 +13,7 @@
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
 #include "Components/ScaleBox.h"
+#include "Components/ScaleBoxSlot.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
 #include "Components/Spacer.h"
@@ -3889,4 +3890,41 @@ bool UTabletWidgetBlueprintLibrary::UpgradeInvestigationDataTables()
 		UE_LOG(LogTemp, Error, TEXT("INVESTIGATION_UPGRADE Result=Failure MigratedChoices=%d SeededRows=%d"), MigratedCount, SeededRows);
 	}
 	return bSaved;
+}
+
+bool UTabletWidgetBlueprintLibrary::CenterItemInspectionWidget()
+{
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr,
+		TEXT("/ItemInspector/UI/WBP_JMItemInspection.WBP_JMItemInspection"));
+	if (!Blueprint || !TabletDesigner::ClearWidgetTree(Blueprint)) return false;
+	UWidgetTree* Tree = Blueprint->WidgetTree;
+	UOverlay* Root = Tree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("InspectorRoot"));
+	Tree->RootWidget = Root;
+	UBorder* Backdrop = Tree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Backdrop"));
+	Backdrop->SetBrushColor(FLinearColor(0.02f, 0.02f, 0.025f, 0.92f));
+	UOverlaySlot* BackdropSlot = Root->AddChildToOverlay(Backdrop);
+	BackdropSlot->SetHorizontalAlignment(HAlign_Fill);
+	BackdropSlot->SetVerticalAlignment(VAlign_Fill);
+	UScaleBox* Content = Tree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("MainRow"));
+	Content->SetStretch(EStretch::ScaleToFit);
+	Content->SetStretchDirection(EStretchDirection::DownOnly);
+	UOverlaySlot* ContentSlot = Root->AddChildToOverlay(Content);
+	ContentSlot->SetHorizontalAlignment(HAlign_Fill);
+	ContentSlot->SetVerticalAlignment(VAlign_Fill);
+	ContentSlot->SetPadding(FMargin(48.0f));
+	USizeBox* Size = Tree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("PreviewSizeBox"));
+	Size->SetWidthOverride(720.0f);
+	Size->SetHeightOverride(720.0f);
+	UScaleBoxSlot* ScaleSlot = CastChecked<UScaleBoxSlot>(Content->AddChild(Size));
+	ScaleSlot->SetHorizontalAlignment(HAlign_Center);
+	ScaleSlot->SetVerticalAlignment(VAlign_Center);
+	UBorder* Panel = Tree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("PreviewPanel"));
+	Panel->bIsVariable = true;
+	Panel->SetBrushColor(FLinearColor::Transparent);
+	Panel->SetPadding(FMargin(0.0f));
+	Size->AddChild(Panel);
+	UImage* Preview = Tree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("PreviewImage"));
+	Preview->bIsVariable = true;
+	Panel->SetContent(Preview);
+	return TabletDesigner::SaveAndCompile(Blueprint);
 }

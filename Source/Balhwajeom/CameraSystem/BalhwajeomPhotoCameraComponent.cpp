@@ -325,6 +325,7 @@ UBalhwajeomPhotoCameraComponent::UBalhwajeomPhotoCameraComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
+	BlockedByTags.AddTag(BalhwajeomGameplayTags::Runtime_Lock_PhotoCamera);
 	PhotoWorldStoryClass = APhotoWorldStoryActor::StaticClass();
 	FocusPrefilterMaterial = TSoftObjectPtr<UMaterialInterface>(
 		FSoftObjectPath(TEXT("/Game/Balhwajeom/Camera/Materials/M_PP_CameraFocusPrefilter.M_PP_CameraFocusPrefilter")));
@@ -381,9 +382,34 @@ void UBalhwajeomPhotoCameraComponent::SetNormalCamera(UCameraComponent* Camera)
 	NormalCamera = Camera;
 }
 
+bool UBalhwajeomPhotoCameraComponent::IsLockedByStoryState() const
+{
+	if (BlockedByTags.IsEmpty())
+	{
+		return false;
+	}
+
+	const UWorld* World = GetWorld();
+	const UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+	const UStoryStateSubsystem* StoryState =
+		GameInstance ? GameInstance->GetSubsystem<UStoryStateSubsystem>() : nullptr;
+
+	return StoryState && StoryState->HasAnyStateTags(BlockedByTags);
+}
+
+
 void UBalhwajeomPhotoCameraComponent::ToggleCameraMode()
 {
 	if (BalhwajeomItemInspection::IsOpen(GetOwner())) return;
+
+	// The lock only refuses entry. Leaving is always allowed, otherwise a lock applied
+	// while the player is already in camera mode would trap them there.
+	if (!bIsInCameraMode && IsLockedByStoryState())
+	{
+		OnCameraModeBlocked.Broadcast();
+		return;
+	}
+
 	// Ignore rapid presses until the current fade-out/switch/fade-in sequence ends.
 	if (bIsCameraTransitioning || !PhotoCamera || !NormalCamera || !GetWorld())
 	{

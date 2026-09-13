@@ -11,6 +11,10 @@ class UTabletWidgetBlueprintLibrary : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 
 public:
+	/** Rebuilds the item inspector as a centered, text-free preview. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Inspection")
+	static bool CenterItemInspectionWidget();
+
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool UpdateMessengerTimeline();
 

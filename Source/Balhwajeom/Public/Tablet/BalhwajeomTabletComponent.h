@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "GameplayTagContainer.h"
 #include "BalhwajeomTabletComponent.generated.h"
 
 class APlayerController;
@@ -42,6 +43,18 @@ public:
 	/** Used by title/cinematic flows to prevent the tablet action from opening. */
 	UFUNCTION(BlueprintCallable, Category = "Tablet")
 	void SetTabletInteractionEnabled(bool bEnabled);
+
+	/**
+	 * Any of these tags present in UStoryStateSubsystem blocks opening the tablet.
+	 * Absent tags mean "unlocked", so a level that never adds them needs no configuration.
+	 * This is progression gating; SetTabletInteractionEnabled remains the separate
+	 * short-lived suppression used by title and cinematic flows.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tablet|Lock")
+	FGameplayTagContainer BlockedByTags;
+
+	UFUNCTION(BlueprintPure, Category = "Tablet|Lock")
+	bool IsLockedByStoryState() const;
 
 protected:
 	virtual void BeginPlay() override;

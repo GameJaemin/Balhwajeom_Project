@@ -18,6 +18,7 @@ UBalhwajeomTabletComponent::UBalhwajeomTabletComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.TickInterval = 0.25f;
+	BlockedByTags.AddTag(BalhwajeomGameplayTags::Runtime_Lock_Tablet);
 
 	TabletMappingContextAsset = TSoftObjectPtr<UInputMappingContext>(
 		FSoftObjectPath(TEXT("/Game/Balhwajeom/Core/Input/IMC_Tablet.IMC_Tablet")));
@@ -247,9 +248,31 @@ void UBalhwajeomTabletComponent::RefreshPhotoCameraBinding()
 	}
 }
 
+bool UBalhwajeomTabletComponent::IsLockedByStoryState() const
+{
+	if (BlockedByTags.IsEmpty())
+	{
+		return false;
+	}
+
+	const UWorld* World = GetWorld();
+	const UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+	const UStoryStateSubsystem* StoryState =
+		GameInstance ? GameInstance->GetSubsystem<UStoryStateSubsystem>() : nullptr;
+
+	return StoryState && StoryState->HasAnyStateTags(BlockedByTags);
+}
+
 void UBalhwajeomTabletComponent::ToggleTablet()
 {
 	if (!bTabletInteractionEnabled)
+	{
+		return;
+	}
+
+	// The lock only refuses opening, so a lock applied while the tablet is already
+	// open still lets the player close it.
+	if (!bTabletOpen && IsLockedByStoryState())
 	{
 		return;
 	}
@@ -291,6 +314,13 @@ void UBalhwajeomTabletComponent::RequestOpenTablet()
 {
 	if (BalhwajeomItemInspection::IsOpen(GetOwner())) return;
 	if (bTabletOpen || bPendingOpenAfterPhotoMode)
+	{
+		return;
+	}
+
+	// Also gated here because this entry point is BlueprintCallable and reachable
+	// without going through ToggleTablet.
+	if (IsLockedByStoryState())
 	{
 		return;
 	}

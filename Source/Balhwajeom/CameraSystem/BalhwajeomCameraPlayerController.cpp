@@ -12,6 +12,8 @@
 #include "Interaction/InspectionComponent.h"
 #include "Interaction/PlayerInteractionComponent.h"
 #include "Tablet/BalhwajeomTabletComponent.h"
+#include "Tutorial/BalhwajeomTutorialDirector.h"
+#include "Tutorial/BalhwajeomTutorialFocusWidget.h"
 #include "UObject/ConstructorHelpers.h"
 
 ABalhwajeomCameraPlayerController::ABalhwajeomCameraPlayerController()
@@ -20,14 +22,17 @@ ABalhwajeomCameraPlayerController::ABalhwajeomCameraPlayerController()
 	bShowMouseCursor = false;
 
 	static ConstructorHelpers::FClassFinder<UUserWidget> DefaultInteractionPromptClass(
-		TEXT("/Game/Balhwajeom/UI/HUD/WB_Interact"));
+		TEXT("/Game/Balhwajeom/UI/HUD/WBP_Interact"));
 	if (DefaultInteractionPromptClass.Succeeded())
 	{
 		InteractionPromptWidgetClass = DefaultInteractionPromptClass.Class;
 	}
 
+	// Native by default, so a level needs no Widget Blueprint to get the tutorial layer.
+	TutorialFocusWidgetClass = UBalhwajeomTutorialFocusWidget::StaticClass();
+
 	static ConstructorHelpers::FClassFinder<UUserWidget> DefaultBedMemoryHUDClass(
-		TEXT("/Game/Balhwajeom/UI/HUD/WB_HUD2"));
+		TEXT("/Game/Balhwajeom/UI/HUD/WBP_HUD2"));
 	if (DefaultBedMemoryHUDClass.Succeeded())
 	{
 		BedMemoryHUDWidgetClass = DefaultBedMemoryHUDClass.Class;
@@ -50,6 +55,7 @@ void ABalhwajeomCameraPlayerController::BeginPlay()
 
 	EnsurePlayerHUD();
 	EnsureBedMemoryHUD();
+	EnsureTutorialFocusLayer();
 	EnsureInteractionPrompt();
 }
 
@@ -83,6 +89,11 @@ void ABalhwajeomCameraPlayerController::SetGameplayPresentationEnabled(bool bEna
 		BedMemoryHUDWidget->SetVisibility(
 			bEnabled && bBedMemoryHUDActive ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	}
+	if (TutorialFocusWidget)
+	{
+		TutorialFocusWidget->SetVisibility(
+			bEnabled ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
 	if (InteractionPromptWidget)
 	{
 		InteractionPromptWidget->SetVisibility(
@@ -104,6 +115,33 @@ void ABalhwajeomCameraPlayerController::EnsureBedMemoryHUD()
 		BedMemoryHUDWidget->SetVisibility(ESlateVisibility::Collapsed);
 		BedMemoryHUDWidget->AddToViewport(1);
 	}
+}
+
+
+void ABalhwajeomCameraPlayerController::EnsureTutorialFocusLayer()
+{
+	if (!IsLocalController() || IsValid(TutorialFocusWidget) || !TutorialFocusWidgetClass)
+	{
+		return;
+	}
+
+	TutorialFocusWidget = CreateWidget<UUserWidget>(this, TutorialFocusWidgetClass);
+	if (TutorialFocusWidget)
+	{
+		TutorialFocusWidget->SetVisibility(
+			bGameplayPresentationEnabled ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		// ZOrder 5 keeps the dim above the HUD icons (0) and the bed HUD (1) but below
+		// WB_Interact (10), so the [F] prompt and centre dot stay bright while dimmed.
+		TutorialFocusWidget->AddToViewport(5);
+	}
+}
+
+
+float ABalhwajeomCameraPlayerController::GetInteractionPromptAlpha() const
+{
+	// The un-pulsed fade value. Reading the widget's render opacity instead would make
+	// the tutorial dim inherit the prompt's blink.
+	return InteractionPromptAlpha;
 }
 
 void ABalhwajeomCameraPlayerController::SetBedMemoryHUDActive(bool bActive)
@@ -201,7 +239,7 @@ void ABalhwajeomCameraPlayerController::EnsureInteractionPrompt()
 		InteractionPromptWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 		InteractionPromptFadeTarget =
 			InteractionPromptWidget->GetWidgetFromName(InteractionPromptFadeTargetName);
-		// WB_Interact's authored text is currently named TextBlock_50. Keep this
+		// Older prompt widgets named their text TextBlock_50. Keep this
 		// fallback so an older BP_OrbitViewPlayerController CDO that inherited the
 		// previous, incorrect "Text" default still resolves the real text widget.
 		if (!InteractionPromptFadeTarget)
@@ -219,7 +257,8 @@ void ABalhwajeomCameraPlayerController::EnsureInteractionPrompt()
 			UE_LOG(
 				LogTemp,
 				Warning,
-				TEXT("%s: WB_Interact has no fade target named '%s'. The center dot will remain visible."),
+				TEXT("%s: the interaction prompt widget has no fade target named '%s', ")
+				TEXT("so nothing in it fades. Set InteractionPromptFadeTargetName to a widget it has."),
 				*GetName(),
 				*InteractionPromptFadeTargetName.ToString());
 		}
@@ -235,6 +274,7 @@ void ABalhwajeomCameraPlayerController::Tick(float DeltaSeconds)
 	// and test worlds, so keep creation idempotent and retry when needed.
 	EnsurePlayerHUD();
 	EnsureBedMemoryHUD();
+	EnsureTutorialFocusLayer();
 	EnsureInteractionPrompt();
 	UpdateInteractionPrompt(DeltaSeconds);
 	UpdateBedMemoryHUD(DeltaSeconds);
@@ -316,6 +356,7 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 	if (BalhwajeomItemInspection::IsOpen(this) || IsInteractionPromptSuppressedByTablet() ||
 		IsInteractionPromptSuppressedByPhotoCamera())
 	{
+		InteractionPromptAlpha = 0.0f;
 		// Full-screen modes own this layer: hide both the center dot and text.
 		// Reset the text so closing the tablet starts a clean fade-in only when the
 		// currently focused evidence is still interactable.
@@ -328,33 +369,52 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 		return;
 	}
 
-	if (!IsValid(InteractionPromptFadeTarget))
-	{
-		return;
-	}
-
 	if (InteractionPromptWidget->GetVisibility() != ESlateVisibility::HitTestInvisible)
 	{
 		InteractionPromptWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 
 	const bool bShouldShow = ShouldShowInteractionPrompt();
-	if (bShouldShow && InteractionPromptFadeTarget->GetVisibility() != ESlateVisibility::HitTestInvisible)
+	const float TargetOpacity = bShouldShow ? 1.0f : 0.0f;
+	InteractionPromptAlpha = FMath::FInterpTo(
+		InteractionPromptAlpha,
+		TargetOpacity,
+		DeltaSeconds,
+		InteractionPromptFadeSpeed);
+
+	// A tutorial step can ask for the prompt to blink. The blink is applied to what is
+	// drawn, never to InteractionPromptAlpha itself, because the tutorial's screen dim
+	// follows that value -- pulsing it would make the whole screen flicker.
+	float DisplayOpacity = InteractionPromptAlpha;
+	if (ABalhwajeomTutorialDirector::GetTutorialHintTarget(this) ==
+		EBalhwajeomTutorialHintTarget::InteractPrompt)
+	{
+		DisplayOpacity *= ABalhwajeomTutorialDirector::GetTutorialHighlightPulse(this);
+	}
+
+	if (!bShouldShow && InteractionPromptAlpha <= KINDA_SMALL_NUMBER)
+	{
+		InteractionPromptAlpha = 0.0f;
+		DisplayOpacity = 0.0f;
+	}
+
+	// A prompt widget without a fade target still keeps a correct alpha above, so the
+	// tutorial dim works even when the widget is a plain centre dot.
+	if (!IsValid(InteractionPromptFadeTarget))
+	{
+		return;
+	}
+
+	if (bShouldShow &&
+		InteractionPromptFadeTarget->GetVisibility() != ESlateVisibility::HitTestInvisible)
 	{
 		InteractionPromptFadeTarget->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 
-	const float TargetOpacity = bShouldShow ? 1.0f : 0.0f;
-	const float NewOpacity = FMath::FInterpTo(
-		InteractionPromptFadeTarget->GetRenderOpacity(),
-		TargetOpacity,
-		DeltaSeconds,
-		InteractionPromptFadeSpeed);
-	InteractionPromptFadeTarget->SetRenderOpacity(NewOpacity);
+	InteractionPromptFadeTarget->SetRenderOpacity(DisplayOpacity);
 
-	if (!bShouldShow && NewOpacity <= KINDA_SMALL_NUMBER)
+	if (!bShouldShow && InteractionPromptAlpha <= 0.0f)
 	{
-		InteractionPromptFadeTarget->SetRenderOpacity(0.0f);
 		InteractionPromptFadeTarget->SetVisibility(ESlateVisibility::Hidden);
 	}
 }

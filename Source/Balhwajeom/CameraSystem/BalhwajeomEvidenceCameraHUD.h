@@ -47,7 +47,19 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Guide", meta = (ClampMin = "0.01", ClampMax = "2.0"))
 	float GuideCenterTransitionDuration = 0.25f;
 
+	/**
+	 * Widget shown over the viewport while the camera is raised, i.e. the UI the player
+	 * gets on right click. Leave unset to fall back to the plain drawn crosshair.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Viewfinder")
+	TSubclassOf<UUserWidget> ViewfinderWidgetClass;
+
 private:
+	/** Shows the viewfinder widget, or draws the fallback crosshair when none is set. */
+	void UpdateViewfinder();
+	bool EnsureViewfinderWidget();
+	void HideViewfinderWidget();
+
 	void UpdateCapturePhotoPresentation();
 	bool EnsureCapturePhotoWidget();
 	void FinishCapturePhotoPresentation();
@@ -68,6 +80,9 @@ private:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Camera|Guide")
 	TObjectPtr<UTexture2D> PhotoCapturedIcon;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUserWidget> ViewfinderWidget;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UUserWidget> FocusGuideWidget;
