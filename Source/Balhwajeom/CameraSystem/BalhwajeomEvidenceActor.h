@@ -48,6 +48,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Evidence|Investigation")
 	FName GetObjectID() const { return ObjectID; }
 
+	/** Runtime identity of this placed copy, which is what the investigation subsystem keys on. */
+	UFUNCTION(BlueprintPure, Category = "Evidence|Investigation")
+	FGuid GetEvidenceInstanceID() const { return EvidenceInstanceID; }
+
+	UFUNCTION(BlueprintPure, Category = "Evidence|Investigation")
+	FName GetCurrentStateID() const { return CurrentStateID; }
+
 	/** Executes the current F-interaction. Single-choice keyword documents award their word immediately. */
 	UFUNCTION(BlueprintCallable, Category = "Evidence|Investigation")
 	bool RequestInvestigationInteraction(FText& OutDisplayText);

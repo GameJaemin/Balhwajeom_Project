@@ -114,7 +114,7 @@ HUD 이미지 이름이 바뀌어도 하이라이트가 조용히 사라지지 �
 | 위치 | 내용 |
 |---|---|
 | `StoryStateTags` | 네이티브 태그 `Runtime.Lock` / `.PhotoCamera` / `.Tablet` — **ini 등록 불필요** |
-| `UStoryStateSubsystem` | 상태 전이 시 `Evidence.State.<StateID>` 발행, `AddEvidenceStoryPlayedTag()` 로 `Evidence.StoryPlayed.<StateID>` 발행 |
+| `UStoryStateSubsystem` | 상태 전이 시 `Evidence.State.<StateID>` 발행, 월드 스토리 재생 시 `Evidence.StoryPlayed.<StateID>` 와 `Evidence.StoryHeard.<ObjectID>` 발행 |
 | `UBalhwajeomPhotoCameraComponent` | `BlockedByTags` 잠금. 진입만 차단, **이탈은 항상 허용** |
 | `UBalhwajeomTabletComponent` | `BlockedByTags` 잠금 (`ToggleTablet` / `RequestOpenTablet` 양쪽) |
 | `UDoorInteractionComponent` | `UnlockRequiresTags` / `UnlockQuery`, `IsOpen()` |
@@ -152,6 +152,7 @@ HUD 이미지 이름이 바뀌어도 하이라이트가 조용히 사라지지 �
 +GameplayTagList=(Tag="Evidence.State.<StateID>",DevComment="")
 +GameplayTagList=(Tag="Evidence.Photographed.<ObjectID>",DevComment="")
 +GameplayTagList=(Tag="Evidence.StoryPlayed.<StateID>",DevComment="")
++GameplayTagList=(Tag="Evidence.StoryHeard.<ObjectID>",DevComment="")
 ```
 
 `<StateID>` / `<ObjectID>` 는 DataTable 의 Row Name 과 **글자 그대로 같아야** 한다.
@@ -168,11 +169,16 @@ HUD 이미지 이름이 바뀌어도 하이라이트가 조용히 사라지지 �
 | StateID | Behavior | Presentation | Next / PostCapture | bCanCapture | StateMesh |
 |---|---|---|---|---|---|
 | `..._DUST` | `ChangeState` | `SimpleText` | Next=`..._CLEAR` | ✗ | 더러운 메쉬 |
-| `..._CLEAR` | `None` 또는 `Repeatable` | `SimpleText` | **PostCapture=`..._MEMORY`** | **✓** | 깨끗한 메쉬 |
+| `..._CLEAR` | `Repeatable` | `SimpleText` | **PostCapture=`..._MEMORY`** | **✓** | 깨끗한 메쉬 |
 | `..._MEMORY` | `Repeatable` | **`WorldStory`** | — | ✗ | 촬영 후 메쉬 |
 
+**플레이 순서는 상호작용 → 사진 → 상호작용이다.**
+`CLEAR` 는 일부러 `WorldStory` 가 아니다 — 가족 대화는 촬영을 거쳐 `MEMORY` 에 도달해야 나온다.
+대신 `CLEAR` 에서도 F 가 반응하도록 `Repeatable` + `SimpleText` 로 두어 "사진을 찍어라" 안내를 띄운다.
+(F 를 눌러도 아무 일도 없으면 고장난 오브젝트로 읽힌다.)
+
 `MEMORY` 를 `Repeatable` 로 두면 대화를 여러 번 들을 수 있고,
-완료 판정은 `Evidence.StoryPlayed.<StateID>` 태그가 대신한다.
+완료 판정은 태그가 대신한다 — 아래 참고.
 
 ### 3) `DA_TutorialFlow_<레벨이름>` 만들기
 
@@ -240,7 +246,7 @@ ID 는 `OBJ_02_001~003` 으로 잡는다.
 |---|---|
 | 먼지만 털면 됨 | `Evidence.State.STATE_02_00X_CLEAR` |
 | 사진까지 찍어야 함 | `Evidence.Photographed.OBJ_02_00X` |
-| 대화까지 들어야 함 | `Evidence.StoryPlayed.STATE_02_00X_MEMORY` |
+| 대화까지 들어야 함 | **`Evidence.StoryHeard.OBJ_02_00X`** |
 
 Room2 는 마지막 것을 쓴다.
 
@@ -253,9 +259,9 @@ Room2 는 마지막 것을 쓴다.
 +GameplayTagList=(Tag="Evidence.Photographed.OBJ_02_001",DevComment="")
 +GameplayTagList=(Tag="Evidence.Photographed.OBJ_02_002",DevComment="")
 +GameplayTagList=(Tag="Evidence.Photographed.OBJ_02_003",DevComment="")
-+GameplayTagList=(Tag="Evidence.StoryPlayed.STATE_02_001_MEMORY",DevComment="")
-+GameplayTagList=(Tag="Evidence.StoryPlayed.STATE_02_002_MEMORY",DevComment="")
-+GameplayTagList=(Tag="Evidence.StoryPlayed.STATE_02_003_MEMORY",DevComment="")
++GameplayTagList=(Tag="Evidence.StoryHeard.OBJ_02_001",DevComment="")
++GameplayTagList=(Tag="Evidence.StoryHeard.OBJ_02_002",DevComment="")
++GameplayTagList=(Tag="Evidence.StoryHeard.OBJ_02_003",DevComment="")
 ```
 
 `Tutorial.Stage.*` 는 **다시 만들 필요 없다.** 한 번에 한 디렉터만 돌기 때문에 맵끼리 공유해도 된다.
@@ -294,7 +300,7 @@ Room2 는 마지막 것을 쓴다.
 | `DustTeach` | `Complete When Any Tags` → `..._02_00X_CLEAR` 3개 |
 | `PhotoPrompt` | 그대로 (모드 태그라 맵 무관) |
 | `Photograph` | `Complete When All Tags` → `Evidence.Photographed.OBJ_02_00X` 3개 |
-| `Talk` | `Complete When All Tags` → `..._02_00X_MEMORY` 3개 |
+| `Talk` | `Complete When All Tags` → `Evidence.StoryHeard.OBJ_02_00X` 3개 |
 | `Done` | 그대로 |
 
 두 번째 맵부터는 카메라·태블릿을 이미 배웠을 테니, `Locks On Start` 를 비우고
@@ -315,9 +321,9 @@ Room2 는 마지막 것을 쓴다.
 
 ```
 Door Interaction ▸ Unlock Requires Tags
-    Evidence.StoryPlayed.STATE_02_001_MEMORY
-    Evidence.StoryPlayed.STATE_02_002_MEMORY
-    Evidence.StoryPlayed.STATE_02_003_MEMORY
+    Evidence.StoryHeard.OBJ_02_001
+    Evidence.StoryHeard.OBJ_02_002
+    Evidence.StoryHeard.OBJ_02_003
 
 Gate Door ▸ Locked Label     = [열 수 없는 문]
 Gate Door ▸ Unlocked Label   = [F] 문 열기

@@ -141,20 +141,22 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 	UBalhwajeomTabletComponent* Tablet =
 		Character->FindComponentByClass<UBalhwajeomTabletComponent>();
 
-	// The exit door is gated on the three family conversations having been heard.
+	// The exit door is gated on the three family conversations having been heard. The tag
+	// is per object, not per state, so it does not matter whether the player heard the
+	// story before photographing or after.
 	AActor* DoorActor = Fixture.World->SpawnActor<AActor>();
 	UDoorInteractionComponent* Door = NewObject<UDoorInteractionComponent>(DoorActor);
 	DoorActor->AddInstanceComponent(Door);
 	Door->RegisterComponent();
 	FGameplayTagContainer DoorTags;
-	for (const FName& MemoryStateID : MemoryStateIDs)
+	for (const FName& ObjectID : ObjectIDs)
 	{
 		const FGameplayTag Tag = FGameplayTag::RequestGameplayTag(
-			FName(*FString::Printf(TEXT("Evidence.StoryPlayed.%s"), *MemoryStateID.ToString())),
+			FName(*FString::Printf(TEXT("Evidence.StoryHeard.%s"), *ObjectID.ToString())),
 			false);
 		if (!TestTrue(
-			FString::Printf(TEXT("Evidence.StoryPlayed.%s must be registered in DefaultGameplayTags.ini"),
-				*MemoryStateID.ToString()),
+			FString::Printf(TEXT("Evidence.StoryHeard.%s must be registered in DefaultGameplayTags.ini"),
+				*ObjectID.ToString()),
 			Tag.IsValid()))
 		{
 			return false;
@@ -282,9 +284,9 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 	for (int32 Index = 0; Index < 3; ++Index)
 	{
 		TestTrue(
-			FString::Printf(TEXT("%s story-played tag should be recorded"),
-				*MemoryStateIDs[Index].ToString()),
-			StoryState->AddEvidenceStoryPlayedTag(MemoryStateIDs[Index]));
+			FString::Printf(TEXT("%s story-heard tag should be recorded"),
+				*ObjectIDs[Index].ToString()),
+			StoryState->AddEvidenceStoryHeardTag(ObjectIDs[Index]));
 
 		if (Index < 2)
 		{

@@ -78,6 +78,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Story State")
 	bool AddEvidenceStoryPlayedTag(FName StateID);
 
+	/**
+	 * Records that an object's world story has been heard at all, as
+	 * "Evidence.StoryHeard.<ObjectID>".
+	 *
+	 * The per-state tag above cannot answer "has the player heard this object's story?"
+	 * on its own, because the same story can play from more than one state -- before a
+	 * photo from the cleaned state, and again afterwards from the memory state. Progress
+	 * gates should use this one so they do not depend on which route the player took.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Story State")
+	bool AddEvidenceStoryHeardTag(FName ObjectID);
+
 	UPROPERTY(BlueprintAssignable, Category = "Story State|Events")
 	FOnStoryStateTagChanged OnStateTagAdded;
 

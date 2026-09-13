@@ -446,6 +446,9 @@ bool ABalhwajeomEvidenceActor::PlayWorldStoryForState(FName StateID)
 				GameInstance->GetSubsystem<UStoryStateSubsystem>())
 			{
 				StoryState->AddEvidenceStoryPlayedTag(StateID);
+				// Object-scoped as well, so a gate can ask "heard this one yet?" without
+				// caring whether it played before or after the photo.
+				StoryState->AddEvidenceStoryHeardTag(ObjectID);
 			}
 		}
 	}

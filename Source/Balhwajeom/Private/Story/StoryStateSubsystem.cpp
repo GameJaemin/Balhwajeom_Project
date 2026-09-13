@@ -263,6 +263,25 @@ bool UStoryStateSubsystem::AddEvidenceStoryPlayedTag(FName StateID)
 }
 
 
+bool UStoryStateSubsystem::AddEvidenceStoryHeardTag(FName ObjectID)
+{
+	if (ObjectID.IsNone())
+	{
+		return false;
+	}
+
+	const FGameplayTag StoryHeardTag = FGameplayTag::RequestGameplayTag(
+		FName(*FString::Printf(
+			TEXT("Evidence.StoryHeard.%s"),
+			*ObjectID.ToString()
+		)),
+		false
+	);
+
+	return StoryHeardTag.IsValid() && AddStateTag(StoryHeardTag);
+}
+
+
 void UStoryStateSubsystem::HandleEvidenceStateChanged(
 	FGuid ChangedInstanceID,
 	FName PreviousStateID,
