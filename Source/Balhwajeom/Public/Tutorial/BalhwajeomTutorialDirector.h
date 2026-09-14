@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "GameplayTagContainer.h"
+#include "TimerManager.h"
 #include "Tutorial/BalhwajeomTutorialFlow.h"
 #include "BalhwajeomTutorialDirector.generated.h"
 
@@ -56,6 +57,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Tutorial|Presentation",
 		meta = (WorldContext = "WorldContextObject"))
 	static EBalhwajeomTutorialHintTarget GetTutorialHintTarget(const UObject* WorldContextObject);
+
+	/**
+	 * The current step's HintMessage, subject to the same visibility rule as the hint
+	 * target: empty when there is no director, no step, or another mode owns the screen.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Tutorial|Presentation",
+		meta = (WorldContext = "WorldContextObject"))
+	static FText GetTutorialHintMessage(const UObject* WorldContextObject);
 
 	/**
 	 * Shared 0..1 blink value for whatever the current step highlights.
@@ -173,14 +182,22 @@ private:
 	void EvaluateCurrentStep();
 	void FinishFlow();
 
+	/** Started in EnterStep when the step's AutoAdvanceAfterSeconds is greater than zero. */
+	void HandleAutoAdvanceTimer();
+	void ClearAutoAdvanceTimer();
+
 	UStoryStateSubsystem* GetStoryState() const;
 	const FBalhwajeomTutorialStep* GetCurrentStepPtr() const;
 
 	/** True when every non-empty condition on the step is satisfied. */
 	bool IsStepSatisfied(const FBalhwajeomTutorialStep& Step) const;
 
-	/** True while the player is in a mode that owns the whole screen. */
-	bool IsScreenOwnedByOtherMode() const;
+	/**
+	 * True while the player is in a mode that owns the whole screen.
+	 * Tablet mode is inset from the screen edges rather than full-screen; pass false to
+	 * treat it like Exploration (only the tablet's own open/close hint should do this).
+	 */
+	bool IsScreenOwnedByOtherMode(bool bTabletModeCounts = true) const;
 
 	float CalculateDimOpacity() const;
 
@@ -198,4 +215,6 @@ private:
 	 */
 	bool bIsEnteringStep = false;
 	bool bPendingEvaluation = false;
+
+	FTimerHandle AutoAdvanceTimerHandle;
 };

@@ -89,11 +89,28 @@ struct BALHWAJEOM_API FBalhwajeomTutorialStep
 			!CompleteWhen.IsEmpty();
 	}
 
+	/**
+	 * When greater than zero, the step advances on its own after this many seconds,
+	 * regardless of the tag conditions above -- the same escape hatch AdvanceStep() gives
+	 * a designer, just timed instead of manual. A step can combine this with a tag
+	 * condition; whichever is satisfied first wins. Zero (the default) means no timer.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Step",
+		meta = (ClampMin = "0.0", Units = "s"))
+	float AutoAdvanceAfterSeconds = 0.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Step|Presentation")
 	EBalhwajeomTutorialDimMode DimMode = EBalhwajeomTutorialDimMode::Off;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Step|Presentation")
 	EBalhwajeomTutorialHintTarget HintTarget = EBalhwajeomTutorialHintTarget::None;
+
+	/**
+	 * Optional line shown next to HintTarget's highlighted icon, for example explaining a
+	 * key. Empty shows nothing, matching every existing step (icon-only, no text).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Step|Presentation")
+	FText HintMessage;
 
 	/** Dim strength at full opacity. FollowInteractPrompt scales this by the prompt's alpha. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Step|Presentation",

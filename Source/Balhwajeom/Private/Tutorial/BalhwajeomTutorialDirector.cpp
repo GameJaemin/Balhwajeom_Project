@@ -57,12 +57,30 @@ EBalhwajeomTutorialHintTarget ABalhwajeomTutorialDirector::GetTutorialHintTarget
 	const FBalhwajeomTutorialStep* Step = Director ? Director->GetCurrentStepPtr() : nullptr;
 
 	// A mode that owns the whole screen also owns the icons, so stop highlighting them.
-	if (!Step || Director->IsScreenOwnedByOtherMode())
+	// The tablet's own open/close hint is the one exception: it stays visible in the
+	// tablet's screen margin, so Tablet mode should not suppress it.
+	if (!Step || Director->IsScreenOwnedByOtherMode(
+		Step->HintTarget != EBalhwajeomTutorialHintTarget::TabletIcon))
 	{
 		return EBalhwajeomTutorialHintTarget::None;
 	}
 
 	return Step->HintTarget;
+}
+
+
+FText ABalhwajeomTutorialDirector::GetTutorialHintMessage(const UObject* WorldContextObject)
+{
+	const ABalhwajeomTutorialDirector* Director = GetTutorialDirector(WorldContextObject);
+	const FBalhwajeomTutorialStep* Step = Director ? Director->GetCurrentStepPtr() : nullptr;
+
+	if (!Step || Director->IsScreenOwnedByOtherMode(
+		Step->HintTarget != EBalhwajeomTutorialHintTarget::TabletIcon))
+	{
+		return FText::GetEmpty();
+	}
+
+	return Step->HintMessage;
 }
 
 
@@ -128,6 +146,7 @@ void ABalhwajeomTutorialDirector::BeginPlay()
 
 void ABalhwajeomTutorialDirector::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	ClearAutoAdvanceTimer();
 	UnsubscribeFromStoryState();
 
 	Super::EndPlay(EndPlayReason);
@@ -288,9 +307,20 @@ void ABalhwajeomTutorialDirector::EnterStep(int32 StepIndex)
 	const FBalhwajeomTutorialStep& Step = Flow->Steps[StepIndex];
 
 	// Restarting the clock makes each new highlight begin at its brightest.
-	if (const UWorld* World = GetWorld())
+	if (UWorld* World = GetWorld())
 	{
 		StepEnteredTimeSeconds = World->GetTimeSeconds();
+
+		ClearAutoAdvanceTimer();
+		if (Step.AutoAdvanceAfterSeconds > 0.0f)
+		{
+			World->GetTimerManager().SetTimer(
+				AutoAdvanceTimerHandle,
+				this,
+				&ThisClass::HandleAutoAdvanceTimer,
+				Step.AutoAdvanceAfterSeconds,
+				false);
+		}
 	}
 
 	UStoryStateSubsystem* StoryState = GetStoryState();
@@ -389,8 +419,24 @@ void ABalhwajeomTutorialDirector::AdvanceStep()
 }
 
 
+void ABalhwajeomTutorialDirector::HandleAutoAdvanceTimer()
+{
+	AdvanceStep();
+}
+
+
+void ABalhwajeomTutorialDirector::ClearAutoAdvanceTimer()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(AutoAdvanceTimerHandle);
+	}
+}
+
+
 void ABalhwajeomTutorialDirector::FinishFlow()
 {
+	ClearAutoAdvanceTimer();
 	CurrentStepIndex = INDEX_NONE;
 	UnsubscribeFromStoryState();
 
@@ -413,6 +459,7 @@ void ABalhwajeomTutorialDirector::AbortFlow()
 {
 	// Releases the locks even when the flow opted out of automatic release, because
 	// aborting is the recovery path and leaving the player locked out is never correct.
+	ClearAutoAdvanceTimer();
 	CurrentStepIndex = INDEX_NONE;
 	UnsubscribeFromStoryState();
 
@@ -450,7 +497,7 @@ void ABalhwajeomTutorialDirector::SetLockActive(FGameplayTag LockTag, bool bActi
 }
 
 
-bool ABalhwajeomTutorialDirector::IsScreenOwnedByOtherMode() const
+bool ABalhwajeomTutorialDirector::IsScreenOwnedByOtherMode(bool bTabletModeCounts) const
 {
 	const UStoryStateSubsystem* StoryState = GetStoryState();
 	if (!StoryState)
@@ -458,11 +505,20 @@ bool ABalhwajeomTutorialDirector::IsScreenOwnedByOtherMode() const
 		return false;
 	}
 
-	// Fail open: only an explicitly non-exploration mode suppresses the dim. Camera mode,
-	// tablet and every future mode set their tag on entry, so this cannot leave a dim
+	// Fail open: only an explicitly non-exploration mode suppresses the dim. Camera mode
+	// and every future full-screen mode set their tag on entry, so this cannot leave a dim
 	// hanging over a full-screen mode, and an unset mode during startup still dims.
+	//
+	// Tablet mode is the one exception a caller can opt out of (bTabletModeCounts = false):
+	// unlike the camera viewfinder, WBP_Tablet is inset from the screen edges, so the HUD
+	// icons behind it -- and this ZOrder-5 layer, well below the tablet's own ZOrder --
+	// stay visible in the margin while it is open. Only the tablet's own open/close hint
+	// (HintTarget == TabletIcon) asks for that; every other hint still treats Tablet mode
+	// as owning the screen, same as any other full-screen mode.
 	if (StoryState->HasStateTag(BalhwajeomGameplayTags::Runtime_Player_Mode) &&
-		!StoryState->HasStateTagExact(BalhwajeomGameplayTags::Runtime_Player_Mode_Exploration))
+		!StoryState->HasStateTagExact(BalhwajeomGameplayTags::Runtime_Player_Mode_Exploration) &&
+		(bTabletModeCounts ||
+			!StoryState->HasStateTagExact(BalhwajeomGameplayTags::Runtime_Player_Mode_Tablet)))
 	{
 		return true;
 	}
@@ -483,7 +539,7 @@ float ABalhwajeomTutorialDirector::CalculateDimOpacity() const
 		return 0.0f;
 	}
 
-	if (IsScreenOwnedByOtherMode())
+	if (IsScreenOwnedByOtherMode(Step->HintTarget != EBalhwajeomTutorialHintTarget::TabletIcon))
 	{
 		return 0.0f;
 	}

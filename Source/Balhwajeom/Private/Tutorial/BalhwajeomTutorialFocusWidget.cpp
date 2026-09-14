@@ -5,6 +5,7 @@
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/Image.h"
+#include "Components/TextBlock.h"
 #include "Tutorial/BalhwajeomTutorialDirector.h"
 
 
@@ -62,6 +63,24 @@ void UBalhwajeomTutorialFocusWidget::BuildWidgetTree()
 		UImage::StaticClass(), TEXT("Img_TabletHighlight"));
 	TabletHighlight->SetVisibility(ESlateVisibility::Collapsed);
 	RootCanvas->AddChild(TabletHighlight);
+
+	// Added last, so it draws above both highlights.
+	HintMessageText = WidgetTree->ConstructWidget<UTextBlock>(
+		UTextBlock::StaticClass(), TEXT("Txt_HintMessage"));
+	HintMessageText->SetVisibility(ESlateVisibility::Collapsed);
+	HintMessageText->SetJustification(ETextJustify::Center);
+	HintMessageText->SetAutoWrapText(true);
+	HintMessageText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	HintMessageText->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f));
+	HintMessageText->SetShadowOffset(FVector2D(1.0f, 1.0f));
+	FSlateFontInfo HintFont = HintMessageText->GetFont();
+	HintFont.Size = 14;
+	HintMessageText->SetFont(HintFont);
+	if (UCanvasPanelSlot* HintSlot = Cast<UCanvasPanelSlot>(RootCanvas->AddChild(HintMessageText)))
+	{
+		HintSlot->SetAnchors(FAnchors(0.0f, 0.0f));
+		HintSlot->SetAutoSize(false);
+	}
 }
 
 
@@ -195,4 +214,59 @@ void UBalhwajeomTutorialFocusWidget::NativeTick(
 		TabletHighlight,
 		HintTarget == EBalhwajeomTutorialHintTarget::TabletIcon,
 		PulseOpacity);
+
+	UpdateHintMessage(HintTarget);
+}
+
+
+void UBalhwajeomTutorialFocusWidget::UpdateHintMessage(
+	const EBalhwajeomTutorialHintTarget HintTarget)
+{
+	if (!HintMessageText)
+	{
+		return;
+	}
+
+	const FText Message = ABalhwajeomTutorialDirector::GetTutorialHintMessage(this);
+	UImage* AnchorHighlight = nullptr;
+	if (HintTarget == EBalhwajeomTutorialHintTarget::PhotoCameraIcon)
+	{
+		AnchorHighlight = PhotoCameraHighlight;
+	}
+	else if (HintTarget == EBalhwajeomTutorialHintTarget::TabletIcon)
+	{
+		AnchorHighlight = TabletHighlight;
+	}
+
+	// No message, or its icon is not actually shown right now (hidden HUD, other mode
+	// owns the screen): nothing to anchor the text to.
+	if (Message.IsEmpty() || !AnchorHighlight ||
+		AnchorHighlight->GetVisibility() == ESlateVisibility::Collapsed)
+	{
+		HintMessageText->SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+
+	UCanvasPanelSlot* AnchorSlot = Cast<UCanvasPanelSlot>(AnchorHighlight->Slot);
+	UCanvasPanelSlot* TextSlot = Cast<UCanvasPanelSlot>(HintMessageText->Slot);
+	if (!AnchorSlot || !TextSlot)
+	{
+		HintMessageText->SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+
+	HintMessageText->SetText(Message);
+	HintMessageText->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+	// Above the highlighted icon, resting a small gap off its top edge and shifted right
+	// of center so it does not sit directly over the icon itself.
+	const FVector2D IconPosition = AnchorSlot->GetPosition();
+	const FVector2D IconSize = AnchorSlot->GetSize();
+	const FVector2D TextSize(260.0f, 30.0f);
+	constexpr float RightShift = 60.0f;
+	constexpr float TopGap = 60.0f;
+	TextSlot->SetPosition(FVector2D(
+		IconPosition.X + IconSize.X * 0.5f - TextSize.X * 0.5f + RightShift,
+		IconPosition.Y - TextSize.Y - TopGap));
+	TextSlot->SetSize(TextSize);
 }
