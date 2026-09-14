@@ -78,6 +78,8 @@ void ABalhwajeomCameraPlayerController::EndPlay(const EEndPlayReason::Type EndPl
 	{
 		BoundInvestigationSubsystem->OnWordAcquired.RemoveDynamic(
 			this, &ABalhwajeomCameraPlayerController::HandleWordAcquired);
+		BoundInvestigationSubsystem->OnPhotoGalleryReset.RemoveDynamic(
+			this, &ABalhwajeomCameraPlayerController::HandleInvestigationPhotoGalleryReset);
 	}
 	BoundInvestigationSubsystem = nullptr;
 
@@ -146,10 +148,14 @@ void ABalhwajeomCameraPlayerController::EnsureKeywordCounter()
 		{
 			BoundInvestigationSubsystem->OnWordAcquired.RemoveDynamic(
 				this, &ABalhwajeomCameraPlayerController::HandleWordAcquired);
+			BoundInvestigationSubsystem->OnPhotoGalleryReset.RemoveDynamic(
+				this, &ABalhwajeomCameraPlayerController::HandleInvestigationPhotoGalleryReset);
 		}
 		BoundInvestigationSubsystem = Investigation;
 		BoundInvestigationSubsystem->OnWordAcquired.AddUniqueDynamic(
 			this, &ABalhwajeomCameraPlayerController::HandleWordAcquired);
+		BoundInvestigationSubsystem->OnPhotoGalleryReset.AddUniqueDynamic(
+			this, &ABalhwajeomCameraPlayerController::HandleInvestigationPhotoGalleryReset);
 		RefreshKeywordCounter();
 	}
 }
@@ -172,6 +178,15 @@ void ABalhwajeomCameraPlayerController::HandleWordAcquired(
 		bPhotoKeywordCountRefreshPending = true;
 		return;
 	}
+	RefreshKeywordCounter();
+}
+
+void ABalhwajeomCameraPlayerController::HandleInvestigationPhotoGalleryReset()
+{
+	// ResetPersistentPhotoGallery() drops every photo-sourced word without going through
+	// AcquireWord, so it never fires OnWordAcquired; without this, the counter is left
+	// showing whatever total was loaded from the previous session's save.
+	bPhotoKeywordCountRefreshPending = false;
 	RefreshKeywordCounter();
 }
 

@@ -171,6 +171,10 @@ private:
 
 	UFUNCTION()
 	void HandleWordAcquired(const FAcquiredWordRecord& WordRecord);
+
+	/** Bound to OnPhotoGalleryReset so the keyword counter drops the stale pre-reset total. */
+	UFUNCTION()
+	void HandleInvestigationPhotoGalleryReset();
 	bool ShouldShowInteractionPrompt() const;
 	bool IsInteractionPromptSuppressedByTablet() const;
 	bool IsInteractionPromptSuppressedByPhotoCamera() const;
