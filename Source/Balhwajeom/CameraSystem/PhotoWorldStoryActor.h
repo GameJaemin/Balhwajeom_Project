@@ -56,6 +56,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Photo Story")
 	TObjectPtr<UWidgetComponent> StoryWidgetComponent;
 
+	/** Opposite-facing copy so the caption is equally bright and readable from either side. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Photo Story")
+	TObjectPtr<UWidgetComponent> BackStoryWidgetComponent;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Photo Story")
 	TObjectPtr<UAudioComponent> StoryAudioComponent;
 
@@ -78,6 +82,11 @@ protected:
 	float NoVoiceLastCueDuration = 2.5f;
 
 private:
+	void InitializeStoryWidgets();
+	void SetStoryWidgetsVisible(bool bVisible);
+	void SetStoryWidgetsText(const FText& Text);
+	void SetStoryWidgetsOpacity(float Opacity);
+	void SetStoryWidgetsFontSize(int32 FontSize);
 	void HandleVoiceLoaded();
 	void PlayLoadedVoice();
 	void ApplyCue(int32 CueIndex);

@@ -22,6 +22,7 @@ class UInspectionComponent;
 class UJMInspectableComponent;
 class UJMItemInspectionData;
 class UTexture2D;
+class UTextRenderComponent;
 class UWidgetComponent;
 class UBalhwajeomInvestigationSubsystem;
 class UStoryStateSubsystem;
@@ -279,8 +280,8 @@ protected:
 
 	/**
 	 * Where the world-locked 3D story text appears and which way it faces. Move and rotate this
-	 * in a derived Blueprint or directly on the placed instance; its +X axis is the reading
-	 * direction, so point the arrow at where the player will be standing.
+	 * in a derived Blueprint or directly on the placed instance. Its rotation is absolute, so it
+	 * keeps this world angle when the evidence mesh is rotated. +X is the reading direction.
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Evidence|Story")
 	TObjectPtr<USceneComponent> StoryAnchor;
@@ -289,6 +290,10 @@ protected:
 	/** Editor-only reading-direction indicator for StoryAnchor. */
 	UPROPERTY()
 	TObjectPtr<UArrowComponent> StoryAnchorArrow;
+
+	/** Editor-only sample caption that makes the anchor's final reading angle obvious. */
+	UPROPERTY()
+	TObjectPtr<UTextRenderComponent> StoryAnchorPreviewText;
 #endif
 
 	/** Presentation actor spawned at StoryAnchor. The native class is used when this is empty. */

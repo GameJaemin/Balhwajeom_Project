@@ -6,6 +6,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "Components/Image.h"
 #include "Components/WidgetComponent.h"
 #include "Interaction/InspectionComponent.h"
@@ -90,6 +91,9 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 	// designer positions it; +X points at the reader because the story widget faces its own +X.
 	StoryAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("StoryAnchor"));
 	StoryAnchor->SetupAttachment(EvidenceMesh);
+	// Follow the evidence position, but keep the authored reading angle in world space.
+	StoryAnchor->SetAbsolute(/*bNewAbsoluteLocation*/ false, /*bNewAbsoluteRotation*/ true,
+		/*bNewAbsoluteScale*/ false);
 	StoryAnchor->SetRelativeLocation(FVector(0.0f, 0.0f, 60.0f));
 
 #if WITH_EDITORONLY_DATA
@@ -100,6 +104,20 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 		StoryAnchorArrow->ArrowColor = FColor(140, 200, 255);
 		StoryAnchorArrow->bIsScreenSizeScaled = true;
 		StoryAnchorArrow->SetHiddenInGame(true);
+	}
+
+	StoryAnchorPreviewText = CreateEditorOnlyDefaultSubobject<UTextRenderComponent>(
+		TEXT("StoryAnchorPreviewText"));
+	if (StoryAnchorPreviewText)
+	{
+		StoryAnchorPreviewText->SetupAttachment(StoryAnchor);
+		StoryAnchorPreviewText->SetText(NSLOCTEXT(
+			"BalhwajeomEvidence", "StoryAnchorPreview", "Story Anchor 예시 텍스트"));
+		StoryAnchorPreviewText->SetHorizontalAlignment(EHTA_Center);
+		StoryAnchorPreviewText->SetVerticalAlignment(EVRTA_TextCenter);
+		StoryAnchorPreviewText->SetWorldSize(18.0f);
+		StoryAnchorPreviewText->SetTextRenderColor(FColor(140, 220, 255));
+		StoryAnchorPreviewText->SetHiddenInGame(true);
 	}
 #endif
 
