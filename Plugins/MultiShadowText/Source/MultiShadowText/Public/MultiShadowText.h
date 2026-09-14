@@ -68,8 +68,16 @@ public:
 	// TEXT
 	// ============================================================
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Text")
+	UPROPERTY(
+		EditAnywhere,
+		BlueprintReadWrite,
+		BlueprintSetter = SetText,
+		Category = "Text"
+	)
 	FText Text;
+
+	UFUNCTION(BlueprintCallable, Category = "Text")
+	void SetText(const FText& InText);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Text")
 	FSlateFontInfo Font;
