@@ -19,6 +19,8 @@
 #include "Animation/AnimationAsset.h"
 #include "Story/StoryStateSubsystem.h"
 #include "Story/StoryStateTags.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 
 ABalhwajeomCameraCharacter::ABalhwajeomCameraCharacter()
 {
@@ -93,11 +95,19 @@ ABalhwajeomCameraCharacter::ABalhwajeomCameraCharacter()
 	{
 		GetMesh()->SetAnimInstanceClass(AnimationBlueprint.Class);
 	}
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> DefaultFootstepCue(
+		TEXT("/Game/Balhwajeom/Audio/SFX/SC_Footsteps.SC_Footsteps"));
+	if (DefaultFootstepCue.Succeeded())
+	{
+		FootstepSound = DefaultFootstepCue.Object;
+	}
 }
 
 void ABalhwajeomCameraCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	UpdateFootsteps(DeltaSeconds);
 
 	// This path is opt-in so legacy children that use an Animation Blueprint are untouched.
 	if (!IdleAnimation || !WalkAnimation || !GetMesh())
@@ -115,6 +125,48 @@ void ABalhwajeomCameraCharacter::Tick(float DeltaSeconds)
 		GetMesh()->PlayAnimation(DesiredAnimation, true);
 		ActiveLocomotionAnimation = DesiredAnimation;
 	}
+}
+
+void ABalhwajeomCameraCharacter::UpdateFootsteps(float DeltaSeconds)
+{
+	const UCharacterMovementComponent* Movement = GetCharacterMovement();
+	const bool bShouldPlay = IsPlayerControlled()
+		&& FootstepSound
+		&& Movement
+		&& Movement->IsMovingOnGround()
+		&& GetVelocity().Size2D() >= FootstepMinimumSpeed;
+
+	if (!bShouldPlay)
+	{
+		FootstepElapsedTime = 0.0f;
+		bWasPlayingFootsteps = false;
+		return;
+	}
+
+	const float SafeInterval = FMath::Max(FootstepInterval, 0.05f);
+	if (!bWasPlayingFootsteps)
+	{
+		// Let the first step sound respond immediately when the player starts moving.
+		FootstepElapsedTime = SafeInterval;
+		bWasPlayingFootsteps = true;
+	}
+	else
+	{
+		FootstepElapsedTime += DeltaSeconds;
+	}
+
+	if (FootstepElapsedTime < SafeInterval)
+	{
+		return;
+	}
+
+	FootstepElapsedTime = FMath::Fmod(FootstepElapsedTime, SafeInterval);
+	UGameplayStatics::PlaySoundAtLocation(
+		this,
+		FootstepSound,
+		GetActorLocation(),
+		FootstepVolume,
+		FootstepPitch);
 }
 
 void ABalhwajeomCameraCharacter::BeginPlay()

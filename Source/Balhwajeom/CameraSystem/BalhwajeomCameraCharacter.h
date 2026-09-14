@@ -10,6 +10,7 @@
 class UCameraComponent;
 class USpringArmComponent;
 class UAnimationAsset;
+class USoundBase;
 class ABalhwajeomFixedCameraZone;
 class UBalhwajeomPhotoCameraComponent;
 class UBalhwajeomTabletComponent;
@@ -53,6 +54,7 @@ protected:
 
 	/** Receives Mouse Y from the "LookUp" axis; routes to camera-mode pitch or boom orbit pitch. */
 	void HandleLookUp(float Value);
+	void UpdateFootsteps(float DeltaSeconds);
 
 	UFUNCTION()
 	void HandleInspectionSucceeded(FText InspectionText);
@@ -97,6 +99,26 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation|Locomotion", meta = (ClampMin = "0.0"))
 	float WalkAnimationThreshold = 5.0f;
 
+	/** Random footstep cue played while this player is walking on the ground. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Footsteps")
+	TObjectPtr<USoundBase> FootstepSound;
+
+	/** Master volume applied when a footstep is played. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Footsteps", meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "2.0"))
+	float FootstepVolume = 0.65f;
+
+	/** Seconds between footsteps while walking. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Footsteps", meta = (ClampMin = "0.05", UIMin = "0.1", UIMax = "1.0", Units = "s"))
+	float FootstepInterval = 0.42f;
+
+	/** Extra runtime pitch multiplier. The cue's Pitch Multiplier can also be tuned directly. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Footsteps", meta = (ClampMin = "0.1", UIMin = "0.5", UIMax = "2.0"))
+	float FootstepPitch = 1.0f;
+
+	/** Minimum horizontal speed required to produce footsteps. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio|Footsteps", meta = (ClampMin = "0.0", Units = "cm/s"))
+	float FootstepMinimumSpeed = 10.0f;
+
 
 	/** Zones currently containing this character. The highest priority zone is active. */
 	UPROPERTY(Transient)
@@ -121,4 +143,7 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimationAsset> ActiveLocomotionAnimation;
+
+	float FootstepElapsedTime = 0.0f;
+	bool bWasPlayingFootsteps = false;
 };

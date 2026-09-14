@@ -19,11 +19,26 @@ APhotoWorldStoryActor::APhotoWorldStoryActor()
 
 	StoryWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("StoryWidget"));
 	StoryWidgetComponent->SetupAttachment(SceneRoot);
-	StoryWidgetComponent->SetWidgetSpace(EWidgetSpace::World);
-	StoryWidgetComponent->SetDrawAtDesiredSize(true);
-	StoryWidgetComponent->SetTwoSided(true);
-	StoryWidgetComponent->SetPivot(FVector2D(0.5f, 0.5f));
-	StoryWidgetComponent->SetRelativeScale3D(FVector(0.1f));
+
+	BackStoryWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("BackStoryWidget"));
+	BackStoryWidgetComponent->SetupAttachment(SceneRoot);
+	BackStoryWidgetComponent->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
+
+	const auto ConfigureStoryPanel = [](UWidgetComponent* Component)
+	{
+		Component->SetWidgetSpace(EWidgetSpace::World);
+		Component->SetDrawAtDesiredSize(true);
+		// Opposing front faces avoid the dim, mirrored back face of a single two-sided panel.
+		Component->SetTwoSided(false);
+		Component->SetBlendMode(EWidgetBlendMode::Transparent);
+		Component->SetBackgroundColor(FLinearColor::Transparent);
+		Component->SetTintColorAndOpacity(FLinearColor::White);
+		Component->SetPivot(FVector2D(0.5f, 0.5f));
+		Component->SetRelativeScale3D(FVector(0.1f));
+		Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	};
+	ConfigureStoryPanel(StoryWidgetComponent);
+	ConfigureStoryPanel(BackStoryWidgetComponent);
 
 	static ConstructorHelpers::FClassFinder<UPhotoWorldStoryWidget> DefaultStoryWidget(
 		TEXT("/Game/Balhwajeom/UI/PhotoStory/WBP_PhotoWorldStory"));
@@ -34,12 +49,78 @@ APhotoWorldStoryActor::APhotoWorldStoryActor()
 	}
 	StoryWidgetComponent->SetWidgetClass(StoryWidgetClass);
 	StoryWidgetComponent->SetVisibility(false);
+	BackStoryWidgetComponent->SetWidgetClass(StoryWidgetClass);
+	BackStoryWidgetComponent->SetVisibility(false);
 
 	StoryAudioComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("StoryAudio"));
 	StoryAudioComponent->SetupAttachment(SceneRoot);
 	StoryAudioComponent->bAutoActivate = false;
 	StoryAudioComponent->bAllowSpatialization = false;
 	StoryAudioComponent->OnAudioFinished.AddDynamic(this, &APhotoWorldStoryActor::HandleAudioFinished);
+}
+
+void APhotoWorldStoryActor::InitializeStoryWidgets()
+{
+	for (UWidgetComponent* Component : { StoryWidgetComponent.Get(), BackStoryWidgetComponent.Get() })
+	{
+		if (!Component)
+		{
+			continue;
+		}
+		if (StoryWidgetClass)
+		{
+			Component->SetWidgetClass(StoryWidgetClass);
+		}
+		Component->InitWidget();
+	}
+}
+
+void APhotoWorldStoryActor::SetStoryWidgetsVisible(bool bVisible)
+{
+	if (StoryWidgetComponent)
+	{
+		StoryWidgetComponent->SetVisibility(bVisible);
+	}
+	if (BackStoryWidgetComponent)
+	{
+		BackStoryWidgetComponent->SetVisibility(bVisible);
+	}
+}
+
+void APhotoWorldStoryActor::SetStoryWidgetsText(const FText& Text)
+{
+	for (UWidgetComponent* Component : { StoryWidgetComponent.Get(), BackStoryWidgetComponent.Get() })
+	{
+		if (UPhotoWorldStoryWidget* Widget = Component
+			? Cast<UPhotoWorldStoryWidget>(Component->GetUserWidgetObject()) : nullptr)
+		{
+			Widget->SetStoryText(Text);
+			Widget->SetRenderOpacity(1.0f);
+		}
+	}
+}
+
+void APhotoWorldStoryActor::SetStoryWidgetsOpacity(float Opacity)
+{
+	for (UWidgetComponent* Component : { StoryWidgetComponent.Get(), BackStoryWidgetComponent.Get() })
+	{
+		if (UUserWidget* Widget = Component ? Component->GetUserWidgetObject() : nullptr)
+		{
+			Widget->SetRenderOpacity(Opacity);
+		}
+	}
+}
+
+void APhotoWorldStoryActor::SetStoryWidgetsFontSize(int32 FontSize)
+{
+	for (UWidgetComponent* Component : { StoryWidgetComponent.Get(), BackStoryWidgetComponent.Get() })
+	{
+		if (UPhotoWorldStoryWidget* Widget = Component
+			? Cast<UPhotoWorldStoryWidget>(Component->GetUserWidgetObject()) : nullptr)
+		{
+			Widget->SetStoryFontSize(FontSize);
+		}
+	}
 }
 
 APhotoWorldStoryActor* APhotoWorldStoryActor::SpawnAndStart(
@@ -110,11 +191,7 @@ void APhotoWorldStoryActor::StartStory(
 		return;
 	}
 
-	if (StoryWidgetClass)
-	{
-		StoryWidgetComponent->SetWidgetClass(StoryWidgetClass);
-	}
-	StoryWidgetComponent->InitWidget();
+	InitializeStoryWidgets();
 	if (bThirdPersonScaleRequested)
 	{
 		TransitionToThirdPersonScale();
@@ -124,7 +201,7 @@ void APhotoWorldStoryActor::StartStory(
 		bPlayingWithoutVoice = true;
 		CurrentCueIndex = 0;
 		ApplyCue(CurrentCueIndex);
-		StoryWidgetComponent->SetVisibility(true);
+		SetStoryWidgetsVisible(true);
 		StoryStartTimeSeconds = GetWorld()->GetTimeSeconds();
 		ScheduleNextCue();
 		return;
@@ -171,7 +248,7 @@ void APhotoWorldStoryActor::PlayLoadedVoice()
 	CurrentCueIndex = 0;
 	bPlayingWithoutVoice = false;
 	ApplyCue(CurrentCueIndex);
-	StoryWidgetComponent->SetVisibility(true);
+	SetStoryWidgetsVisible(true);
 	StoryStartTimeSeconds = GetWorld()->GetTimeSeconds();
 	StoryAudioComponent->SetSound(Voice);
 	StoryAudioComponent->Play();
@@ -185,12 +262,7 @@ void APhotoWorldStoryActor::ApplyCue(int32 CueIndex)
 		return;
 	}
 
-	if (UPhotoWorldStoryWidget* Widget =
-		Cast<UPhotoWorldStoryWidget>(StoryWidgetComponent->GetUserWidgetObject()))
-	{
-		Widget->SetStoryText(StoryCues[CueIndex].Text);
-		Widget->SetRenderOpacity(1.0f);
-	}
+	SetStoryWidgetsText(StoryCues[CueIndex].Text);
 }
 
 void APhotoWorldStoryActor::ScheduleNextCue()
@@ -255,7 +327,7 @@ void APhotoWorldStoryActor::TransitionToThirdPersonScale()
 		return;
 	}
 
-	StoryWidgetComponent->InitWidget();
+	InitializeStoryWidgets();
 	UPhotoWorldStoryWidget* Widget =
 		Cast<UPhotoWorldStoryWidget>(StoryWidgetComponent->GetUserWidgetObject());
 	if (!Widget)
@@ -272,7 +344,7 @@ void APhotoWorldStoryActor::TransitionToThirdPersonScale()
 
 	if (ScaleTransitionDuration <= KINDA_SMALL_NUMBER)
 	{
-		Widget->SetStoryFontSize(FontSizeTransitionTarget);
+		SetStoryWidgetsFontSize(FontSizeTransitionTarget);
 		return;
 	}
 
@@ -286,13 +358,9 @@ void APhotoWorldStoryActor::UpdateScaleTransition()
 	const double Elapsed = GetWorld()->GetTimeSeconds() - ScaleStartTimeSeconds;
 	const float Alpha = FMath::Clamp(Elapsed / ScaleTransitionDuration, 0.0, 1.0);
 	const float SmoothAlpha = FMath::InterpEaseInOut(0.0f, 1.0f, Alpha, 2.0f);
-	if (UPhotoWorldStoryWidget* Widget =
-		Cast<UPhotoWorldStoryWidget>(StoryWidgetComponent->GetUserWidgetObject()))
-	{
-		Widget->SetStoryFontSize(FMath::RoundToInt(
-			FMath::Lerp(static_cast<float>(FontSizeTransitionStart),
-				static_cast<float>(FontSizeTransitionTarget), SmoothAlpha)));
-	}
+	SetStoryWidgetsFontSize(FMath::RoundToInt(
+		FMath::Lerp(static_cast<float>(FontSizeTransitionStart),
+			static_cast<float>(FontSizeTransitionTarget), SmoothAlpha)));
 
 	if (Alpha >= 1.0f)
 	{
@@ -324,10 +392,7 @@ void APhotoWorldStoryActor::UpdateFadeOut()
 {
 	const double Elapsed = GetWorld()->GetTimeSeconds() - FadeStartTimeSeconds;
 	const float Opacity = 1.0f - FMath::Clamp(Elapsed / FadeOutDuration, 0.0, 1.0);
-	if (UUserWidget* Widget = StoryWidgetComponent->GetUserWidgetObject())
-	{
-		Widget->SetRenderOpacity(Opacity);
-	}
+	SetStoryWidgetsOpacity(Opacity);
 	if (Opacity <= 0.0f)
 	{
 		Destroy();
