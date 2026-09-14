@@ -153,6 +153,8 @@ void ABalhwajeomEvidenceActor::ApplyStateVisuals(
 	const FEvidenceStateDefinition& State,
 	bool bInitialApply)
 {
+	bool bMeshPresentationChanged = false;
+
 	// The mesh is applied on a load too, otherwise a restored state shows the wrong object.
 	if (EvidenceMesh && !State.StateMesh.IsNull())
 	{
@@ -161,16 +163,41 @@ void ABalhwajeomEvidenceActor::ApplyStateVisuals(
 		UStaticMesh* StateMesh = State.StateMesh.LoadSynchronous();
 		if (StateMesh && EvidenceMesh->GetStaticMesh() != StateMesh)
 		{
+			const UStaticMesh* PreviousMesh = EvidenceMesh->GetStaticMesh();
 			EvidenceMesh->SetStaticMesh(StateMesh);
-			// Photo focus and interaction traces run against this volume, so it has to follow.
-			FitCameraTargetBoundsToMesh();
-			UpdateObjectLabelPlacement();
+			// Per-instance material overrides are indexed by slot, so the placement's overrides
+			// survive the swap and hide the new mesh's own materials -- the '_e' memory look
+			// never appears on any object whose placement overrode a material.
+			EvidenceMesh->EmptyOverrideMaterials();
+			ReportStateMeshPivotShift(State, PreviousMesh, StateMesh);
+			bMeshPresentationChanged = true;
 		}
 		else if (!StateMesh)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("%s: state '%s' could not load StateMesh '%s'."),
 				*GetName(), *State.StateID.ToString(), *State.StateMesh.ToString());
 		}
+	}
+
+	// Applied on every state, not just on a swap, so leaving an offset state puts the mesh back.
+	if (EvidenceMesh && bEvidenceMeshBaselineCaptured)
+	{
+		// The offset is authored in the mesh's own space, the space the pivot difference was
+		// measured in, so it has to be rotated and scaled into the placement before it is added.
+		const FVector DesiredLocation = EvidenceMeshBaselineRelativeLocation +
+			EvidenceMesh->GetRelativeTransform().TransformVector(State.StateMeshOffset);
+		if (!EvidenceMesh->GetRelativeLocation().Equals(DesiredLocation))
+		{
+			EvidenceMesh->SetRelativeLocation(DesiredLocation);
+			bMeshPresentationChanged = true;
+		}
+	}
+
+	if (bMeshPresentationChanged)
+	{
+		// Photo focus and interaction traces run against this volume, so it has to follow.
+		FitCameraTargetBoundsToMesh();
+		UpdateObjectLabelPlacement();
 	}
 
 	if (ActiveStateEffect.IsValid())
@@ -203,12 +230,50 @@ void ABalhwajeomEvidenceActor::ApplyStateVisuals(
 		/*bAutoDestroy*/ true);
 }
 
+void ABalhwajeomEvidenceActor::ReportStateMeshPivotShift(
+	const FEvidenceStateDefinition& State,
+	const UStaticMesh* PreviousMesh,
+	const UStaticMesh* NewMesh) const
+{
+	// An authored offset means somebody already knows the pivots differ.
+	if (!PreviousMesh || !NewMesh || !State.StateMeshOffset.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FVector PivotShift =
+		NewMesh->GetBounds().Origin - PreviousMesh->GetBounds().Origin;
+	// Variants exported from one source share a pivot, so a real difference means the new mesh
+	// will sit somewhere else entirely. That reads as "the mesh is broken", so name it here
+	// instead of leaving it to be found by eye.
+	if (PivotShift.Size() <= 1.0f)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("%s: state '%s' swaps to a mesh sitting %s from the previous pivot, so it will not ")
+		TEXT("land where the object was placed. Re-export it on the same pivot, or set that ")
+		TEXT("state's StateMeshOffset to %s in DT_EvidenceStates."),
+		*GetName(),
+		*State.StateID.ToString(),
+		*PivotShift.ToString(),
+		*(-PivotShift).ToString());
+}
+
 void ABalhwajeomEvidenceActor::BeginPlay()
 {
 	Super::BeginPlay();
 
 	bActorBaselineHidden = IsHidden();
 	bActorBaselineCollisionEnabled = GetActorEnableCollision();
+	if (EvidenceMesh)
+	{
+		// Captured before any state applies, so StateMeshOffset always measures from the
+		// placement the level author sees in the editor.
+		EvidenceMeshBaselineRelativeLocation = EvidenceMesh->GetRelativeLocation();
+		bEvidenceMeshBaselineCaptured = true;
+	}
 	FitCameraTargetBoundsToMesh();
 	if (CameraTargetBounds)
 	{
