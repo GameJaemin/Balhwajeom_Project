@@ -3966,6 +3966,60 @@ bool UTabletWidgetBlueprintLibrary::CenterItemInspectionWidget()
 	UImage* Preview = Tree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("PreviewImage"));
 	Preview->bIsVariable = true;
 	Panel->SetContent(Preview);
+
+	// Keep the controls presentation in the Widget Blueprint so designers can freely
+	// adjust wording, spacing, colors, and typography without touching runtime code.
+	UBorder* ControlsHintPanel = Tree->ConstructWidget<UBorder>(
+		UBorder::StaticClass(), TEXT("ControlsHintPanel"));
+	ControlsHintPanel->bIsVariable = true;
+	ControlsHintPanel->SetBrushColor(FLinearColor(0.015f, 0.015f, 0.02f, 0.78f));
+	ControlsHintPanel->SetPadding(FMargin(20.0f, 10.0f));
+	ControlsHintPanel->SetVisibility(ESlateVisibility::HitTestInvisible);
+	UOverlaySlot* ControlsSlot = Root->AddChildToOverlay(ControlsHintPanel);
+	ControlsSlot->SetHorizontalAlignment(HAlign_Center);
+	ControlsSlot->SetVerticalAlignment(VAlign_Bottom);
+	ControlsSlot->SetPadding(FMargin(32.0f, 32.0f, 32.0f, 52.0f));
+
+	UHorizontalBox* ControlsRow = Tree->ConstructWidget<UHorizontalBox>(
+		UHorizontalBox::StaticClass(), TEXT("ControlsHintRow"));
+	ControlsRow->bIsVariable = true;
+	ControlsHintPanel->SetContent(ControlsRow);
+
+	UFont* KoreanFont = LoadObject<UFont>(nullptr,
+		TEXT("/Game/Balhwajeom/UI/JE/Freesentation-4Regular_Font.Freesentation-4Regular_Font"));
+	const auto AddHintText = [Tree, ControlsRow, KoreanFont](
+		const FName Name,
+		const TCHAR* Value,
+		const FLinearColor& Color,
+		const FMargin& Padding)
+	{
+		UTextBlock* Text = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), Name);
+		Text->bIsVariable = true;
+		Text->SetText(FText::FromString(Value));
+		Text->SetColorAndOpacity(FSlateColor(Color));
+		Text->SetShadowOffset(FVector2D(1.0f, 1.0f));
+		Text->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f));
+		FSlateFontInfo Font = Text->GetFont();
+		Font.FontObject = KoreanFont;
+		Font.Size = 22;
+		Font.OutlineSettings.OutlineSize = 1;
+		Font.OutlineSettings.OutlineColor = FLinearColor(0.0f, 0.0f, 0.0f, 0.7f);
+		Text->SetFont(Font);
+		if (UHorizontalBoxSlot* Slot = ControlsRow->AddChildToHorizontalBox(Text))
+		{
+			Slot->SetVerticalAlignment(VAlign_Center);
+			Slot->SetPadding(Padding);
+		}
+	};
+
+	const FLinearColor KeyColor(1.0f, 0.78f, 0.30f, 1.0f);
+	const FLinearColor LabelColor(0.94f, 0.94f, 0.96f, 1.0f);
+	const FLinearColor SeparatorColor(0.58f, 0.58f, 0.62f, 1.0f);
+	AddHintText(TEXT("CloseKeyText"), TEXT("[F]"), KeyColor, FMargin(0.0f, 0.0f, 8.0f, 0.0f));
+	AddHintText(TEXT("CloseActionText"), TEXT("닫기"), LabelColor, FMargin(0.0f, 0.0f, 18.0f, 0.0f));
+	AddHintText(TEXT("ControlsSeparatorText"), TEXT("/"), SeparatorColor, FMargin(0.0f, 0.0f, 18.0f, 0.0f));
+	AddHintText(TEXT("RotateKeyText"), TEXT("[마우스 클릭]"), KeyColor, FMargin(0.0f, 0.0f, 8.0f, 0.0f));
+	AddHintText(TEXT("RotateActionText"), TEXT("회전하기"), LabelColor, FMargin(0.0f));
 	return TabletDesigner::SaveAndCompile(Blueprint);
 }
 

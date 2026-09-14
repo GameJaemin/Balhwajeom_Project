@@ -11,7 +11,7 @@ class UTabletWidgetBlueprintLibrary : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 
 public:
-	/** Rebuilds the item inspector as a centered, text-free preview. */
+	/** Rebuilds the item inspector as a centered preview with an editable bottom controls hint. */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Inspection")
 	static bool CenterItemInspectionWidget();
 

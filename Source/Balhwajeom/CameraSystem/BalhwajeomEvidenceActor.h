@@ -139,6 +139,12 @@ protected:
 	/** Applies the state's mesh and plays its one-shot effect. Only the mesh is applied on a load. */
 	void ApplyStateVisuals(const struct FEvidenceStateDefinition& State, bool bInitialApply);
 
+	/** Names a state whose mesh sits on a different pivot than the one it replaced. */
+	void ReportStateMeshPivotShift(
+		const struct FEvidenceStateDefinition& State,
+		const UStaticMesh* PreviousMesh,
+		const UStaticMesh* NewMesh) const;
+
 	UFUNCTION()
 	void HandleEvidenceStateChanged(FGuid ChangedInstanceID, FName PreviousStateID, FName NewStateID);
 
@@ -242,6 +248,10 @@ protected:
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Evidence|Progression")
 	bool bProgressionAvailable = true;
+
+	/** Evidence mesh placement as authored, i.e. the origin StateMeshOffset is measured from. */
+	FVector EvidenceMeshBaselineRelativeLocation = FVector::ZeroVector;
+	bool bEvidenceMeshBaselineCaptured = false;
 
 	/** Completion condition that changes this object's normal F interaction into removal. */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Evidence|Progression")

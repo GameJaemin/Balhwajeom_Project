@@ -73,6 +73,16 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 	TSoftObjectPtr<UStaticMesh> StateMesh;
 
 	/**
+	 * Local offset applied to the evidence mesh while this state is active, on top of the
+	 * placement authored in the level. Swapping StateMesh keeps the component transform, so a
+	 * mesh exported on a different pivot lands somewhere else; this nudges it back without
+	 * touching the art or the other states. Zero means "use the authored placement", which is
+	 * what every state wants once its meshes share a pivot.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Presentation", meta = (Units = "cm"))
+	FVector StateMeshOffset = FVector::ZeroVector;
+
+	/**
 	 * Niagara system played once when this state is entered. It is deliberately skipped when a
 	 * level load restores an already-advanced state, so a one-shot burst does not replay.
 	 */
