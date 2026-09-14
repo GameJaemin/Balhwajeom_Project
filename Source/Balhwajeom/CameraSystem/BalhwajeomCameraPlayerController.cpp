@@ -7,13 +7,17 @@
 #include "BalhwajeomPhotoCameraComponent.h"
 #include "Blueprint/GameViewportSubsystem.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/Image.h"
 #include "Components/TextBlock.h"
+#include "Engine/Texture2D.h"
 #include "Interaction/ItemInspectionIntegration.h"
 #include "Components/Widget.h"
 #include "Interaction/DoorInteractionComponent.h"
 #include "Interaction/InspectionComponent.h"
 #include "Interaction/PlayerInteractionComponent.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
+#include "Story/StoryStateSubsystem.h"
+#include "Story/StoryStateTags.h"
 #include "Tablet/BalhwajeomTabletComponent.h"
 #include "Tutorial/BalhwajeomTutorialDirector.h"
 #include "Tutorial/BalhwajeomTutorialFocusWidget.h"
@@ -49,6 +53,20 @@ ABalhwajeomCameraPlayerController::ABalhwajeomCameraPlayerController()
 	{
 		BedMemoryHUDWidgetClass = DefaultBedMemoryHUDClass.Class;
 	}
+
+	static ConstructorHelpers::FObjectFinder<UTexture2D> CameraIdleTextureFinder(
+		TEXT("/Game/Balhwajeom/UI/JE/IMG/Room/cam_button_idle.cam_button_idle"));
+	static ConstructorHelpers::FObjectFinder<UTexture2D> CameraClickedTextureFinder(
+		TEXT("/Game/Balhwajeom/UI/JE/IMG/Room/cam_button_click.cam_button_click"));
+	static ConstructorHelpers::FObjectFinder<UTexture2D> TabletIdleTextureFinder(
+		TEXT("/Game/Balhwajeom/UI/JE/IMG/Room/tab_button.tab_button"));
+	static ConstructorHelpers::FObjectFinder<UTexture2D> TabletClickedTextureFinder(
+		TEXT("/Game/Balhwajeom/UI/JE/IMG/Room/tab_button_click.tab_button_click"));
+
+	CameraButtonIdleTexture = CameraIdleTextureFinder.Object;
+	CameraButtonClickedTexture = CameraClickedTextureFinder.Object;
+	TabletButtonIdleTexture = TabletIdleTextureFinder.Object;
+	TabletButtonClickedTexture = TabletClickedTextureFinder.Object;
 }
 
 void ABalhwajeomCameraPlayerController::BeginPlay()
@@ -66,6 +84,8 @@ void ABalhwajeomCameraPlayerController::BeginPlay()
 	}
 
 	EnsurePlayerHUD();
+	BindHudModeEvents();
+	RefreshHudModeIcons();
 	EnsureKeywordCounter();
 	EnsureBedMemoryHUD();
 	EnsureTutorialFocusLayer();
@@ -74,10 +94,21 @@ void ABalhwajeomCameraPlayerController::BeginPlay()
 
 void ABalhwajeomCameraPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (BoundHudStoryStateSubsystem)
+	{
+		BoundHudStoryStateSubsystem->OnStateTagAdded.RemoveDynamic(
+			this, &ThisClass::HandleHudModeTagChanged);
+		BoundHudStoryStateSubsystem->OnStateTagRemoved.RemoveDynamic(
+			this, &ThisClass::HandleHudModeTagChanged);
+	}
+	BoundHudStoryStateSubsystem = nullptr;
+
 	if (BoundInvestigationSubsystem)
 	{
 		BoundInvestigationSubsystem->OnWordAcquired.RemoveDynamic(
 			this, &ABalhwajeomCameraPlayerController::HandleWordAcquired);
+		BoundInvestigationSubsystem->OnPhotoGalleryReset.RemoveDynamic(
+			this, &ABalhwajeomCameraPlayerController::HandleInvestigationPhotoGalleryReset);
 	}
 	BoundInvestigationSubsystem = nullptr;
 
@@ -113,6 +144,81 @@ void ABalhwajeomCameraPlayerController::EnsurePlayerHUD()
 		PlayerHUDWidget->SetVisibility(
 			bGameplayPresentationEnabled ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 		PlayerHUDWidget->AddToViewport(0);
+		RefreshHudModeIcons();
+	}
+}
+
+void ABalhwajeomCameraPlayerController::BindHudModeEvents()
+{
+	UStoryStateSubsystem* StoryState = GetGameInstance()
+		? GetGameInstance()->GetSubsystem<UStoryStateSubsystem>()
+		: nullptr;
+	if (!StoryState || BoundHudStoryStateSubsystem == StoryState)
+	{
+		return;
+	}
+
+	if (BoundHudStoryStateSubsystem)
+	{
+		BoundHudStoryStateSubsystem->OnStateTagAdded.RemoveDynamic(
+			this, &ThisClass::HandleHudModeTagChanged);
+		BoundHudStoryStateSubsystem->OnStateTagRemoved.RemoveDynamic(
+			this, &ThisClass::HandleHudModeTagChanged);
+	}
+
+	BoundHudStoryStateSubsystem = StoryState;
+	BoundHudStoryStateSubsystem->OnStateTagAdded.AddUniqueDynamic(
+		this, &ThisClass::HandleHudModeTagChanged);
+	BoundHudStoryStateSubsystem->OnStateTagRemoved.AddUniqueDynamic(
+		this, &ThisClass::HandleHudModeTagChanged);
+}
+
+void ABalhwajeomCameraPlayerController::HandleHudModeTagChanged(FGameplayTag StateTag)
+{
+	if (StateTag.MatchesTag(BalhwajeomGameplayTags::Runtime_Player_Mode))
+	{
+		RefreshHudModeIcons();
+	}
+}
+
+void ABalhwajeomCameraPlayerController::RefreshHudModeIcons()
+{
+	if (!PlayerHUDWidget)
+	{
+		return;
+	}
+
+	const UStoryStateSubsystem* StoryState = BoundHudStoryStateSubsystem
+		? BoundHudStoryStateSubsystem.Get()
+		: (GetGameInstance() ? GetGameInstance()->GetSubsystem<UStoryStateSubsystem>() : nullptr);
+	const bool bPhotoCameraMode = StoryState && StoryState->HasStateTagExact(
+		BalhwajeomGameplayTags::Runtime_Player_Mode_PhotoCamera);
+	const bool bTabletMode = StoryState && StoryState->HasStateTagExact(
+		BalhwajeomGameplayTags::Runtime_Player_Mode_Tablet);
+
+	if (UImage* CameraImage = Cast<UImage>(
+		PlayerHUDWidget->GetWidgetFromName(CameraButtonImageName)))
+	{
+		UTexture2D* Texture = bPhotoCameraMode
+			? CameraButtonClickedTexture.Get()
+			: CameraButtonIdleTexture.Get();
+		if (Texture)
+		{
+			// Preserve the size authored in WBP_HUID; only replace its resource.
+			CameraImage->SetBrushFromTexture(Texture, false);
+		}
+	}
+
+	if (UImage* TabletImage = Cast<UImage>(
+		PlayerHUDWidget->GetWidgetFromName(TabletButtonImageName)))
+	{
+		UTexture2D* Texture = bTabletMode
+			? TabletButtonClickedTexture.Get()
+			: TabletButtonIdleTexture.Get();
+		if (Texture)
+		{
+			TabletImage->SetBrushFromTexture(Texture, false);
+		}
 	}
 }
 
@@ -146,10 +252,14 @@ void ABalhwajeomCameraPlayerController::EnsureKeywordCounter()
 		{
 			BoundInvestigationSubsystem->OnWordAcquired.RemoveDynamic(
 				this, &ABalhwajeomCameraPlayerController::HandleWordAcquired);
+			BoundInvestigationSubsystem->OnPhotoGalleryReset.RemoveDynamic(
+				this, &ABalhwajeomCameraPlayerController::HandleInvestigationPhotoGalleryReset);
 		}
 		BoundInvestigationSubsystem = Investigation;
 		BoundInvestigationSubsystem->OnWordAcquired.AddUniqueDynamic(
 			this, &ABalhwajeomCameraPlayerController::HandleWordAcquired);
+		BoundInvestigationSubsystem->OnPhotoGalleryReset.AddUniqueDynamic(
+			this, &ABalhwajeomCameraPlayerController::HandleInvestigationPhotoGalleryReset);
 		RefreshKeywordCounter();
 	}
 }
@@ -172,6 +282,15 @@ void ABalhwajeomCameraPlayerController::HandleWordAcquired(
 		bPhotoKeywordCountRefreshPending = true;
 		return;
 	}
+	RefreshKeywordCounter();
+}
+
+void ABalhwajeomCameraPlayerController::HandleInvestigationPhotoGalleryReset()
+{
+	// ResetPersistentPhotoGallery() drops every photo-sourced word without going through
+	// AcquireWord, so it never fires OnWordAcquired; without this, the counter is left
+	// showing whatever total was loaded from the previous session's save.
+	bPhotoKeywordCountRefreshPending = false;
 	RefreshKeywordCounter();
 }
 
