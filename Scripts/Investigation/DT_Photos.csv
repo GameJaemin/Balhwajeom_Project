@@ -1,4 +1,4 @@
-Name,PhotoID,PhotoName,DescriptionSource,CustomDescription,PhotoSentenceID,WorldStoryCues ,StoryVoice,GrantedWordIDs,CharacterID,EvidenceSentenceID
+Name,PhotoID,PhotoName,DescriptionSource,CustomDescription,PhotoSentenceID,WorldStoryCues,StoryVoice,GrantedWordIDs,CharacterID,EvidenceSentenceID
 PHOTO_01_001,PHOTO_01_001,첫째 형 돌 사진,Custom,불에 그을린 흔적이 남아 있는 형의 돌사진,,"((Text=""여기 봐야지~"",StartTimeSeconds=0.0),(Text=""우리 아들~ 이쪽 보세요~"",StartTimeSeconds=1.3))",BROTHER_BABY,(WORD_01_001),CHARACTER_SISTER,
 PHOTO_01_002,PHOTO_01_002,여동생과 노는 일상사진,Custom,"불에 그을린 흔적이 남아 있는 막내가 태어난 지 얼마 안 되었을 때, 아버지가 찍어준 사진",,"((Text=""이제 오빠 다 됐네"",StartTimeSeconds=0.0),(Text=""안 무거워?"",StartTimeSeconds=1.0),(Text=""응 괜찮아."",StartTimeSeconds=2.3))",BROTHER_SISTER,(WORD_01_002),CHARACTER_SISTER,
 PHOTO_01_003,PHOTO_01_003,가족 사진,Custom,,SENT_01_PHOTO_001,"((Text=""다들 좀 붙어봐라."",StartTimeSeconds=0.0),(Text=""우리 공주! 이리와~"",StartTimeSeconds=1.5),(Text=""아. 징그러워!"",StartTimeSeconds=3.0))",TAKE_PICTURE,(WORD_01_003),CHARACTER_SISTER,SENT_01_STATEMENT_02
@@ -37,4 +37,4 @@ PHOTO_01_023,PHOTO_01_023,거울,Custom,산산조각이 난 전신거울.,,"((Te
 PHOTO_01_024,PHOTO_01_024,바닥 쪽지,Custom,영수증으로 만든 쪽지.,,"((Text=""여기 또 있네. 엄마 전용 메모지."",StartTimeSeconds=0.0))",MOTHER_FLOORNOTE,(),CHARACTER_SISTER,
 PHOTO_01_025,PHOTO_01_025,책장 쪽지,Custom,영수증으로 만든 쪽지.,,"((Text=""엄마가 두고 간 쪽지 읽어 봤어?"",StartTimeSeconds=0.0),(Text=""엄마... 그냥 메세지를 보내..."",StartTimeSeconds=1.9),
 (Text=""엄마는 이게 더 좋아."",StartTimeSeconds=3.6))",MOTHER_BOOKSHELFNOTE,(),CHARACTER_SISTER,
-,PHOTO_01_027,책장,Custom,책장,,"((Text=""책장 책장 책장."",StartTimeSeconds=0.0))",DESK,(),CHARACTER_SISTER,
+PHOTO_01_027,PHOTO_01_027,책장,Custom,책장,,"((Text=""책장 책장 책장."",StartTimeSeconds=0.0))",DESK,(),CHARACTER_SISTER,

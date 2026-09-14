@@ -429,11 +429,19 @@ bool FInvestigationChapter01PhaseActivationDataTest::RunTest(
 	};
 	const TArray<FName> Phase02Objects = {
 		TEXT("OBJ_01_004"), TEXT("OBJ_01_022"), TEXT("OBJ_01_021"),
-		TEXT("OBJ_01_025"), TEXT("OBJ_01_015"), TEXT("OBJ_01_023")
+		TEXT("OBJ_01_025"), TEXT("OBJ_01_024"), TEXT("OBJ_01_023"),
+		TEXT("OBJ_01_015")
 	};
 	const TArray<FName> Phase03Objects = {
 		TEXT("OBJ_01_017"), TEXT("OBJ_01_016")
 	};
+	const FGameplayTag TutorialDoneTag = FGameplayTag::RequestGameplayTag(
+		FName(TEXT("Tutorial.Stage.Done")), false);
+	if (!TestTrue(TEXT("Tutorial completion tag should be registered"),
+		TutorialDoneTag.IsValid()))
+	{
+		return false;
+	}
 
 	for (const FName ObjectID : Phase01Objects)
 	{
@@ -443,9 +451,9 @@ bool FInvestigationChapter01PhaseActivationDataTest::RunTest(
 			FString::Printf(TEXT("%s definition should exist"), *ObjectID.ToString()),
 			Definition))
 		{
-			TestFalse(
-				FString::Printf(TEXT("%s should be active from phase 01 start"), *ObjectID.ToString()),
-				Definition->RequiredActivationTag.IsValid());
+			TestTrue(
+				FString::Printf(TEXT("%s should require tutorial completion"), *ObjectID.ToString()),
+				Definition->RequiredActivationTag == TutorialDoneTag);
 		}
 	}
 

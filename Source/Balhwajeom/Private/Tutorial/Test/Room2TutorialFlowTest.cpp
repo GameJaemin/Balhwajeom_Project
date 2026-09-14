@@ -177,7 +177,16 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 	// BeginPlay already auto-started it; this is a no-op that documents the entry point.
 	Director->StartFlow();
 
-	// --- Step 0: only F works ----------------------------------------------------------
+	// The live Room2 asset begins with a presentation-only opening step that a Blueprint
+	// advances. TabletIntro already has its completion state in this fixture and therefore
+	// fast-forwards immediately to DustTeach after the opening is advanced.
+	TestTrue(TEXT("The flow starts on its opening presentation step"),
+		Director->IsFlowActive());
+	TestEqual(TEXT("The opening presentation step intentionally has no ID"),
+		Director->GetCurrentStepID(), NAME_None);
+	Director->AdvanceStep();
+
+	// --- DustTeach: only F works -------------------------------------------------------
 	TestEqual(TEXT("The flow starts on DustTeach"),
 		Director->GetCurrentStepID(), FName(TEXT("DustTeach")));
 	// With no text on screen, the blinking [F] prompt is the entire instruction.
@@ -304,6 +313,10 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 
 	TestEqual(TEXT("Hearing all three conversations reaches Done"),
 		Director->GetCurrentStepID(), FName(TEXT("Done")));
+	const FGameplayTag TutorialDoneTag = FGameplayTag::RequestGameplayTag(
+		FName(TEXT("Tutorial.Stage.Done")), false);
+	TestTrue(TEXT("Done records tutorial completion in story state"),
+		TutorialDoneTag.IsValid() && StoryState->HasStateTagExact(TutorialDoneTag));
 	TestTrue(TEXT("Done unlocks the exit door"), Door->IsUnlocked());
 	TestTrue(TEXT("An unlocked door offers its interaction"), Door->CanInteract());
 	TestEqual(TEXT("Done leaves no dim on screen"),
