@@ -49,6 +49,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool RedesignTabletPhotoWidget();
 
+	/** Rebuilds WBP_Messenger as the static four-room UI using the final messenger artwork. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
+	static bool RedesignMessengerWidget();
+
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool InspectTabletWidgetBlueprint();
 

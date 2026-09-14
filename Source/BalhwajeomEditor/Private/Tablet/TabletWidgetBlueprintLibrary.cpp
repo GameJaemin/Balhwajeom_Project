@@ -85,6 +85,13 @@ namespace TabletDesigner
 	const TCHAR* MessengerCatalogAssetName = TEXT("DA_MessengerCatalog");
 	const TCHAR* MessengerCatalogAssetPath =
 		TEXT("/Game/Balhwajeom/Data/Messenger/DA_MessengerCatalog.DA_MessengerCatalog");
+	const TCHAR* MessengerBackgroundPath = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/messenger_BG.messenger_BG");
+	const TCHAR* MessengerDadPath = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/messenger_dad.messenger_dad");
+	const TCHAR* MessengerMotherPath = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/messenger_mom.messenger_mom");
+	const TCHAR* MessengerSisterPath = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/messenger_sis.messenger_sis");
+	const TCHAR* MessengerBrotherPath = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/messenger_bro.messenger_bro");
+	const TCHAR* MessengerSelectedPath = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/messenger_selected.messenger_selected");
+	const TCHAR* MessengerScrollPath = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/messenger_scroll.messenger_scroll");
 	const TCHAR* InternetAssetName = TEXT("WBP_Internet");
 	const TCHAR* InternetAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_Internet.WBP_Internet");
 	const TCHAR* InternetClassPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_Internet.WBP_Internet_C");
@@ -1019,58 +1026,58 @@ namespace TabletDesigner
 
 		void BuildMessenger() const
 		{
+			// Follow the fixed-size artwork pattern used by WBP_TabletPhoto. The 650x699
+			// composition scales as one unit inside the tablet page without distortion.
+			UScaleBox* Scale = Make<UScaleBox>(TEXT("ScaleBox_Wrapper"));
+			Scale->SetStretch(EStretch::ScaleToFit);
+			USizeBox* Size = Make<USizeBox>(TEXT("SizeBox_Wrapper"));
+			Size->SetWidthOverride(650.0f);
+			Size->SetHeightOverride(699.0f);
+			Scale->SetContent(Size);
+
 			UCanvasPanel* Root = Make<UCanvasPanel>(TEXT("Canvas_MessengerRoot"));
-			FillCanvas(Root, MakeColorImage(
-				TEXT("IMG_MessengerBackground"), FLinearColor(0.095f, 0.065f, 0.042f, 0.985f)));
+			Size->SetContent(Root);
+			FillCanvas(Root, MakeTextureImage(TEXT("IMG_MessengerBackground"), MessengerBackgroundPath, false), 0);
 
-			Place(Root, MakeTextButton(TEXT("BTN_Back"), TEXT("←"), 38), 38, 76, 86, 64, 5);
-			Place(Root, MakeText(TEXT("TXT_MessengerTitle"), TEXT("메신저"), 35), 145, 82, 360, 55, 5);
-			Place(
-				Root,
-				MakeText(TEXT("TXT_ArchiveLabel"), TEXT("과거 대화 · 읽기 전용"), 18, WarmMuted),
-				1110, 92, 260, 36, 5);
+			UImage* Selection = MakeTextureImage(TEXT("IMG_RoomSelection"), MessengerSelectedPath, true);
+			Selection->SetVisibility(ESlateVisibility::HitTestInvisible);
+			Place(Root, Selection, 59.0f, 110.0f, 258.0f, 58.0f, 1);
 
-			UBorder* RoomPanel = MakeBorder(
-				TEXT("BRD_RoomPanel"), FLinearColor(0.12f, 0.082f, 0.052f, 0.98f), FMargin(18.0f));
-			UCanvasPanel* RoomCanvas = Make<UCanvasPanel>(TEXT("Canvas_RoomPanel"));
-			RoomPanel->SetContent(RoomCanvas);
-			Place(RoomCanvas, MakeText(TEXT("TXT_RoomListTitle"), TEXT("대화방"), 22), 6, 0, 300, 42);
-			UScrollBox* RoomList = Make<UScrollBox>(TEXT("SB_ChatRoomList"), true);
-			RoomList->SetAnimateWheelScrolling(true);
-			RoomList->SetScrollBarVisibility(ESlateVisibility::Visible);
-			Place(RoomCanvas, RoomList, 0, 52, 365, 690);
-			Place(Root, RoomPanel, 36, 154, 405, 806, 5);
+			auto AddRoom = [this, Root](
+				const TCHAR* ButtonName,
+				const TCHAR* ImageName,
+				const TCHAR* TexturePath,
+				const float Y)
+			{
+				UImage* Row = MakeTextureImage(ImageName, TexturePath, false);
+				Row->SetVisibility(ESlateVisibility::HitTestInvisible);
+				Place(Root, Row, 59.0f, Y, 258.0f, 58.0f, 2);
 
-			UBorder* MessagePanel = MakeBorder(
-				TEXT("BRD_MessagePanel"), FLinearColor(0.14f, 0.095f, 0.058f, 0.98f), FMargin(18.0f));
-			UCanvasPanel* MessageCanvas = Make<UCanvasPanel>(TEXT("Canvas_MessagePanel"));
-			MessagePanel->SetContent(MessageCanvas);
+				// Keep artwork independent from the button. A NoDraw button style can suppress
+				// its content in some UMG render paths, while an overlay hit target is stable.
+				UButton* Button = MakeTransparentButton(ButtonName);
+				Place(Root, Button, 59.0f, Y, 258.0f, 58.0f, 3);
+			};
+			AddRoom(TEXT("BTN_RoomDad"), TEXT("IMG_RoomDad"), MessengerDadPath, 110.0f);
+			AddRoom(TEXT("BTN_RoomMother"), TEXT("IMG_RoomMother"), MessengerMotherPath, 168.0f);
+			AddRoom(TEXT("BTN_RoomSister"), TEXT("IMG_RoomSister"), MessengerSisterPath, 226.0f);
+			AddRoom(TEXT("BTN_RoomBrother"), TEXT("IMG_RoomBrother"), MessengerBrotherPath, 284.0f);
+
 			UTextBlock* CurrentRoomName = MakeText(
-				TEXT("TXT_CurrentRoomName"), TEXT(""), 26, WarmWhite, true);
-			Place(MessageCanvas, CurrentRoomName, 12, 0, 820, 45);
+				TEXT("TXT_CurrentRoomName"), TEXT("아버지"), 16, FLinearColor::Black, true);
+			CurrentRoomName->SetJustification(ETextJustify::Center);
+			CurrentRoomName->SetShadowOffset(FVector2D::ZeroVector);
+			Place(Root, CurrentRoomName, 337.0f, 82.0f, 293.0f, 32.0f, 4);
 
-			UScrollBox* MessageList = Make<UScrollBox>(TEXT("SB_MessageList"), true);
-			MessageList->SetAnimateWheelScrolling(true);
-			MessageList->SetScrollBarVisibility(ESlateVisibility::Visible);
-			Place(MessageCanvas, MessageList, 0, 55, 876, 580);
+			UImage* ScrollThumb = MakeTextureImage(TEXT("IMG_MessengerScroll"), MessengerScrollPath, false);
+			ScrollThumb->SetVisibility(ESlateVisibility::HitTestInvisible);
+			Place(Root, ScrollThumb, 639.0f, 279.0f, 9.0f, 135.0f, 4);
 
-			UTextBlock* Prompt = MakeText(
-				TEXT("TXT_SelectRoomPrompt"), TEXT("대화방을 선택하세요."), 26, WarmMuted, true);
-			Prompt->SetJustification(ETextJustify::Center);
-			Prompt->SetVisibility(ESlateVisibility::HitTestInvisible);
-			Place(MessageCanvas, Prompt, 90, 290, 696, 60, 2);
+			// messenger_BG already contains the close glyph. Keep an invisible button over it
+			// so the native tablet back-navigation event remains intact.
+			Place(Root, MakeTransparentButton(TEXT("BTN_Back")), 585.0f, 0.0f, 65.0f, 53.0f, 10);
 
-			UBorder* DisabledInput = MakeBorder(
-				TEXT("BRD_DisabledInputArea"), FLinearColor(0.085f, 0.06f, 0.042f, 1.0f), FMargin(20.0f));
-			DisabledInput->SetVisibility(ESlateVisibility::HitTestInvisible);
-			UTextBlock* DisabledText = MakeText(
-				TEXT("TXT_DisabledInput"), TEXT("현재 대화가 불가능합니다"), 20, WarmMuted);
-			DisabledText->SetJustification(ETextJustify::Center);
-			DisabledInput->SetContent(DisabledText);
-			Place(MessageCanvas, DisabledInput, 0, 660, 876, 82);
-			Place(Root, MessagePanel, 462, 154, 942, 806, 5);
-
-			Tree->RootWidget = Root;
+			Tree->RootWidget = Scale;
 		}
 
 		static UVerticalBoxSlot* AddInternetBlock(
@@ -1801,34 +1808,12 @@ namespace TabletDesigner
 
 	bool BuildMessengerWidgetBlueprints(const bool bRedesignExisting)
 	{
-		return BuildWidgetBlueprint(TEXT("WBP_MessengerDateSeparator"),
-			TEXT("/Game/Balhwajeom/UI/Tablet/WBP_MessengerDateSeparator.WBP_MessengerDateSeparator"),
-			UBalhwajeomMessengerDateSeparator::StaticClass(), bRedesignExisting,
-			[](const FBuilder& Builder) { Builder.BuildDateSeparator(); })
-			&& BuildWidgetBlueprint(
-			KeywordAssetName,
-			KeywordAssetPath,
-			UBalhwajeomMessengerKeywordWidget::StaticClass(),
+		return BuildWidgetBlueprint(
+			MessengerAssetName,
+			MessengerAssetPath,
+			UBalhwajeomMessengerWidget::StaticClass(),
 			bRedesignExisting,
-			[](const FBuilder& Builder) { Builder.BuildMessengerKeyword(); })
-			&& BuildWidgetBlueprint(
-				RoomAssetName,
-				RoomAssetPath,
-				UBalhwajeomMessengerRoomWidget::StaticClass(),
-				bRedesignExisting,
-				[](const FBuilder& Builder) { Builder.BuildMessengerRoom(); })
-			&& BuildWidgetBlueprint(
-				MessageAssetName,
-				MessageAssetPath,
-				UBalhwajeomMessengerMessageWidget::StaticClass(),
-				bRedesignExisting,
-				[](const FBuilder& Builder) { Builder.BuildMessengerMessage(); })
-			&& BuildWidgetBlueprint(
-				MessengerAssetName,
-				MessengerAssetPath,
-				UBalhwajeomMessengerWidget::StaticClass(),
-				bRedesignExisting,
-				[](const FBuilder& Builder) { Builder.BuildMessenger(); });
+			[](const FBuilder& Builder) { Builder.BuildMessenger(); });
 	}
 
 	bool ValidateInternetKeywordData()
@@ -2737,8 +2722,7 @@ bool UTabletWidgetBlueprintLibrary::SetClassDefaultTexture(
 bool UTabletWidgetBlueprintLibrary::CreateTabletWidgetBlueprint()
 {
 	using namespace TabletDesigner;
-	if (!CreateMessengerDataAssetsInternal()
-		|| !BuildMessengerWidgetBlueprints(false)
+	if (!BuildMessengerWidgetBlueprints(false)
 		|| !BuildInternetWidgetBlueprints(false)
 		|| !BuildTabletDesignerWidgets(false)
 		|| !BuildWidgetBlueprint(
@@ -2772,8 +2756,7 @@ bool UTabletWidgetBlueprintLibrary::CreateTabletWidgetBlueprint()
 bool UTabletWidgetBlueprintLibrary::RedesignTabletWidgetBlueprint()
 {
 	using namespace TabletDesigner;
-	if (!CreateMessengerDataAssetsInternal()
-		|| !BuildMessengerWidgetBlueprints(true)
+	if (!BuildMessengerWidgetBlueprints(true)
 		|| !BuildInternetWidgetBlueprints(true)
 		|| !BuildTabletDesignerWidgets(false)
 		|| !BuildWidgetBlueprint(
@@ -3995,4 +3978,10 @@ bool UTabletWidgetBlueprintLibrary::RedesignTabletPhotoWidget()
 		UBalhwajeomTabletDetailWidget::StaticClass(),
 		true,
 		[](const FBuilder& Builder) { Builder.BuildDetailWidget(false); });
+}
+
+bool UTabletWidgetBlueprintLibrary::RedesignMessengerWidget()
+{
+	using namespace TabletDesigner;
+	return BuildMessengerWidgetBlueprints(true);
 }

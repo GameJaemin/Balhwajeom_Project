@@ -1,33 +1,40 @@
 #include "Tablet/BalhwajeomMessengerWidget.h"
 
 #include "Components/Button.h"
-#include "Components/ScrollBox.h"
+#include "Components/Image.h"
 #include "Components/TextBlock.h"
-#include "Tablet/BalhwajeomMessengerDataAssets.h"
-#include "Tablet/BalhwajeomMessengerDateSeparator.h"
-#include "Tablet/BalhwajeomMessengerMessageWidget.h"
-#include "Tablet/BalhwajeomMessengerRoomWidget.h"
-#include "Engine/GameInstance.h"
-#include "Investigation/BalhwajeomInvestigationSubsystem.h"
-#include "Investigation/WordDefinitions.h"
 
 namespace
 {
-	const TCHAR* RoomWidgetClassPath =
-		TEXT("/Game/Balhwajeom/UI/Tablet/WBP_MessengerRoom.WBP_MessengerRoom_C");
-	const TCHAR* MessageWidgetClassPath =
-		TEXT("/Game/Balhwajeom/UI/Tablet/WBP_MessengerMessage.WBP_MessengerMessage_C");
-	const TCHAR* MessengerCatalogPath =
-		TEXT("/Game/Balhwajeom/Data/Messenger/DA_MessengerCatalog.DA_MessengerCatalog");
-}
+	const FString DadRoomID(TEXT("Dad"));
+	const FString MotherRoomID(TEXT("Mother"));
+	const FString SisterRoomID(TEXT("Sister"));
+	const FString BrotherRoomID(TEXT("Brother"));
 
-UBalhwajeomMessengerWidget::UBalhwajeomMessengerWidget(const FObjectInitializer& ObjectInitializer)
-	: Super(ObjectInitializer)
-{
-	DateSeparatorClass = TSoftClassPtr<UBalhwajeomMessengerDateSeparator>(FSoftObjectPath(
-		TEXT("/Game/Balhwajeom/UI/Tablet/WBP_MessengerDateSeparator.WBP_MessengerDateSeparator_C")));
-	MessengerData = TSoftObjectPtr<UBalhwajeomMessengerCatalogDataAsset>(
-		FSoftObjectPath(MessengerCatalogPath));
+	bool IsStaticRoomID(const FString& RoomID)
+	{
+		return RoomID == DadRoomID
+			|| RoomID == MotherRoomID
+			|| RoomID == SisterRoomID
+			|| RoomID == BrotherRoomID;
+	}
+
+	FText RoomDisplayName(const FString& RoomID)
+	{
+		if (RoomID == DadRoomID) return NSLOCTEXT("Messenger", "DadRoom", "아버지");
+		if (RoomID == MotherRoomID) return NSLOCTEXT("Messenger", "MotherRoom", "어머니");
+		if (RoomID == SisterRoomID) return NSLOCTEXT("Messenger", "SisterRoom", "막내");
+		if (RoomID == BrotherRoomID) return NSLOCTEXT("Messenger", "BrotherRoom", "형");
+		return FText::GetEmpty();
+	}
+
+	float SelectionOffset(const FString& RoomID)
+	{
+		if (RoomID == MotherRoomID) return 58.0f;
+		if (RoomID == SisterRoomID) return 116.0f;
+		if (RoomID == BrotherRoomID) return 174.0f;
+		return 0.0f;
+	}
 }
 
 void UBalhwajeomMessengerWidget::NativeOnInitialized()
@@ -38,434 +45,85 @@ void UBalhwajeomMessengerWidget::NativeOnInitialized()
 	{
 		BTN_Back->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBackClicked);
 	}
-	if (UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem())
-	{
-		Investigation->OnWordAcquired.AddUniqueDynamic(this, &ThisClass::HandleWordAcquired);
-	}
+	BindRoomButtons();
 	InitializeMessenger();
-}
-
-void UBalhwajeomMessengerWidget::NativeDestruct()
-{
-	if (UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem())
-	{
-		Investigation->OnWordAcquired.RemoveDynamic(this, &ThisClass::HandleWordAcquired);
-	}
-	Super::NativeDestruct();
 }
 
 void UBalhwajeomMessengerWidget::InitializeMessenger()
 {
-	if (bInitialized)
+	BindRoomButtons();
+	if (CurrentRoomID.IsEmpty())
 	{
-		return;
+		CurrentRoomID = DadRoomID;
 	}
-
-	CurrentUnreadCounts.Reset();
-	ValidRoomIDs.Reset();
-	CurrentRoomID.Reset();
-	LoadedMessengerData = MessengerData.LoadSynchronous();
-	if (!LoadedMessengerData)
-	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT("Messenger initialization failed: catalog '%s' could not be loaded."),
-			*MessengerData.ToSoftObjectPath().ToString());
-		bInitialized = true;
-		CreateRoomList();
-		BroadcastUnreadCount();
-		return;
-	}
-
-	TSet<FString> SeenRoomIDs;
-	for (const UBalhwajeomMessengerRoomDataAsset* Room : LoadedMessengerData->Rooms)
-	{
-		if (!Room)
-		{
-			UE_LOG(LogTemp, Error, TEXT("Messenger room ignored: catalog contains an empty asset reference."));
-			continue;
-		}
-		if (Room->RoomID.IsEmpty())
-		{
-			UE_LOG(LogTemp, Error, TEXT("Messenger room ignored: RoomID is empty."));
-			continue;
-		}
-		if (SeenRoomIDs.Contains(Room->RoomID))
-		{
-			UE_LOG(LogTemp, Error, TEXT("Messenger room ignored: duplicate RoomID '%s'."), *Room->RoomID);
-			ValidRoomIDs.Remove(Room->RoomID);
-			CurrentUnreadCounts.Remove(Room->RoomID);
-			continue;
-		}
-
-		SeenRoomIDs.Add(Room->RoomID);
-		if (Room->Messages.IsEmpty())
-		{
-			UE_LOG(LogTemp, Error, TEXT("Messenger room ignored: '%s' has no archived messages."), *Room->RoomID);
-			continue;
-		}
-
-		if (Room->InitialUnreadCount < 0 || Room->InitialUnreadCount > Room->Messages.Num())
-		{
-			UE_LOG(
-				LogTemp,
-				Error,
-				TEXT("Messenger room '%s' has invalid InitialUnreadCount %d for %d messages; clamping runtime state."),
-				*Room->RoomID,
-				Room->InitialUnreadCount,
-				Room->Messages.Num());
-		}
-
-		ValidRoomIDs.Add(Room->RoomID);
-		CurrentUnreadCounts.Add(
-			Room->RoomID,
-			FMath::Clamp(Room->InitialUnreadCount, 0, Room->Messages.Num()));
-	}
-
 	bInitialized = true;
-	CreateRoomList();
-	if (SB_MessageList)
-	{
-		SB_MessageList->ClearChildren();
-	}
-	if (TXT_SelectRoomPrompt)
-	{
-		TXT_SelectRoomPrompt->SetVisibility(ESlateVisibility::HitTestInvisible);
-	}
-	if (TXT_CurrentRoomName)
-	{
-		TXT_CurrentRoomName->SetText(FText::GetEmpty());
-	}
-	BroadcastUnreadCount();
+	RefreshSelection();
+	OnTotalUnreadChanged.Broadcast(0);
 }
 
 bool UBalhwajeomMessengerWidget::SelectRoomByID(const FString& RoomID)
 {
-	const UBalhwajeomMessengerRoomDataAsset* Room = FindUniqueRoom(RoomID);
-	if (!Room)
+	if (!IsStaticRoomID(RoomID))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Messenger selection ignored: RoomID '%s' was not found or is ambiguous."), *RoomID);
 		return false;
 	}
 
 	CurrentRoomID = RoomID;
-	UpdateRoomSelection();
-	LoadMessages(*Room);
-
-	CurrentUnreadCounts.FindOrAdd(RoomID) = 0;
-	if (TObjectPtr<UBalhwajeomMessengerRoomWidget>* RoomWidget = RoomWidgets.Find(RoomID))
-	{
-		if (*RoomWidget)
-		{
-			(*RoomWidget)->SetUnreadCount(0);
-		}
-	}
-	BroadcastUnreadCount();
+	RefreshSelection();
+	OnRoomSelectionChanged.Broadcast(CurrentRoomID);
 	return true;
 }
 
 int32 UBalhwajeomMessengerWidget::GetCurrentUnreadCount(const FString& RoomID) const
 {
-	if (const int32* Count = CurrentUnreadCounts.Find(RoomID))
-	{
-		return *Count;
-	}
+	(void)RoomID;
 	return 0;
-}
-
-int32 UBalhwajeomMessengerWidget::GetTotalUnreadCount() const
-{
-	int32 Total = 0;
-	for (const TPair<FString, int32>& Pair : CurrentUnreadCounts)
-	{
-		Total += Pair.Value;
-	}
-	return Total;
-}
-
-int32 UBalhwajeomMessengerWidget::GetDisplayedRoomCount() const
-{
-	return SB_ChatRoomList ? SB_ChatRoomList->GetChildrenCount() : 0;
-}
-
-int32 UBalhwajeomMessengerWidget::GetDisplayedMessageCount() const
-{
-	int32 Count = 0;
-	if (SB_MessageList)
-	{
-		for (UWidget* Child : SB_MessageList->GetAllChildren())
-		{
-			Count += Cast<UBalhwajeomMessengerMessageWidget>(Child) != nullptr ? 1 : 0;
-		}
-	}
-	return Count;
 }
 
 UBalhwajeomMessengerRoomWidget* UBalhwajeomMessengerWidget::GetDisplayedRoomWidget(
 	const FString& RoomID) const
 {
-	if (const TObjectPtr<UBalhwajeomMessengerRoomWidget>* RoomWidget = RoomWidgets.Find(RoomID))
-	{
-		return *RoomWidget;
-	}
+	(void)RoomID;
 	return nullptr;
 }
 
 UBalhwajeomMessengerMessageWidget* UBalhwajeomMessengerWidget::GetDisplayedMessageWidget(
 	const int32 Index) const
 {
-	int32 MessageIndex = 0;
-	if (SB_MessageList && Index >= 0)
-	{
-		for (UWidget* Child : SB_MessageList->GetAllChildren())
-		{
-			if (auto* Message = Cast<UBalhwajeomMessengerMessageWidget>(Child))
-			{
-				if (MessageIndex++ == Index)
-				{
-					return Message;
-				}
-			}
-		}
-	}
+	(void)Index;
 	return nullptr;
 }
 
-bool UBalhwajeomMessengerWidget::HasValidRoomData() const
+void UBalhwajeomMessengerWidget::BindRoomButtons()
 {
-	if (!LoadedMessengerData || LoadedMessengerData->Rooms.IsEmpty())
+	if (BTN_RoomDad)
 	{
-		return false;
+		BTN_RoomDad->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleDadClicked);
 	}
-
-	TSet<FString> SeenRoomIDs;
-	for (const UBalhwajeomMessengerRoomDataAsset* Room : LoadedMessengerData->Rooms)
+	if (BTN_RoomMother)
 	{
-		if (!Room
-			|| Room->RoomID.IsEmpty()
-			|| SeenRoomIDs.Contains(Room->RoomID)
-			|| Room->Messages.IsEmpty()
-			|| Room->InitialUnreadCount < 0
-			|| Room->InitialUnreadCount > Room->Messages.Num())
-		{
-			return false;
-		}
-		SeenRoomIDs.Add(Room->RoomID);
+		BTN_RoomMother->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleMotherClicked);
 	}
-	return true;
-}
-
-void UBalhwajeomMessengerWidget::CreateRoomList()
-{
-	RoomWidgets.Reset();
-	if (!SB_ChatRoomList)
+	if (BTN_RoomSister)
 	{
-		return;
+		BTN_RoomSister->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSisterClicked);
 	}
-
-	SB_ChatRoomList->ClearChildren();
-	const TSubclassOf<UBalhwajeomMessengerRoomWidget> ResolvedClass = ResolveRoomWidgetClass();
-	UWorld* World = GetWorld();
-	if (!World || !ResolvedClass)
+	if (BTN_RoomBrother)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Messenger room list could not resolve WBP_MessengerRoom."));
-		return;
-	}
-
-	if (!LoadedMessengerData)
-	{
-		return;
-	}
-
-	for (const UBalhwajeomMessengerRoomDataAsset* Room : LoadedMessengerData->Rooms)
-	{
-		if (!Room || !ValidRoomIDs.Contains(Room->RoomID))
-		{
-			continue;
-		}
-
-		UBalhwajeomMessengerRoomWidget* RoomWidget =
-			CreateWidget<UBalhwajeomMessengerRoomWidget>(World, ResolvedClass);
-		if (!RoomWidget)
-		{
-			continue;
-		}
-
-#if WITH_EDITOR
-		if (!GetOwningLocalPlayer())
-		{
-			RoomWidget->InitializeForAutomatedTest();
-		}
-#endif
-		const FText LastMessagePreview = Room->Messages.Last().Message;
-		RoomWidget->SetupRoom(
-			Room->RoomID,
-			Room->RoomName,
-			LastMessagePreview,
-			GetCurrentUnreadCount(Room->RoomID),
-			Room->RoomID == CurrentRoomID);
-		RoomWidget->OnRoomClicked.AddUniqueDynamic(this, &ThisClass::HandleRoomClicked);
-		SB_ChatRoomList->AddChild(RoomWidget);
-		RoomWidgets.Add(Room->RoomID, RoomWidget);
+		BTN_RoomBrother->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleBrotherClicked);
 	}
 }
 
-void UBalhwajeomMessengerWidget::LoadMessages(const UBalhwajeomMessengerRoomDataAsset& Room)
+void UBalhwajeomMessengerWidget::RefreshSelection()
 {
-	if (!SB_MessageList)
+	if (IMG_RoomSelection)
 	{
-		return;
-	}
-
-	SB_MessageList->ClearChildren();
-	const TSubclassOf<UBalhwajeomMessengerMessageWidget> ResolvedClass = ResolveMessageWidgetClass();
-	UWorld* World = GetWorld();
-	if (!World || !ResolvedClass)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Messenger message list could not resolve WBP_MessengerMessage."));
-		return;
-	}
-
-	const auto SeparatorClass = DateSeparatorClass.LoadSynchronous();
-	FDateTime PreviousDate;
-	bool bFirstMessage = true;
-	for (const FST_MessengerMessage& Message : Room.Messages)
-	{
-		const FDateTime Date = Message.SentAt.GetDate();
-		if (bFirstMessage || Date != PreviousDate)
-		{
-			if (SeparatorClass)
-			{
-				auto* Separator = CreateWidget<UBalhwajeomMessengerDateSeparator>(World, SeparatorClass);
-				if (Separator)
-				{
-					Separator->SetupDate(Message.SentAt);
-					SB_MessageList->AddChild(Separator);
-				}
-			}
-		}
-		bFirstMessage = false;
-		PreviousDate = Date;
-		UBalhwajeomMessengerMessageWidget* MessageWidget =
-			CreateWidget<UBalhwajeomMessengerMessageWidget>(World, ResolvedClass);
-		if (!MessageWidget)
-		{
-			continue;
-		}
-#if WITH_EDITOR
-		if (!GetOwningLocalPlayer())
-		{
-			MessageWidget->InitializeForAutomatedTest();
-		}
-#endif
-		MessageWidget->SetupMessage(Message);
-		MessageWidget->OnKeywordClicked.AddUniqueDynamic(this, &ThisClass::HandleKeywordClicked);
-		if (UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem())
-		{
-			MessageWidget->SetKeywordAcquired(
-				Investigation->HasAcquiredWord(MessageWidget->GetKeywordWordID()));
-		}
-		SB_MessageList->AddChild(MessageWidget);
-	}
-
-	if (TXT_SelectRoomPrompt)
-	{
-		TXT_SelectRoomPrompt->SetVisibility(ESlateVisibility::Collapsed);
+		IMG_RoomSelection->SetRenderTranslation(FVector2D(0.0f, SelectionOffset(CurrentRoomID)));
 	}
 	if (TXT_CurrentRoomName)
 	{
-		TXT_CurrentRoomName->SetText(Room.RoomName);
+		TXT_CurrentRoomName->SetText(RoomDisplayName(CurrentRoomID));
 	}
-	SB_MessageList->ScrollToEnd();
-}
-
-void UBalhwajeomMessengerWidget::UpdateRoomSelection()
-{
-	for (const TPair<FString, TObjectPtr<UBalhwajeomMessengerRoomWidget>>& Pair : RoomWidgets)
-	{
-		if (Pair.Value)
-		{
-			Pair.Value->SetSelected(Pair.Key == CurrentRoomID);
-		}
-	}
-}
-
-const UBalhwajeomMessengerRoomDataAsset* UBalhwajeomMessengerWidget::FindUniqueRoom(
-	const FString& RoomID) const
-{
-	if (RoomID.IsEmpty() || !ValidRoomIDs.Contains(RoomID) || !LoadedMessengerData)
-	{
-		return nullptr;
-	}
-
-	const UBalhwajeomMessengerRoomDataAsset* Match = nullptr;
-	for (const UBalhwajeomMessengerRoomDataAsset* Room : LoadedMessengerData->Rooms)
-	{
-		if (!Room || Room->RoomID != RoomID)
-		{
-			continue;
-		}
-		if (Match)
-		{
-			return nullptr;
-		}
-		Match = Room;
-	}
-	return Match;
-}
-
-TSubclassOf<UBalhwajeomMessengerRoomWidget> UBalhwajeomMessengerWidget::ResolveRoomWidgetClass()
-{
-	if (!RoomWidgetClass)
-	{
-		RoomWidgetClass = LoadClass<UBalhwajeomMessengerRoomWidget>(nullptr, RoomWidgetClassPath);
-	}
-	return RoomWidgetClass;
-}
-
-TSubclassOf<UBalhwajeomMessengerMessageWidget> UBalhwajeomMessengerWidget::ResolveMessageWidgetClass()
-{
-	if (!MessageWidgetClass)
-	{
-		MessageWidgetClass = LoadClass<UBalhwajeomMessengerMessageWidget>(nullptr, MessageWidgetClassPath);
-	}
-	return MessageWidgetClass;
-}
-
-void UBalhwajeomMessengerWidget::BroadcastUnreadCount()
-{
-	OnTotalUnreadChanged.Broadcast(GetTotalUnreadCount());
-}
-
-UBalhwajeomInvestigationSubsystem* UBalhwajeomMessengerWidget::GetInvestigationSubsystem() const
-{
-	UGameInstance* GameInstance = GetGameInstance();
-	return GameInstance ? GameInstance->GetSubsystem<UBalhwajeomInvestigationSubsystem>() : nullptr;
-}
-
-void UBalhwajeomMessengerWidget::RefreshDisplayedKeywordStates()
-{
-	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
-	if (!Investigation || !SB_MessageList)
-	{
-		return;
-	}
-
-	for (UWidget* Child : SB_MessageList->GetAllChildren())
-	{
-		if (UBalhwajeomMessengerMessageWidget* Message =
-			Cast<UBalhwajeomMessengerMessageWidget>(Child))
-		{
-			Message->SetKeywordAcquired(
-				Investigation->HasAcquiredWord(Message->GetKeywordWordID()));
-		}
-	}
-}
-
-void UBalhwajeomMessengerWidget::HandleRoomClicked(const FString& RoomID)
-{
-	SelectRoomByID(RoomID);
 }
 
 void UBalhwajeomMessengerWidget::HandleBackClicked()
@@ -473,40 +131,22 @@ void UBalhwajeomMessengerWidget::HandleBackClicked()
 	OnBackRequested.Broadcast();
 }
 
-void UBalhwajeomMessengerWidget::HandleKeywordClicked(
-	const FName WordID,
-	const FName MessageID)
+void UBalhwajeomMessengerWidget::HandleDadClicked()
 {
-	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
-	if (!Investigation || WordID.IsNone())
-	{
-		return;
-	}
-
-	FWordDefinition Definition;
-	if (!Investigation->GetWordDefinition(WordID, Definition))
-	{
-		UE_LOG(
-			LogTemp,
-			Error,
-			TEXT("Messenger keyword '%s' is not defined in DT_Words."),
-			*WordID.ToString());
-		return;
-	}
-
-	const FName SourceID = !MessageID.IsNone() ? MessageID : FName(*CurrentRoomID);
-	if (!Investigation->HasAcquiredWord(WordID))
-	{
-		Investigation->AcquireWord(
-			WordID,
-			EWordAcquisitionSource::Messenger,
-			SourceID);
-	}
-	RefreshDisplayedKeywordStates();
+	SelectRoomByID(DadRoomID);
 }
 
-void UBalhwajeomMessengerWidget::HandleWordAcquired(const FAcquiredWordRecord& WordRecord)
+void UBalhwajeomMessengerWidget::HandleMotherClicked()
 {
-	(void)WordRecord;
-	RefreshDisplayedKeywordStates();
+	SelectRoomByID(MotherRoomID);
+}
+
+void UBalhwajeomMessengerWidget::HandleSisterClicked()
+{
+	SelectRoomByID(SisterRoomID);
+}
+
+void UBalhwajeomMessengerWidget::HandleBrotherClicked()
+{
+	SelectRoomByID(BrotherRoomID);
 }
