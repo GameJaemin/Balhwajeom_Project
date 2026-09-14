@@ -2,18 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Investigation/InvestigationRuntimeTypes.h"
-#include "Tablet/BalhwajeomMessengerTypes.h"
 #include "BalhwajeomMessengerWidget.generated.h"
 
-class UBalhwajeomMessengerMessageWidget;
-class UBalhwajeomMessengerDateSeparator;
-class UBalhwajeomMessengerRoomWidget;
 class UBalhwajeomMessengerCatalogDataAsset;
-class UBalhwajeomMessengerRoomDataAsset;
-class UBalhwajeomInvestigationSubsystem;
+class UBalhwajeomMessengerMessageWidget;
+class UBalhwajeomMessengerRoomWidget;
 class UButton;
-class UScrollBox;
+class UImage;
 class UTextBlock;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FMessengerBackRequestedSignature);
@@ -21,28 +16,28 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FMessengerUnreadChangedSignature,
 	int32,
 	TotalUnreadCount);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FMessengerRoomSelectionChangedSignature,
+	const FString&,
+	RoomID);
 
-/** Owns archived room data, runtime read state, selection, and child widget creation. */
+/**
+ * Presentation-only messenger page.
+ *
+ * Conversation content is intentionally empty until the final script is ready.
+ * The widget only keeps the selected room and the tablet back-navigation contract.
+ */
 UCLASS()
 class BALHWAJEOM_API UBalhwajeomMessengerWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
 public:
-	UBalhwajeomMessengerWidget(const FObjectInitializer& ObjectInitializer);
-
 	UFUNCTION(BlueprintCallable, Category = "Tablet|Messenger")
 	void InitializeMessenger();
 
-	/** Ignores an invalid/ambiguous ID without altering the current UI or read state. */
 	UFUNCTION(BlueprintCallable, Category = "Tablet|Messenger")
 	bool SelectRoomByID(const FString& RoomID);
-
-	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
-	int32 GetCurrentUnreadCount(const FString& RoomID) const;
-
-	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
-	int32 GetTotalUnreadCount() const;
 
 	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
 	const FString& GetCurrentRoomID() const { return CurrentRoomID; }
@@ -50,11 +45,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
 	bool IsMessengerInitialized() const { return bInitialized; }
 
+	/** Compatibility helpers retained for WBP_Tablet while unread/data-driven UI is removed. */
 	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
-	int32 GetDisplayedRoomCount() const;
+	int32 GetCurrentUnreadCount(const FString& RoomID) const;
 
 	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
-	int32 GetDisplayedMessageCount() const;
+	int32 GetTotalUnreadCount() const { return 0; }
+
+	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
+	int32 GetDisplayedRoomCount() const { return 4; }
+
+	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
+	int32 GetDisplayedMessageCount() const { return 0; }
 
 	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
 	UBalhwajeomMessengerRoomWidget* GetDisplayedRoomWidget(const FString& RoomID) const;
@@ -63,87 +65,69 @@ public:
 	UBalhwajeomMessengerMessageWidget* GetDisplayedMessageWidget(int32 Index) const;
 
 	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
-	bool HasValidRoomData() const;
+	bool HasValidRoomData() const { return true; }
 
 	UFUNCTION(BlueprintPure, Category = "Tablet|Messenger")
-	UBalhwajeomMessengerCatalogDataAsset* GetMessengerDataAsset() const { return LoadedMessengerData; }
+	UBalhwajeomMessengerCatalogDataAsset* GetMessengerDataAsset() const { return nullptr; }
 
 	UPROPERTY(BlueprintAssignable, Category = "Tablet|Messenger")
 	FMessengerBackRequestedSignature OnBackRequested;
 
+	/** Always reports zero; retained so the parent tablet can clear its legacy badge. */
 	UPROPERTY(BlueprintAssignable, Category = "Tablet|Messenger")
 	FMessengerUnreadChangedSignature OnTotalUnreadChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Tablet|Messenger")
+	FMessengerRoomSelectionChangedSignature OnRoomSelectionChanged;
 
 #if WITH_EDITOR
 	void InitializeForAutomatedTest() { NativeOnInitialized(); }
 #endif
 
 protected:
-	UPROPERTY(EditDefaultsOnly, Category = "Tablet|Messenger")
-	TSoftClassPtr<UBalhwajeomMessengerDateSeparator> DateSeparatorClass;
-
 	virtual void NativeOnInitialized() override;
-	virtual void NativeDestruct() override;
-
-	/** Planner-owned source data. InitialUnreadCount and messages are never mutated at runtime. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Messenger")
-	TSoftObjectPtr<UBalhwajeomMessengerCatalogDataAsset> MessengerData;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Messenger")
-	TSubclassOf<UBalhwajeomMessengerRoomWidget> RoomWidgetClass;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Messenger")
-	TSubclassOf<UBalhwajeomMessengerMessageWidget> MessageWidgetClass;
 
 private:
-	void CreateRoomList();
-	void LoadMessages(const UBalhwajeomMessengerRoomDataAsset& Room);
-	void UpdateRoomSelection();
-	const UBalhwajeomMessengerRoomDataAsset* FindUniqueRoom(const FString& RoomID) const;
-	TSubclassOf<UBalhwajeomMessengerRoomWidget> ResolveRoomWidgetClass();
-	TSubclassOf<UBalhwajeomMessengerMessageWidget> ResolveMessageWidgetClass();
-	void BroadcastUnreadCount();
-	UBalhwajeomInvestigationSubsystem* GetInvestigationSubsystem() const;
-	void RefreshDisplayedKeywordStates();
-
-	UFUNCTION()
-	void HandleRoomClicked(const FString& RoomID);
+	void BindRoomButtons();
+	void RefreshSelection();
 
 	UFUNCTION()
 	void HandleBackClicked();
 
 	UFUNCTION()
-	void HandleKeywordClicked(FName WordID, FName MessageID);
+	void HandleDadClicked();
 
 	UFUNCTION()
-	void HandleWordAcquired(const FAcquiredWordRecord& WordRecord);
+	void HandleMotherClicked();
+
+	UFUNCTION()
+	void HandleSisterClicked();
+
+	UFUNCTION()
+	void HandleBrotherClicked();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Tablet|Messenger", meta = (AllowPrivateAccess = "true"))
 	FString CurrentRoomID;
 
-	UPROPERTY(Transient)
-	TMap<FString, int32> CurrentUnreadCounts;
-
-	UPROPERTY(Transient)
-	TMap<FString, TObjectPtr<UBalhwajeomMessengerRoomWidget>> RoomWidgets;
-
-	UPROPERTY(Transient)
-	TObjectPtr<UBalhwajeomMessengerCatalogDataAsset> LoadedMessengerData;
-
-	TSet<FString> ValidRoomIDs;
 	bool bInitialized = false;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_Back;
 
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UScrollBox> SB_ChatRoomList;
+	TObjectPtr<UButton> BTN_RoomDad;
 
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UScrollBox> SB_MessageList;
+	TObjectPtr<UButton> BTN_RoomMother;
 
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UTextBlock> TXT_SelectRoomPrompt;
+	TObjectPtr<UButton> BTN_RoomSister;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UButton> BTN_RoomBrother;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UImage> IMG_RoomSelection;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TXT_CurrentRoomName;

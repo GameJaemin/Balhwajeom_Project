@@ -1,45 +1,58 @@
-# 태블릿 담당 작업 문서 — 메신저
+# 태블릿 메신저 UI
 
-> 기준 문서: [Project-Progress-and-Roadmap.md](../../Project-Progress-and-Roadmap.md) 2.3(메신저), 5장 P0-2
-> 담당 범위: 메신저 위젯 일체 (`UBalhwajeomMessengerWidget` 및 하위 위젯), `FST_MessengerRoom`/`FST_MessengerMessage` Data Asset
-> 같은 태블릿 폴더의 다른 문서: [Tablet_Folder.md](./Tablet_Folder.md), [Tablet_Browser.md](./Tablet_Browser.md)
+> 기준일: 2026-09-14
+> 현재 범위: 실제 대화 데이터가 확정되기 전까지 사용하는 정적 UI
 
-핵심 파일:
-- [BalhwajeomTabletWidget.h](../../../Source/Balhwajeom/Public/Tablet/BalhwajeomTabletWidget.h) — 태블릿과 메신저를 연결하는 공용 위젯(`WBP_Messenger` 바인딩, 안읽음 배지)
-- [BalhwajeomMessengerWidget.h](../../../Source/Balhwajeom/Public/Tablet/BalhwajeomMessengerWidget.h) / `.cpp`
-- [BalhwajeomMessengerRoomWidget.h](../../../Source/Balhwajeom/Public/Tablet/BalhwajeomMessengerRoomWidget.h)
-- [BalhwajeomMessengerMessageWidget.h](../../../Source/Balhwajeom/Public/Tablet/BalhwajeomMessengerMessageWidget.h)
-- [BalhwajeomMessengerDateSeparator.h](../../../Source/Balhwajeom/Public/Tablet/BalhwajeomMessengerDateSeparator.h)
-- [BalhwajeomMessengerKeywordWidget.h](../../../Source/Balhwajeom/Public/Tablet/BalhwajeomMessengerKeywordWidget.h)
-- [BalhwajeomMessengerTypes.h](../../../Source/Balhwajeom/Public/Tablet/BalhwajeomMessengerTypes.h) — `FST_MessengerRoom`/`FST_MessengerMessage`
-- [BalhwajeomMessengerDataAssets.h](../../../Source/Balhwajeom/Public/Tablet/BalhwajeomMessengerDataAssets.h)
+## 현재 동작
 
-`UBalhwajeomTabletWidget`(`ETabletPage::Messenger`)은 다른 두 문서([Tablet_Folder.md](./Tablet_Folder.md), [Tablet_Browser.md](./Tablet_Browser.md))와 공유되는 헤더이므로, 태블릿 쪽 바인딩(`WBP_Messenger`, `HandleMessengerClicked`, `HandleMessengerUnreadChanged` 등)을 수정할 때는 두 담당자에게 미리 공지한다.
+`WBP_Messenger`는 `/Game/Balhwajeom/UI/Tablet/Messenger`의 최종 이미지를 사용한다.
+Data Asset이나 조사 Subsystem에서 대화를 읽지 않으며 다음 기능만 제공한다.
 
-## 1. 현재 상태
+- 아버지, 어머니, 막내, 형 채팅방 표시
+- 채팅방 클릭 시 선택 배경 이동
+- 선택한 채팅방 이름 표시
+- 빈 대화 영역 유지
+- 우측 상단 닫기 버튼으로 태블릿 이전 화면 복귀
 
-기능 통합 진행 중. 방/메시지는 `FST_MessengerRoom`/`FST_MessengerMessage` Data Asset으로 관리되며, 날짜 변경 지점에 구분선(`BalhwajeomMessengerDateSeparator`)이 표시된다. 메시지의 `WordID`가 `InvestigationSubsystem`의 획득 상태와 연결된다. 안읽음 배지는 `SetUnreadMessageCount`/`HandleMessengerUnreadChanged`로 `UBalhwajeomTabletWidget`과 동기화된다.
+`UBalhwajeomMessengerWidget`은 선택된 방 ID와 닫기 이벤트만 관리한다. 기존
+안 읽음 API는 `WBP_Tablet` 호환을 위해 항상 0을 반환하는 형태로 임시 유지한다.
 
-## 2. 변경 필요 사항
+## 핵심 파일
 
-- [ ] 예시 일시(`SentAt`, 현재 2026-05-12~13 임시 데이터)를 실제 본편 연표로 교체 — [DataTable-Handoff.md](../DataTable-Handoff.md)의 시나리오 확정 작업과 함께 진행.
-- [ ] 메시지 키워드(`KeywordText`/`WordID`) 지급이 중복 지급되지 않는지, 여러 방을 오갈 때 안읽음 카운트가 정확한지 확인.
-- [ ] 메신저 방/인물 구성이 태블릿 인물 폴더(`DT_Characters` 기반, [Tablet_Folder.md](./Tablet_Folder.md) 담당)와 일치하는지 확인.
+- `Source/Balhwajeom/Public/Tablet/BalhwajeomMessengerWidget.h`
+- `Source/Balhwajeom/Private/Tablet/BalhwajeomMessengerWidget.cpp`
+- `Content/Balhwajeom/UI/Tablet/WBP_Messenger.uasset`
+- `Scripts/Tablet/RedesignMessengerWidget.py`
 
-## 3. 작업 체크리스트 (일정 연동)
+## 제거 가능한 레거시
 
-- **1단계(9/10~9/12, M1)**: 메신저 연표 교체 착수, 방/인물 구성 확정
-- **2단계(9/13~9/15, M2)**: 안읽음 카운트·중복 지급 검증, 아트/이펙트/사운드 트랙과 알림음·구분선 연출 연결
-- **3단계(9/16~9/17, M3)**: 태블릿 내 다른 페이지(폴더/브라우저)와 전환 회귀 테스트
-- **4단계(9/18, M4)**: 최종 QA 대응
+새 정적 UI 검증 후 아래 항목은 메신저에서 더 이상 사용하지 않으므로 제거할 수 있다.
 
-## 4. 완료 조건
+- `/Game/Balhwajeom/Data/Messenger/DA_MessengerCatalog`
+- `/Game/Balhwajeom/Data/Messenger/Rooms/DA_MessengerRoom_*`
+- `WBP_MessengerRoom`
+- `WBP_MessengerMessage`
+- `WBP_MessengerKeyword`
+- `WBP_MessengerDateSeparator`
+- `BalhwajeomMessengerDataAssets.h/.cpp`
+- `BalhwajeomMessengerTypes.h`
+- `BalhwajeomMessengerRoomWidget.h/.cpp`
+- `BalhwajeomMessengerMessageWidget.h/.cpp`
+- `BalhwajeomMessengerKeywordWidget.h/.cpp`
+- `BalhwajeomMessengerDateSeparator.h/.cpp`
+- 에디터 라이브러리의 `CreateMessengerDataAssets`, 타임라인 생성·검증 코드
+- 기존 Data Asset 기반 메신저 테스트
 
-- 메신저 방/메시지가 본편 연표 기준으로 동작하며 프로토타입 전용 예시 일시가 없다.
-- 안읽음 배지와 키워드 지급이 여러 방/재입장 상황에서 정확하다.
-- 관련 자동화/스모크 테스트가 통과한다.
+실제 대화 데이터 방식이 확정되기 전까지는 레거시 에셋을 즉시 삭제하지 않는다. 삭제할
+때는 Unreal Content Browser의 Reference Viewer로 참조가 0건인지 확인하고 삭제한다.
 
-## 5. 주의 사항
+## 검증
 
-- `WBP_Tablet`, 메신저 WBP는 폴더·브라우저 담당자와 공유되는 UI이므로 동시 편집 전 확인한다.
-- 메신저는 조사 상태(키워드 획득 등)를 자체적으로 저장하지 않는다. 항상 [Subsystem-Handoff.md](../Subsystem-Handoff.md)의 InvestigationSubsystem을 조회/갱신하는 방식으로 구현한다.
+자동화 테스트:
+
+```text
+Balhwajeom.Tablet.Messenger.StaticRoomSelection
+```
+
+이 테스트는 WBP 구성 요소, 650x699 디자인 크기, 네 방 선택, 빈 대화 상태와 잘못된
+Room ID 거부를 확인한다.
