@@ -14,6 +14,7 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "Interaction/InspectionComponent.h"
+#include "Interaction/InspectionLabelPresentation.h"
 #include "Interaction/WorldInteractable.h"
 #include "CameraSystem/BalhwajeomEvidenceActor.h"
 #include "CameraSystem/BalhwajeomPhotoCameraComponent.h"
@@ -94,10 +95,14 @@ bool UPlayerInteractionComponent::UpdateDistanceStateForInspectable(
 		return false;
 	}
 
+	const float Distance = FVector::Distance(
+		PlayerLocation,
+		TargetBoundsCenter
+	);
+
 	const EPlayerInspectionDistanceState NewDistanceState =
-		ClassifyDistanceBetweenPoints(
-			PlayerLocation,
-			TargetBoundsCenter,
+		ClassifyDistance(
+			Distance,
 			InspectionComponent->CloseDistance,
 			InspectionComponent->MiddleDistance,
 			InspectionComponent->MaxDisplayDistance
@@ -118,6 +123,12 @@ bool UPlayerInteractionComponent::UpdateDistanceStateForInspectable(
 			NewDistanceState
 		);
 	}
+
+	BalhwajeomInspectionLabelPresentation::ApplyToActor(
+		InspectionComponent->GetOwner(),
+		Distance,
+		InspectionComponent->MiddleDistance
+	);
 
 	return bStateChanged;
 }
