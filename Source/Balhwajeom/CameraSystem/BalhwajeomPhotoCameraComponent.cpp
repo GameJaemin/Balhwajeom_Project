@@ -405,9 +405,35 @@ bool UBalhwajeomPhotoCameraComponent::IsLockedByStoryState() const
 }
 
 
+bool UBalhwajeomPhotoCameraComponent::IsCaptureResultBlockingInput() const
+{
+	if (PendingCapture.IsSet())
+	{
+		return true;
+	}
+
+	if (const APlayerController* PlayerController =
+		Cast<APlayerController>(GetOwningController(this)))
+	{
+		if (const ABalhwajeomEvidenceCameraHUD* CameraHUD =
+			Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD()))
+		{
+			return CameraHUD->IsCapturePhotoPresentationActive();
+		}
+	}
+
+	return false;
+}
+
 void UBalhwajeomPhotoCameraComponent::ToggleCameraMode()
 {
 	if (BalhwajeomItemInspection::IsOpen(GetOwner())) return;
+
+	// Raising or lowering the camera under the result card would strand it mid-flight.
+	if (IsCaptureResultBlockingInput())
+	{
+		return;
+	}
 
 	// The lock only refuses entry. Leaving is always allowed, otherwise a lock applied
 	// while the player is already in camera mode would trap them there.
@@ -525,6 +551,11 @@ void UBalhwajeomPhotoCameraComponent::ZoomCamera(float Value)
 		return;
 	}
 
+	if (IsCaptureResultBlockingInput())
+	{
+		return;
+	}
+
 	const float MinFOV = FMath::Min(MinCameraFieldOfView, MaxCameraFieldOfView);
 	const float MaxFOV = FMath::Max(MinCameraFieldOfView, MaxCameraFieldOfView);
 	PhotoCamera->SetFieldOfView(
@@ -537,6 +568,15 @@ void UBalhwajeomPhotoCameraComponent::TakePhoto()
 	{
 		return;
 	}
+
+	// One shutter press owns the screen until its photo and keywords have flown to TAB.
+	// Held left click would otherwise stack shutter sounds and flashes under the card,
+	// and the second capture would be refused deeper in with a confusing yellow message.
+	if (IsCaptureResultBlockingInput())
+	{
+		return;
+	}
+
 	if (USoundBase* Sound = ShutterSound.LoadSynchronous())
 	{
 		UGameplayStatics::PlaySound2D(this, Sound);

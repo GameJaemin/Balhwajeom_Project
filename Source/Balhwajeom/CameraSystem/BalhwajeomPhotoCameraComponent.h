@@ -140,6 +140,13 @@ public:
     UFUNCTION(BlueprintPure, Category = "Photo Camera")
     bool IsCameraTransitioning() const { return bIsCameraTransitioning; }
 
+    /**
+     * True while a shutter press is still resolving: the photo is being saved, or its
+     * card and keywords are still on screen. Camera input is refused for that whole span.
+     */
+    UFUNCTION(BlueprintPure, Category = "Photo Camera")
+    bool IsCaptureResultBlockingInput() const;
+
     /** Returns the currently focused target's screen guide and object-authored response. */
     UFUNCTION(BlueprintPure, Category = "Photo Camera|Focus")
     bool GetActiveFocusGuide(

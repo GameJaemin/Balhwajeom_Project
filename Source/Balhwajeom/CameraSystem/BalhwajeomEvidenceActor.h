@@ -202,6 +202,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inspection|3D")
 	TObjectPtr<UJMInspectableComponent> ItemInspectionComponent;
 
+	/**
+	 * Whether the level or Blueprint ticked ItemInspectionComponent.bInspectionEnabled by hand.
+	 * That flag is derived state every ConfigureItemInspection() rewrites, so it is captured
+	 * once at BeginPlay and treated as the same opt-in bEnable3DInspection gives.
+	 */
+	bool bAuthoredItemInspectionEnabled = false;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UJMItemInspectionData> RuntimeItemInspectionData;
 

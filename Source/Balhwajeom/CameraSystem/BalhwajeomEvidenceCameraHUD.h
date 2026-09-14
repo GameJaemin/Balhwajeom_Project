@@ -34,6 +34,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Camera|Evidence")
 	void TriggerEvidenceSavedAnimation(const FText& EvidenceName);
 
+	/** True from the moment the capture card appears until it has flown to TAB. */
+	UFUNCTION(BlueprintPure, Category = "Camera|Evidence")
+	bool IsCapturePhotoPresentationActive() const
+	{
+		return EvidenceSavedAnimationStartTime >= 0.0f;
+	}
+
 	/** Shows the captured image, its sentence, and newly granted keywords before flying to TAB. */
 	void TriggerCapturePhotoPresentation(
 		UTexture2D* CapturedTexture,
