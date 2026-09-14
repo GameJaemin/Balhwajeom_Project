@@ -41,6 +41,13 @@ struct FEvidenceActorTestAccessor
 		Evidence->HandlePlayerDistanceStateChanged(DistanceState);
 	}
 
+	static void SetCanBeCaptured(
+		ABalhwajeomEvidenceActor* Evidence,
+		const bool bCanBeCaptured)
+	{
+		Evidence->bCanBeCaptured = bCanBeCaptured;
+	}
+
 	static UObject* GetStatusIconResource(ABalhwajeomEvidenceActor* Evidence)
 	{
 		if (!Evidence->ObjectLabelWidget)
@@ -111,6 +118,53 @@ struct FEvidenceActorTestAccessor
 	}
 
 };
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FEvidenceNonCapturableUsesDotIconTest,
+	"Balhwajeom.Camera.Evidence.ObjectLabel.NonCapturableUsesDotIcon",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FEvidenceNonCapturableUsesDotIconTest::RunTest(const FString& Parameters)
+{
+	UGameInstance* GameInstance = NewObject<UGameInstance>(GEngine);
+	GameInstance->InitializeStandalone();
+	UWorld* World = GameInstance->GetWorld();
+	if (!TestNotNull(TEXT("Standalone GameInstance should create a World"), World))
+	{
+		GameInstance->Shutdown();
+		return false;
+	}
+
+	ABalhwajeomEvidenceActor* Evidence = World->SpawnActor<ABalhwajeomEvidenceActor>();
+	if (!TestNotNull(TEXT("Evidence actor should spawn"), Evidence))
+	{
+		GameInstance->Shutdown();
+		return false;
+	}
+
+	FEvidenceActorTestAccessor::SetCanBeCaptured(Evidence, false);
+	FEvidenceActorTestAccessor::SetDistanceState(
+		Evidence,
+		EPlayerInspectionDistanceState::Far);
+
+	UTexture2D* DotIcon = LoadObject<UTexture2D>(
+		nullptr,
+		TEXT("/Game/Balhwajeom/UI/Icons/DotIcon.DotIcon"));
+	TestNotNull(TEXT("Non-capturable icon should be imported"), DotIcon);
+	TestEqual(
+		TEXT("Non-capturable evidence should use the dot icon"),
+		FEvidenceActorTestAccessor::GetStatusIconResource(Evidence),
+		static_cast<UObject*>(DotIcon));
+
+	GameInstance->Shutdown();
+	GEngine->DestroyWorldContext(World);
+	World->DestroyWorld(false);
+	return true;
+}
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -276,6 +330,9 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 	{
 		Evidence->DispatchBeginPlay();
 	}
+	// This test exercises the camera-to-check transition independently of the
+	// configured object's current data-authored capture availability.
+	FEvidenceActorTestAccessor::SetCanBeCaptured(Evidence, true);
 	UJMInspectableComponent* ItemInspection = Evidence->GetItemInspectionComponent();
 	TestNotNull(TEXT("Evidence should own the 3D inspection adapter"), ItemInspection);
 	if (ItemInspection)

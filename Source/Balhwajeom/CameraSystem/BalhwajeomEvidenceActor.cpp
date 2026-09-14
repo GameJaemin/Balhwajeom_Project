@@ -76,6 +76,13 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 		PhotoCapturedIcon = PhotoCapturedIconAsset.Object;
 	}
 
+	static ConstructorHelpers::FObjectFinder<UTexture2D> PhotoUnavailableIconAsset(
+		TEXT("/Game/Balhwajeom/UI/Icons/DotIcon.DotIcon"));
+	if (PhotoUnavailableIconAsset.Succeeded())
+	{
+		PhotoUnavailableIcon = PhotoUnavailableIconAsset.Object;
+	}
+
 	CameraFocusPoint = CreateDefaultSubobject<USceneComponent>(TEXT("CameraFocusPoint"));
 	CameraFocusPoint->SetupAttachment(EvidenceMesh);
 
@@ -884,9 +891,17 @@ void ABalhwajeomEvidenceActor::SetInspectionLabel(
 
 	if (UImage* StatusImage = Cast<UImage>(LabelWidget->GetWidgetFromName(TEXT("UseCamera"))))
 	{
-		UTexture2D* StatusTexture = EvidenceData.bAlreadyCollected
-			? PhotoCapturedIcon
-			: PhotoRequiredIcon;
+		UTexture2D* StatusTexture = nullptr;
+		if (!bCanBeCaptured)
+		{
+			StatusTexture = PhotoUnavailableIcon;
+		}
+		else
+		{
+			StatusTexture = EvidenceData.bAlreadyCollected
+				? PhotoCapturedIcon
+				: PhotoRequiredIcon;
+		}
 		if (StatusTexture)
 		{
 			StatusImage->SetBrushFromTexture(StatusTexture, false);

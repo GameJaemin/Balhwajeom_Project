@@ -217,6 +217,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inspection|UI")
 	TObjectPtr<UTexture2D> PhotoCapturedIcon;
 
+	/** Status icon used when the current evidence state cannot be photographed. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inspection|UI")
+	TObjectPtr<UTexture2D> PhotoUnavailableIcon;
+
 	/** Optional local offset from the evidence mesh's actual bounds center. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inspection|UI")
 	FVector ObjectLabelOffset = FVector::ZeroVector;
