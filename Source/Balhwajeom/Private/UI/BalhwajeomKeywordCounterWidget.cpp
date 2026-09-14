@@ -52,11 +52,11 @@ void UBalhwajeomKeywordCounterWidget::BuildWidgetTree()
 	CountText->SetFont(Font);
 
 	UCanvasPanelSlot* CountSlot = RootCanvas->AddChildToCanvas(CountText);
-	CountSlot->SetAnchors(FAnchors(1.0f, 1.0f));
+	CountSlot->SetAnchors(FAnchors(0.0f, 1.0f));
 	CountSlot->SetAlignment(FVector2D(1.0f, 1.0f));
 	// WBP_HUID's TAB art occupies the bottom-right corner. This centers the
 	// counter over that art while keeping it resolution-independent.
-	CountSlot->SetPosition(FVector2D(-5.0f, -115.0f));
+	CountSlot->SetPosition(FVector2D(180.0f, -115.0f));
 	CountSlot->SetSize(FVector2D(180.0f, 34.0f));
 }
 
