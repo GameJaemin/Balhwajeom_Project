@@ -231,6 +231,7 @@ bool ABalhwajeomIntroFlowActor::StartMediaCinematic()
 	IntroMediaTexture->SetMediaPlayer(IntroMediaPlayer);
 	CinematicVideoWidget->SetMediaTexture(IntroMediaTexture);
 	CinematicVideoWidget->AddToPlayerScreen(2000);
+	CinematicVideoWidget->OnSkipRequested.AddUniqueDynamic(this, &ThisClass::HandleSkipRequested);
 	IntroMediaPlayer->OnMediaOpened.RemoveAll(this);
 	IntroMediaPlayer->OnMediaOpenFailed.RemoveAll(this);
 	IntroMediaPlayer->OnEndReached.RemoveAll(this);
@@ -294,6 +295,38 @@ void ABalhwajeomIntroFlowActor::HandleMediaEndReached()
 		BeginTitleTransition();
 	}
 	else if (State == EBalhwajeomIntroState::Cinematic)
+	{
+		BeginGameplayTransition();
+	}
+}
+
+void ABalhwajeomIntroFlowActor::HandleSkipRequested()
+{
+	if (State != EBalhwajeomIntroState::Cinematic && State != EBalhwajeomIntroState::Ending)
+	{
+		return;
+	}
+
+	UMediaPlayer* ActiveMediaPlayer = State == EBalhwajeomIntroState::Ending
+		? EndingMediaPlayer.Get() : IntroMediaPlayer.Get();
+	if (ActiveMediaPlayer)
+	{
+		ActiveMediaPlayer->OnMediaOpened.RemoveAll(this);
+		ActiveMediaPlayer->OnMediaOpenFailed.RemoveAll(this);
+		ActiveMediaPlayer->OnEndReached.RemoveAll(this);
+		ActiveMediaPlayer->Close();
+	}
+	if (CinematicVideoWidget)
+	{
+		CinematicVideoWidget->RemoveFromParent();
+		CinematicVideoWidget = nullptr;
+	}
+
+	if (State == EBalhwajeomIntroState::Ending)
+	{
+		BeginTitleTransition();
+	}
+	else
 	{
 		BeginGameplayTransition();
 	}
@@ -457,6 +490,7 @@ bool ABalhwajeomIntroFlowActor::StartEndingMediaCinematic()
 	EndingMediaTexture->SetMediaPlayer(EndingMediaPlayer);
 	CinematicVideoWidget->SetMediaTexture(EndingMediaTexture);
 	CinematicVideoWidget->AddToPlayerScreen(2000);
+	CinematicVideoWidget->OnSkipRequested.AddUniqueDynamic(this, &ThisClass::HandleSkipRequested);
 	EndingMediaPlayer->OnMediaOpened.RemoveAll(this);
 	EndingMediaPlayer->OnMediaOpenFailed.RemoveAll(this);
 	EndingMediaPlayer->OnEndReached.RemoveAll(this);

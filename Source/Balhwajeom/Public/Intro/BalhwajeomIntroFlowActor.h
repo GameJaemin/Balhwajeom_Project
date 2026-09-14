@@ -139,6 +139,9 @@ private:
 	UFUNCTION()
 	void HandleMediaEndReached();
 
+	UFUNCTION()
+	void HandleSkipRequested();
+
 	void SetGameplayEnabled(bool bEnabled);
 	void ResetInvestigationPhotosIfRequested();
 	void StartCinematic();
