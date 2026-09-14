@@ -253,7 +253,25 @@ void ABalhwajeomEvidenceActor::BeginPlay()
 		}
 	}
 
+	// bInspectionEnabled is derived state that every ConfigureItemInspection() rewrites.
+	// The component is visible in the details panel, so it is the flag designers reach for;
+	// read the authored tick before anything overwrites it instead of silently dropping it.
+	bAuthoredItemInspectionEnabled =
+		ItemInspectionComponent && ItemInspectionComponent->bInspectionEnabled;
+	if (bAuthoredItemInspectionEnabled && !bEnable3DInspection)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("%s: ItemInspectionComponent 'Inspection Enabled' is ticked while 'Enable 3D Inspection' is off. ")
+			TEXT("Honouring it, but 'Enable 3D Inspection' on the Evidence Actor is the switch this system reads."),
+			*GetName());
+	}
+
 	RegisterWithInvestigationSystem();
+
+	// Registration bails out on a missing ObjectID or DT_EvidenceStates row, and it owns the
+	// only other path to ConfigureItemInspection(). Without this the inspector would have no
+	// InspectionData, and CanInspect() would refuse every F press without saying why.
+	ConfigureItemInspection();
 }
 
 void ABalhwajeomEvidenceActor::ConfigureItemInspection()
@@ -263,15 +281,28 @@ void ABalhwajeomEvidenceActor::ConfigureItemInspection()
 		return;
 	}
 
+	const bool bInspectionRequested =
+		bEnable3DInspection || bAuthoredItemInspectionEnabled;
+	const bool bProgressionAllowsInspection =
+		bProgressionAvailable && !bProgressionCleared && !bProgressionRemovalPending;
+
 	ItemInspectionComponent->bInspectionEnabled =
-		bEnable3DInspection && bProgressionAvailable &&
-		!bProgressionCleared && !bProgressionRemovalPending;
+		bInspectionRequested && bProgressionAllowsInspection;
 	ItemInspectionComponent->InspectionData = nullptr;
 	RuntimeItemInspectionData = nullptr;
-	if (!bEnable3DInspection || !bProgressionAvailable ||
-		bProgressionCleared || bProgressionRemovalPending ||
-		!EvidenceMesh || !EvidenceMesh->GetStaticMesh())
+	if (!bInspectionRequested || !bProgressionAllowsInspection)
 	{
+		return;
+	}
+
+	if (!EvidenceMesh || !EvidenceMesh->GetStaticMesh())
+	{
+		// CanInspect() needs InspectionData as well as the flag, so leaving the flag on
+		// would only turn a missing mesh into another silent "F does nothing".
+		UE_LOG(LogTemp, Warning,
+			TEXT("%s: 3D inspection is enabled but EvidenceMesh has no Static Mesh to show."),
+			*GetName());
+		ItemInspectionComponent->bInspectionEnabled = false;
 		return;
 	}
 
