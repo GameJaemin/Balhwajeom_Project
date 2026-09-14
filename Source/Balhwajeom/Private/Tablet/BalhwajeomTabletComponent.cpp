@@ -478,6 +478,7 @@ void UBalhwajeomTabletComponent::FinishCloseTablet()
 	if (TabletWidget)
 	{
 		TabletWidget->SetVisibility(ESlateVisibility::Collapsed);
+		TabletWidget->ResetToDesktop();
 	}
 
 	if (IsValid(PlayerController) && bWasTabletOpen)
