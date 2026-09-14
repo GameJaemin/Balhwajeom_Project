@@ -9,6 +9,52 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "Slate/WidgetRenderer.h"
 #include "RenderingThread.h"
+#include "Components/TextBlock.h"
+#include "Components/WrapBox.h"
+#include "Components/WrapBoxSlot.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCapturePhotoMultilineSentenceTest,
+	"Balhwajeom.Camera.CapturePhotoMultilineSentence",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCapturePhotoMultilineSentenceTest::RunTest(const FString& Parameters)
+{
+	UClass* WidgetClass = LoadClass<UBalhwajeomCapturePhotoWidget>(nullptr,
+		TEXT("/Game/Balhwajeom/UI/Camera/WBP_CapturePhoto.WBP_CapturePhoto_C"));
+	auto* Widget = WidgetClass && GEditor
+		? CreateWidget<UBalhwajeomCapturePhotoWidget>(
+			GEditor->GetEditorWorldContext().World(), WidgetClass)
+		: nullptr;
+	if (!TestNotNull(TEXT("Live capture widget"), Widget)) return false;
+	Widget->AddToRoot();
+	Widget->PresentCapture(
+		nullptr,
+		FText::FromString(TEXT("Before [] text.\n[] after.\n\nLast [].")),
+		{},
+		true);
+
+	int32 ForcedLineBreakCount = 0;
+	for (int32 ChildIndex = 0;
+		Widget->SentenceBuilder && ChildIndex < Widget->SentenceBuilder->GetChildrenCount();
+		++ChildIndex)
+	{
+		UWidget* Child = Widget->SentenceBuilder->GetChildAt(ChildIndex);
+		if (const UTextBlock* Segment = Cast<UTextBlock>(Child))
+		{
+			TestFalse(TEXT("Generated sentence fragments contain no embedded newline"),
+				Segment->GetText().ToString().Contains(TEXT("\n")) ||
+				Segment->GetText().ToString().Contains(TEXT("\r")));
+		}
+		if (const UWrapBoxSlot* Slot = Child ? Cast<UWrapBoxSlot>(Child->Slot) : nullptr)
+		{
+			ForcedLineBreakCount += Slot->DoesForceNewLine() ? 1 : 0;
+		}
+	}
+	TestEqual(TEXT("Every authored newline becomes a WrapBox line break"),
+		ForcedLineBreakCount, 3);
+	Widget->RemoveFromRoot();
+	return !HasAnyErrors();
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCapturePhotoFlightTest,
 	"Balhwajeom.Camera.CapturePhotoFlight",

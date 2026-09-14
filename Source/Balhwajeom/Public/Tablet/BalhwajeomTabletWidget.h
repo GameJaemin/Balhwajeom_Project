@@ -839,6 +839,10 @@ private:
 	UPROPERTY(Transient)
 	TMap<int32, TObjectPtr<UBalhwajeomTabletSentenceBlank>> ActiveBlanksBySlot;
 
+	/** Generated static fragments kept separately because explicit line breaks still use nested layout state. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UTextBlock>> ActiveSentenceSegments;
+
 	/** Photo evidence slot widgets for the sentence currently open, keyed by SlotIndex. Rebuilt each PreparePuzzle. */
 	UPROPERTY(Transient)
 	TMap<int32, TObjectPtr<UBalhwajeomTabletPhotoSlot>> ActivePhotoSlotsBySlot;

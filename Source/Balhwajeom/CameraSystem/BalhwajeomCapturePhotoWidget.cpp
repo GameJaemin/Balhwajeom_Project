@@ -4,6 +4,7 @@
 #include "Components/CanvasPanel.h"
 #include "Components/Image.h"
 #include "Components/SizeBox.h"
+#include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
@@ -74,21 +75,56 @@ void UBalhwajeomCapturePhotoWidget::PresentCapture(
 		{
 			TArray<FString> Segments;
 			SentenceText.ToString().ParseIntoArray(Segments, TEXT("[]"), false);
+			bool bForceNextChildToNewLine = false;
+			auto AddSentenceChild = [this, &bForceNextChildToNewLine](UWidget* Child)
+			{
+				if (UWrapBoxSlot* Slot = SentenceBuilder->AddChildToWrapBox(Child))
+				{
+					Slot->SetNewLine(bForceNextChildToNewLine);
+					Slot->SetVerticalAlignment(VAlign_Center);
+				}
+				bForceNextChildToNewLine = false;
+			};
+			auto AddEmptyLine = [this, &AddSentenceChild]()
+			{
+				USpacer* Spacer = NewObject<USpacer>(SentenceBuilder);
+				Spacer->SetSize(FVector2D(1.0f, static_cast<float>(AnalysisSentenceFontSize)));
+				AddSentenceChild(Spacer);
+				if (UWrapBoxSlot* Slot = Cast<UWrapBoxSlot>(Spacer->Slot))
+				{
+					Slot->SetFillEmptySpace(true);
+				}
+			};
+
 			for (int32 SegmentIndex = 0; SegmentIndex < Segments.Num(); ++SegmentIndex)
 			{
-				if (!Segments[SegmentIndex].IsEmpty())
+				FString NormalizedSegment = Segments[SegmentIndex]
+					.Replace(TEXT("\r\n"), TEXT("\n"))
+					.Replace(TEXT("\r"), TEXT("\n"));
+				TArray<FString> Lines;
+				NormalizedSegment.ParseIntoArray(Lines, TEXT("\n"), false);
+				for (int32 LineIndex = 0; LineIndex < Lines.Num(); ++LineIndex)
 				{
-					UTextBlock* Segment = NewObject<UTextBlock>(SentenceBuilder);
-					Segment->SetText(FText::FromString(Segments[SegmentIndex]));
-					Segment->SetColorAndOpacity(FSlateColor(FLinearColor::White));
-					FSlateFontInfo SegmentFont = SentenceTextBlock
-						? SentenceTextBlock->GetFont()
-						: Segment->GetFont();
-					SegmentFont.Size = AnalysisSentenceFontSize;
-					Segment->SetFont(SegmentFont);
-					if (UWrapBoxSlot* SegmentSlot = SentenceBuilder->AddChildToWrapBox(Segment))
+					if (LineIndex > 0)
 					{
-						SegmentSlot->SetVerticalAlignment(VAlign_Center);
+						// A second unconsumed break represents an intentionally blank line.
+						if (bForceNextChildToNewLine)
+						{
+							AddEmptyLine();
+						}
+						bForceNextChildToNewLine = true;
+					}
+					if (!Lines[LineIndex].IsEmpty())
+					{
+						UTextBlock* Segment = NewObject<UTextBlock>(SentenceBuilder);
+						Segment->SetText(FText::FromString(Lines[LineIndex]));
+						Segment->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+						FSlateFontInfo SegmentFont = SentenceTextBlock
+							? SentenceTextBlock->GetFont()
+							: Segment->GetFont();
+						SegmentFont.Size = AnalysisSentenceFontSize;
+						Segment->SetFont(SegmentFont);
+						AddSentenceChild(Segment);
 					}
 				}
 
@@ -100,10 +136,10 @@ void UBalhwajeomCapturePhotoWidget::PresentCapture(
 					BlankSize->SetWidthOverride(83.0f);
 					BlankSize->SetHeightOverride(36.0f);
 					BlankSize->SetContent(BlankBackground);
-					if (UWrapBoxSlot* BlankSlot = SentenceBuilder->AddChildToWrapBox(BlankSize))
+					AddSentenceChild(BlankSize);
+					if (UWrapBoxSlot* BlankSlot = Cast<UWrapBoxSlot>(BlankSize->Slot))
 					{
 						BlankSlot->SetPadding(FMargin(4.0f, 0.0f));
-						BlankSlot->SetVerticalAlignment(VAlign_Center);
 					}
 				}
 			}
