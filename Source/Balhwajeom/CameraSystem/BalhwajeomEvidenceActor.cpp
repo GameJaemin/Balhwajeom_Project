@@ -463,6 +463,13 @@ bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplay
 	{
 		return false;
 	}
+	// Do not let rapid interaction restart the presentation. StopStory fades the old actor, so
+	// replacing it here used to leave the fading caption underneath the newly spawned caption.
+	// The weak pointer becomes invalid automatically after the final cue and fade have completed.
+	if (ActiveWorldStory.IsValid())
+	{
+		return false;
+	}
 	if (CanClearForProgression())
 	{
 		bProgressionRemovalPending = true;
@@ -578,6 +585,10 @@ bool ABalhwajeomEvidenceActor::PlayWorldStoryForState(FName StateID)
 	{
 		return false;
 	}
+	if (ActiveWorldStory.IsValid())
+	{
+		return false;
+	}
 
 	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
 	FEvidenceStateDefinition State;
@@ -600,7 +611,6 @@ bool ABalhwajeomEvidenceActor::PlayWorldStoryForState(FName StateID)
 		return false;
 	}
 
-	StopWorldStory();
 	ActiveWorldStory = APhotoWorldStoryActor::SpawnAndStart(
 		GetWorld(),
 		StoryActorClass,
@@ -640,7 +650,8 @@ bool ABalhwajeomEvidenceActor::PlayWorldStoryForState(FName StateID)
 
 bool ABalhwajeomEvidenceActor::CanRequestInvestigationInteraction() const
 {
-	if (!bProgressionAvailable || bProgressionCleared || bProgressionRemovalPending)
+	if (!bProgressionAvailable || bProgressionCleared || bProgressionRemovalPending ||
+		ActiveWorldStory.IsValid())
 	{
 		return false;
 	}
