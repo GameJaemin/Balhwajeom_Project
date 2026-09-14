@@ -70,6 +70,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "UI|Interaction")
 	float GetInteractionPromptAlpha() const;
 
+	/** Shows the authored evidence-inspection text above the tutorial dim layer. */
+	UFUNCTION(BlueprintCallable, Category = "UI|Inspection")
+	void ShowInspectionMessage(const FText& Message);
+
 	/** Hides or restores every gameplay HUD layer owned by this controller. */
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void SetGameplayPresentationEnabled(bool bEnabled);
@@ -137,6 +141,24 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction", meta = (ClampMin = "0.1"))
 	float InteractionPromptFadeSpeed = 8.0f;
 
+	/** Authored result widget displayed after interacting with an Evidence Actor. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Inspection")
+	TSubclassOf<UUserWidget> InspectionMessageWidgetClass;
+
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "UI|Inspection")
+	TObjectPtr<UUserWidget> InspectionMessageWidget;
+
+	/** TextBlock inside WBP_InspectionMessage that receives the evidence text. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Inspection")
+	FName InspectionMessageTextWidgetName = TEXT("MessageText");
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Inspection",
+		meta = (ClampMin = "0.1", UIMin = "0.1", Units = "s"))
+	float InspectionMessageDisplayDuration = 4.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Inspection")
+	int32 InspectionMessageViewportZOrder = 1200;
+
 private:
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FBedMemoryTestAccessor;
@@ -145,6 +167,7 @@ private:
 	void HandleMouseYaw(float Value);
 	void EnsureKeywordCounter();
 	void RefreshKeywordCounter();
+	void HideInspectionMessage();
 
 	UFUNCTION()
 	void HandleWordAcquired(const FAcquiredWordRecord& WordRecord);
@@ -164,4 +187,6 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UBalhwajeomInvestigationSubsystem> BoundInvestigationSubsystem;
+
+	FTimerHandle InspectionMessageTimerHandle;
 };

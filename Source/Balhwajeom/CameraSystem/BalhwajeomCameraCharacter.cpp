@@ -2,6 +2,7 @@
 
 #include "BalhwajeomCameraCharacter.h"
 
+#include "BalhwajeomCameraPlayerController.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "BalhwajeomFixedCameraZone.h"
@@ -178,10 +179,10 @@ void ABalhwajeomCameraCharacter::BeginPlay()
 
 void ABalhwajeomCameraCharacter::HandleInspectionSucceeded(FText InspectionText)
 {
-	if (GEngine && !InspectionText.IsEmpty())
+	if (ABalhwajeomCameraPlayerController* CameraController =
+		Cast<ABalhwajeomCameraPlayerController>(GetController()))
 	{
-		GEngine->AddOnScreenDebugMessage(
-			-1, 4.0f, FColor(255, 220, 140), InspectionText.ToString(), true, FVector2D(1.25f));
+		CameraController->ShowInspectionMessage(InspectionText);
 	}
 }
 

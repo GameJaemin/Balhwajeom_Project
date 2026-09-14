@@ -5,7 +5,9 @@
 #include "BalhwajeomCameraCharacter.h"
 #include "BalhwajeomEvidenceActor.h"
 #include "BalhwajeomPhotoCameraComponent.h"
+#include "Blueprint/GameViewportSubsystem.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/TextBlock.h"
 #include "Interaction/ItemInspectionIntegration.h"
 #include "Components/Widget.h"
 #include "Interaction/DoorInteractionComponent.h"
@@ -16,6 +18,7 @@
 #include "Tutorial/BalhwajeomTutorialDirector.h"
 #include "Tutorial/BalhwajeomTutorialFocusWidget.h"
 #include "UI/BalhwajeomKeywordCounterWidget.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
 ABalhwajeomCameraPlayerController::ABalhwajeomCameraPlayerController()
@@ -28,6 +31,13 @@ ABalhwajeomCameraPlayerController::ABalhwajeomCameraPlayerController()
 	if (DefaultInteractionPromptClass.Succeeded())
 	{
 		InteractionPromptWidgetClass = DefaultInteractionPromptClass.Class;
+	}
+
+	static ConstructorHelpers::FClassFinder<UUserWidget> DefaultInspectionMessageClass(
+		TEXT("/Game/Balhwajeom/UI/Inspection/WBP_InspectionMessage"));
+	if (DefaultInspectionMessageClass.Succeeded())
+	{
+		InspectionMessageWidgetClass = DefaultInspectionMessageClass.Class;
 	}
 
 	// Native by default, so a level needs no Widget Blueprint to get the tutorial layer.
@@ -70,6 +80,16 @@ void ABalhwajeomCameraPlayerController::EndPlay(const EEndPlayReason::Type EndPl
 			this, &ABalhwajeomCameraPlayerController::HandleWordAcquired);
 	}
 	BoundInvestigationSubsystem = nullptr;
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(InspectionMessageTimerHandle);
+	}
+	if (InspectionMessageWidget)
+	{
+		InspectionMessageWidget->RemoveFromParent();
+	}
+	InspectionMessageWidget = nullptr;
 
 	if (KeywordCounterWidget)
 	{
@@ -229,7 +249,7 @@ void ABalhwajeomCameraPlayerController::EnsureTutorialFocusLayer()
 		TutorialFocusWidget->SetVisibility(
 			bGameplayPresentationEnabled ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 		// ZOrder 5 keeps the dim above the HUD icons (0) and the bed HUD (1) but below
-		// WB_Interact (10), so the [F] prompt and centre dot stay bright while dimmed.
+		// WBP_Interact (20), so the [F] prompt and centre dot stay readable while dimmed.
 		TutorialFocusWidget->AddToViewport(5);
 	}
 }
@@ -240,6 +260,67 @@ float ABalhwajeomCameraPlayerController::GetInteractionPromptAlpha() const
 	// The un-pulsed fade value. Reading the widget's render opacity instead would make
 	// the tutorial dim inherit the prompt's blink.
 	return InteractionPromptAlpha;
+}
+
+
+void ABalhwajeomCameraPlayerController::ShowInspectionMessage(const FText& Message)
+{
+	if (!IsLocalController() || Message.IsEmpty() || !InspectionMessageWidgetClass)
+	{
+		return;
+	}
+
+	if (!InspectionMessageWidget)
+	{
+		InspectionMessageWidget = CreateWidget<UUserWidget>(this, InspectionMessageWidgetClass);
+		if (!InspectionMessageWidget)
+		{
+			return;
+		}
+		InspectionMessageWidget->AddToViewport(InspectionMessageViewportZOrder);
+	}
+
+	if (UTextBlock* MessageText = Cast<UTextBlock>(
+		InspectionMessageWidget->GetWidgetFromName(InspectionMessageTextWidgetName)))
+	{
+		MessageText->SetText(Message);
+	}
+	else
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("%s: WBP_InspectionMessage has no TextBlock named '%s'."),
+			*GetName(),
+			*InspectionMessageTextWidgetName.ToString());
+	}
+
+	InspectionMessageWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (UGameViewportSubsystem* ViewportSubsystem = UGameViewportSubsystem::Get(GetWorld()))
+	{
+		FGameViewportWidgetSlot Slot = ViewportSubsystem->GetWidgetSlot(InspectionMessageWidget);
+		Slot.ZOrder = InspectionMessageViewportZOrder;
+		ViewportSubsystem->SetWidgetSlot(InspectionMessageWidget, Slot);
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			InspectionMessageTimerHandle,
+			this,
+			&ThisClass::HideInspectionMessage,
+			FMath::Max(0.1f, InspectionMessageDisplayDuration),
+			false);
+	}
+}
+
+
+void ABalhwajeomCameraPlayerController::HideInspectionMessage()
+{
+	if (InspectionMessageWidget)
+	{
+		InspectionMessageWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 void ABalhwajeomCameraPlayerController::SetBedMemoryHUDActive(bool bActive)
@@ -490,7 +571,6 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 	{
 		InteractionPromptWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
-
 	const bool bShouldShow = ShouldShowInteractionPrompt();
 	const float TargetOpacity = bShouldShow ? 1.0f : 0.0f;
 	InteractionPromptAlpha = FMath::FInterpTo(
@@ -499,9 +579,7 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 		DeltaSeconds,
 		InteractionPromptFadeSpeed);
 
-	// A tutorial step can ask for the prompt to blink. The blink is applied to what is
-	// drawn, never to InteractionPromptAlpha itself, because the tutorial's screen dim
-	// follows that value -- pulsing it would make the whole screen flicker.
+	// A tutorial step can ask for the [F] prompt itself to pulse.
 	float DisplayOpacity = InteractionPromptAlpha;
 	if (ABalhwajeomTutorialDirector::GetTutorialHintTarget(this) ==
 		EBalhwajeomTutorialHintTarget::InteractPrompt)

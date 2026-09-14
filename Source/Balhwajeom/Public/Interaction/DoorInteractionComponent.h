@@ -6,6 +6,9 @@
 #include "DoorInteractionComponent.generated.h"
 
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDoorLockedInteractionRequested);
+
+
 /** Opens the owning actor around its existing pivot when the player interacts. */
 UCLASS(ClassGroup = (Interaction), meta = (BlueprintSpawnableComponent))
 class BALHWAJEOM_API UDoorInteractionComponent : public UActorComponent
@@ -35,9 +38,8 @@ public:
 	 * Story state condition that must hold before this door can be opened.
 	 * An empty query leaves the door permanently unlocked, so existing doors are unaffected.
 	 *
-	 * The interaction prompt asks CanInteract(), so a locked door shows no [F] prompt at all.
-	 * Author the locked/unlocked label text on the door's UInspectionComponent instead:
-	 * its ConditionalData takes the same kind of query and swaps NearLabel.
+	 * A locked door still accepts an interaction attempt. RequestInteraction then broadcasts
+	 * OnLockedInteractionRequested instead of opening it.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door|Gate")
 	FGameplayTagQuery UnlockQuery;
@@ -63,6 +65,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Door")
 	bool RequestInteraction();
+
+	/** Fired when the player presses interact while the unlock condition is not met. */
+	UPROPERTY(BlueprintAssignable, Category = "Door|Gate")
+	FOnDoorLockedInteractionRequested OnLockedInteractionRequested;
 
 protected:
 	virtual void BeginPlay() override;

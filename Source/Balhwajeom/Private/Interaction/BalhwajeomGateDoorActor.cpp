@@ -1,11 +1,18 @@
 #include "Interaction/BalhwajeomGateDoorActor.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Blueprint/GameViewportSubsystem.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "Interaction/DoorInteractionComponent.h"
 #include "Interaction/InspectionComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Misc/PackageName.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
+#include "UObject/UObjectIterator.h"
 
 
 ABalhwajeomGateDoorActor::ABalhwajeomGateDoorActor()
@@ -38,6 +45,15 @@ ABalhwajeomGateDoorActor::ABalhwajeomGateDoorActor()
 		ObjectLabelWidget->SetWidgetClass(ObjectLabelWidgetClass.Class);
 	}
 
+	// WBP_Check owns its authored text and layout. The actor only controls how long
+	// that finished widget stays visible after a locked interaction.
+	static ConstructorHelpers::FClassFinder<UUserWidget> LockedFeedbackClass(
+		TEXT("/Game/Balhwajeom/UI/HUD/WBP_Check"));
+	if (LockedFeedbackClass.Succeeded())
+	{
+		LockedFeedbackWidgetClass = LockedFeedbackClass.Class;
+	}
+
 	// Label text is authored per instance, which keeps localized strings out of source
 	// encoding entirely -- this module's files are not consistently UTF-8.
 }
@@ -52,8 +68,123 @@ void ABalhwajeomGateDoorActor::BeginPlay()
 		InspectionComponent->OnPlayerDistanceStateChanged.AddUniqueDynamic(
 			this, &ThisClass::HandlePlayerDistanceStateChanged);
 	}
+	if (DoorInteraction)
+	{
+		DoorInteraction->OnLockedInteractionRequested.AddUniqueDynamic(
+			this, &ThisClass::HandleLockedInteractionRequested);
+	}
 
 	RefreshLabelForLockState();
+}
+
+
+void ABalhwajeomGateDoorActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(LockedFeedbackTimerHandle);
+	}
+	if (LockedFeedbackWidget)
+	{
+		LockedFeedbackWidget->RemoveFromParent();
+		LockedFeedbackWidget = nullptr;
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+
+void ABalhwajeomGateDoorActor::HandleLockedInteractionRequested()
+{
+	const TSubclassOf<UUserWidget> FeedbackClass = ResolveLockedFeedbackWidgetClass();
+	if (!FeedbackClass)
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("%s: locked interaction feedback has no widget class. Assign WBP_Check."),
+			*GetName());
+		return;
+	}
+
+	APlayerController* PlayerController = UGameplayStatics::GetPlayerController(this, 0);
+	if (!IsValid(PlayerController) || !PlayerController->IsLocalController())
+	{
+		return;
+	}
+
+	if (!LockedFeedbackWidget)
+	{
+		LockedFeedbackWidget = CreateWidget<UUserWidget>(
+			PlayerController, FeedbackClass);
+		if (!LockedFeedbackWidget)
+		{
+			return;
+		}
+		LockedFeedbackWidget->AddToViewport(FMath::Max(LockedFeedbackZOrder, 1100));
+	}
+	if (UGameViewportSubsystem* ViewportSubsystem = UGameViewportSubsystem::Get(GetWorld()))
+	{
+		FGameViewportWidgetSlot Slot = ViewportSubsystem->GetWidgetSlot(LockedFeedbackWidget);
+		// Older room instances may have serialized the previous value (30). Never let
+		// that stale instance value put this message under the tutorial UI.
+		Slot.ZOrder = FMath::Max(LockedFeedbackZOrder, 1100);
+		ViewportSubsystem->SetWidgetSlot(LockedFeedbackWidget, Slot);
+	}
+
+	LockedFeedbackWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			LockedFeedbackTimerHandle,
+			this,
+			&ThisClass::HideLockedFeedback,
+			FMath::Max(0.1f, LockedFeedbackDisplayDuration),
+			false);
+	}
+}
+
+
+TSubclassOf<UUserWidget> ABalhwajeomGateDoorActor::ResolveLockedFeedbackWidgetClass() const
+{
+	if (LockedFeedbackWidgetClass)
+	{
+		return LockedFeedbackWidgetClass;
+	}
+
+	// A newly created, unsaved WBP_Check still has a generated class in editor memory.
+	// Resolve it by name so PIE does not depend on when this actor's CDO was constructed.
+	for (TObjectIterator<UClass> It; It; ++It)
+	{
+		if (It->IsChildOf(UUserWidget::StaticClass()) &&
+			It->GetName().Equals(TEXT("WBP_Check_C"), ESearchCase::IgnoreCase))
+		{
+			return *It;
+		}
+	}
+
+	// FClassFinder in the constructor cannot see a widget created later during the same
+	// editor session, so try the conventional path again at interaction time.
+	const FString ConventionalPackage = TEXT("/Game/Balhwajeom/UI/HUD/WBP_Check");
+	if (FPackageName::DoesPackageExist(ConventionalPackage))
+	{
+		if (UClass* LoadedClass = LoadClass<UUserWidget>(
+			nullptr, TEXT("/Game/Balhwajeom/UI/HUD/WBP_Check.WBP_Check_C")))
+		{
+			return LoadedClass;
+		}
+	}
+
+	return nullptr;
+}
+
+
+void ABalhwajeomGateDoorActor::HideLockedFeedback()
+{
+	if (LockedFeedbackWidget)
+	{
+		LockedFeedbackWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 

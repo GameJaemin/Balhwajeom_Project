@@ -114,6 +114,18 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 		return false;
 	}
 
+	for (const FName& ClearStateID : ClearStateIDs)
+	{
+		FEvidenceStateDefinition ClearState;
+		TestTrue(
+			FString::Printf(TEXT("%s should exist"), *ClearStateID.ToString()),
+			Investigation->GetEvidenceStateDefinition(ClearStateID, ClearState));
+		TestTrue(
+			FString::Printf(TEXT("%s should not show a redundant camera instruction"),
+				*ClearStateID.ToString()),
+			ClearState.InteractionText.IsEmpty());
+	}
+
 	// Deferred so the flow is in place before BeginPlay auto-starts it.
 	ABalhwajeomTutorialDirector* Director =
 		Fixture.World->SpawnActorDeferred<ABalhwajeomTutorialDirector>(

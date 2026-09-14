@@ -10,6 +10,7 @@
 class UDoorInteractionComponent;
 class UInspectionComponent;
 class UStaticMeshComponent;
+class UUserWidget;
 class UWidgetComponent;
 
 
@@ -17,9 +18,9 @@ class UWidgetComponent;
  * A placeable door whose opening is gated on story progress.
  *
  * The gate itself lives in UDoorInteractionComponent, which the player's interaction
- * code already consults before offering the [F] prompt -- so a locked door shows no
- * prompt at all. This actor adds the part that component cannot own: a world label that
- * tells the player *why* the door will not open.
+ * code already consults before offering the [F] prompt. A locked door remains
+ * interactable and this actor shows a short screen-space explanation when opening is
+ * attempted before its story condition is met.
  *
  * Rotation happens around the actor's own pivot, so place the actor at the hinge and
  * offset DoorMesh to where the panel actually is.
@@ -47,11 +48,19 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
 
 	UFUNCTION()
 	void HandlePlayerDistanceStateChanged(EPlayerInspectionDistanceState NewState);
 
+	UFUNCTION()
+	void HandleLockedInteractionRequested();
+
+	UFUNCTION()
+	void HideLockedFeedback();
+
+	TSubclassOf<UUserWidget> ResolveLockedFeedbackWidgetClass() const;
 	void ApplyInspectionDistanceState(EPlayerInspectionDistanceState DistanceState);
 	void SetInspectionLabel(const FText& LabelText, bool bVisible);
 	void RefreshLabelForLockState();
@@ -84,6 +93,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Text")
 	FVector ObjectLabelOffset = FVector::ZeroVector;
 
+	/** Full-screen feedback shown when this locked door is interacted with. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback")
+	TSubclassOf<UUserWidget> LockedFeedbackWidgetClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback",
+		meta = (ClampMin = "0.1", UIMin = "0.1", Units = "s"))
+	float LockedFeedbackDisplayDuration = 2.5f;
+
+	/** Above the tutorial dim and interaction prompt, below modal screens. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback")
+	int32 LockedFeedbackZOrder = 1100;
+
 private:
 	EPlayerInspectionDistanceState LastInspectionDistanceState =
 		EPlayerInspectionDistanceState::OutOfRange;
@@ -92,4 +113,9 @@ private:
 	bool bLastKnownUnlocked = false;
 	bool bLastKnownOpen = false;
 	bool bHasLabelState = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUserWidget> LockedFeedbackWidget;
+
+	FTimerHandle LockedFeedbackTimerHandle;
 };

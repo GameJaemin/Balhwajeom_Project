@@ -5,7 +5,10 @@
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Interaction/DoorInteractionComponent.h"
 #include "Interaction/ItemInspectionIntegration.h"
+#include "Interaction/InspectionComponent.h"
+#include "Interaction/PlayerInteractionComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Story/StoryStateSubsystem.h"
 #include "Story/StoryStateTags.h"
@@ -481,6 +484,26 @@ float ABalhwajeomTutorialDirector::CalculateDimOpacity() const
 	}
 
 	if (IsScreenOwnedByOtherMode())
+	{
+		return 0.0f;
+	}
+
+	// Door feedback is WBP_Check, not part of the evidence-focus tutorial. Never dim
+	// the screen merely because the player is looking at an interactable door.
+	const APlayerController* PlayerController =
+		UGameplayStatics::GetPlayerController(this, 0);
+	const APawn* PlayerPawn = IsValid(PlayerController) ? PlayerController->GetPawn() : nullptr;
+	const UPlayerInteractionComponent* PlayerInteraction = IsValid(PlayerPawn)
+		? PlayerPawn->FindComponentByClass<UPlayerInteractionComponent>()
+		: nullptr;
+	const UInspectionComponent* FocusedInspection = IsValid(PlayerInteraction)
+		? PlayerInteraction->GetFocusedInspection()
+		: nullptr;
+	const AActor* FocusedActor = IsValid(FocusedInspection)
+		? FocusedInspection->GetOwner()
+		: nullptr;
+	if (IsValid(FocusedActor) &&
+		FocusedActor->FindComponentByClass<UDoorInteractionComponent>())
 	{
 		return 0.0f;
 	}

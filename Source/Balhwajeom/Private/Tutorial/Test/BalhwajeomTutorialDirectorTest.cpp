@@ -414,9 +414,11 @@ bool FTutorialDoorUnlockQueryTest::RunTest(const FString& Parameters)
 
 	Door->UnlockQuery = TutorialDirectorTests::QueryFor(TutorialDirectorTests::TriggerOne());
 	TestFalse(TEXT("An unsatisfied query locks the door"), Door->IsUnlocked());
-	TestFalse(
-		TEXT("A locked door refuses interaction, which also hides its [F] prompt"),
+	TestTrue(
+		TEXT("A closed locked door remains interactable so [F] can explain the gate"),
 		Door->CanInteract());
+	TestTrue(TEXT("A locked interaction attempt is handled"), Door->RequestInteraction());
+	TestFalse(TEXT("A locked interaction attempt does not open the door"), Door->IsOpen());
 
 	StoryState->AddStateTag(TutorialDirectorTests::TriggerOne());
 	TestTrue(TEXT("A satisfied query unlocks the door"), Door->IsUnlocked());

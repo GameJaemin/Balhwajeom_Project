@@ -64,7 +64,9 @@ bool UDoorInteractionComponent::IsUnlocked() const
 
 bool UDoorInteractionComponent::CanInteract() const
 {
-	return IsValid(GetOwner()) && !bIsOpening && !bIsOpen && IsUnlocked();
+	// A closed locked door is still a valid interaction target: attempting it gives the
+	// player feedback about what remains to be done instead of silently hiding [F].
+	return IsValid(GetOwner()) && !bIsOpening && !bIsOpen;
 }
 
 
@@ -73,6 +75,12 @@ bool UDoorInteractionComponent::RequestInteraction()
 	if (!CanInteract())
 	{
 		return false;
+	}
+
+	if (!IsUnlocked())
+	{
+		OnLockedInteractionRequested.Broadcast();
+		return true;
 	}
 
 	AActor* DoorActor = GetOwner();
