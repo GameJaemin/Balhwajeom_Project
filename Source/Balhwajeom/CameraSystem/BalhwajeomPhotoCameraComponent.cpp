@@ -549,12 +549,12 @@ void UBalhwajeomPhotoCameraComponent::TakePhoto()
 	if (bEnableEvidenceFocusSystem)
 	{
 		UpdateEvidenceFocus(0.0f);
-		// A successful evidence shot flashes only after the viewport pixels have been
-		// copied. Otherwise the white shutter overlay becomes the saved photograph.
-		if (!TryCaptureActiveFocusTarget())
-		{
-			TriggerPhotoFlash();
-		}
+		// The shutter flashes the instant the button is pressed, evidence or not, so
+		// a capture never reads as a frame late. The HUD draws no overlay while the
+		// clean screenshot frame renders, so the white rect cannot become the saved
+		// photograph, and it holds the flash clock until those pixels arrive.
+		TriggerPhotoFlash();
+		TryCaptureActiveFocusTarget();
 		return;
 	}
 
@@ -1628,9 +1628,8 @@ void UBalhwajeomPhotoCameraComponent::HandleScreenshotCaptured(
 	const FString AbsolutePath = PendingCapture->AbsolutePath;
 	ClearScreenshotDelegates();
 
-	// The pixels above represent the unflashed viewport. Start the visual shutter
-	// response now so it remains visible to the player but cannot contaminate the PNG.
-	TriggerPhotoFlash();
+	// The pixels above represent the unflashed viewport. The flash started at the
+	// shutter press and was held by the HUD; it resumes now that the overlays are back.
 	ShowPhotoFeedback(TEXT("사진을 저장하고 있다."), FColor::Silver);
 
 	if (Width <= 0 || Height <= 0 || Colors.Num() != Width * Height)

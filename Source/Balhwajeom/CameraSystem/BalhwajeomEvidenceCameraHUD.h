@@ -61,6 +61,9 @@ private:
 	bool EnsureViewfinderWidget();
 	void HideViewfinderWidget();
 
+	/** Full-screen shutter flash. Its clock only advances on frames it can draw. */
+	void DrawPhotoFlash();
+
 	void UpdateCapturePhotoPresentation();
 	bool EnsureCapturePhotoWidget();
 	void FinishCapturePhotoPresentation();
@@ -100,7 +103,8 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UBalhwajeomCapturePhotoWidget> CapturePhotoWidget;
 
-	float PhotoFlashEndTime = -1.0f;
+	/** Shutter flash time left, in seconds. Frozen while the screenshot frame renders. */
+	float PhotoFlashRemaining = 0.0f;
 	float EvidenceSavedAnimationStartTime = -1.0f;
 	float CapturePhotoLayoutWaitStartTime = -1.0f;
 	bool bCapturePhotoMovementLocked = false;
