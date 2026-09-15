@@ -3938,20 +3938,21 @@ bool UTabletWidgetBlueprintLibrary::CenterItemInspectionWidget()
 		TEXT("/ItemInspector/UI/WBP_JMItemInspection.WBP_JMItemInspection"));
 	if (!Blueprint || !TabletDesigner::ClearWidgetTree(Blueprint)) return false;
 	UWidgetTree* Tree = Blueprint->WidgetTree;
-	UOverlay* Root = Tree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("InspectorRoot"));
+	UCanvasPanel* Root = Tree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("InspectorRoot"));
 	Tree->RootWidget = Root;
 	UBorder* Backdrop = Tree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Backdrop"));
 	Backdrop->SetBrushColor(FLinearColor(0.02f, 0.02f, 0.025f, 0.92f));
-	UOverlaySlot* BackdropSlot = Root->AddChildToOverlay(Backdrop);
-	BackdropSlot->SetHorizontalAlignment(HAlign_Fill);
-	BackdropSlot->SetVerticalAlignment(VAlign_Fill);
+	UCanvasPanelSlot* BackdropSlot = Root->AddChildToCanvas(Backdrop);
+	BackdropSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+	BackdropSlot->SetOffsets(FMargin(0.0f));
+	BackdropSlot->SetZOrder(-100);
 	UScaleBox* Content = Tree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("MainRow"));
 	Content->SetStretch(EStretch::ScaleToFit);
 	Content->SetStretchDirection(EStretchDirection::DownOnly);
-	UOverlaySlot* ContentSlot = Root->AddChildToOverlay(Content);
-	ContentSlot->SetHorizontalAlignment(HAlign_Fill);
-	ContentSlot->SetVerticalAlignment(VAlign_Fill);
-	ContentSlot->SetPadding(FMargin(48.0f));
+	UCanvasPanelSlot* ContentSlot = Root->AddChildToCanvas(Content);
+	ContentSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+	ContentSlot->SetOffsets(FMargin(48.0f));
+	ContentSlot->SetZOrder(0);
 	USizeBox* Size = Tree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("PreviewSizeBox"));
 	Size->SetWidthOverride(720.0f);
 	Size->SetHeightOverride(720.0f);
@@ -3975,10 +3976,12 @@ bool UTabletWidgetBlueprintLibrary::CenterItemInspectionWidget()
 	ControlsHintPanel->SetBrushColor(FLinearColor(0.015f, 0.015f, 0.02f, 0.78f));
 	ControlsHintPanel->SetPadding(FMargin(20.0f, 10.0f));
 	ControlsHintPanel->SetVisibility(ESlateVisibility::HitTestInvisible);
-	UOverlaySlot* ControlsSlot = Root->AddChildToOverlay(ControlsHintPanel);
-	ControlsSlot->SetHorizontalAlignment(HAlign_Center);
-	ControlsSlot->SetVerticalAlignment(VAlign_Bottom);
-	ControlsSlot->SetPadding(FMargin(32.0f, 32.0f, 32.0f, 52.0f));
+	UCanvasPanelSlot* ControlsSlot = Root->AddChildToCanvas(ControlsHintPanel);
+	ControlsSlot->SetAnchors(FAnchors(0.5f, 1.0f));
+	ControlsSlot->SetAlignment(FVector2D(0.5f, 1.0f));
+	ControlsSlot->SetPosition(FVector2D(0.0f, -52.0f));
+	ControlsSlot->SetAutoSize(true);
+	ControlsSlot->SetZOrder(100);
 
 	UHorizontalBox* ControlsRow = Tree->ConstructWidget<UHorizontalBox>(
 		UHorizontalBox::StaticClass(), TEXT("ControlsHintRow"));
