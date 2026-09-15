@@ -64,6 +64,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Inspection")
 	static bool ConfigureObjectLabelLayout();
 
+	/** Matches the focus guide's icon layout and copies WBP_ObjectLabel's Multi Shadow Text styling. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Inspection")
+	static bool ConfigureEvidenceFocusGuideLayout();
+
 	/** Sets a named UButton's content to an Image using the given texture (e.g. an icon for a physical button). */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool SetButtonIconTexture(const FString& AssetPath, const FString& ButtonName, const FString& TexturePath);

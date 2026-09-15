@@ -106,6 +106,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Keyword Style")
 	FLinearColor KeywordBackgroundColor = FLinearColor(0.96f, 0.96f, 0.96f, 1.0f);
 
+	/** When set, each keyword pill uses this texture instead of KeywordBackgroundColor. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Keyword Style")
+	TObjectPtr<UTexture2D> KeywordBackgroundTexture;
+
 	/** Background used when the captured photo has a keyword-analysis sentence. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Theme")
 	TObjectPtr<UTexture2D> AnalysisBackgroundTexture;

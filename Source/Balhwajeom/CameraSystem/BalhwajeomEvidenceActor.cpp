@@ -16,6 +16,7 @@
 #include "ItemInspection/JMItemInspectionData.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
+#include "CameraSystem/BalhwajeomEvidenceFocusGuideLayout.h"
 #include "CameraSystem/PhotoWorldStoryActor.h"
 #include "Engine/StaticMesh.h"
 #include "NiagaraComponent.h"
@@ -70,13 +71,6 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 	if (PhotoRequiredIconAsset.Succeeded())
 	{
 		PhotoRequiredIcon = PhotoRequiredIconAsset.Object;
-	}
-
-	static ConstructorHelpers::FObjectFinder<UTexture2D> PhotoCapturedIconAsset(
-		TEXT("/Game/Balhwajeom/UI/Icons/T_EvidencePhotoCaptured.T_EvidencePhotoCaptured"));
-	if (PhotoCapturedIconAsset.Succeeded())
-	{
-		PhotoCapturedIcon = PhotoCapturedIconAsset.Object;
 	}
 
 	static ConstructorHelpers::FObjectFinder<UTexture2D> PhotoUnavailableIconAsset(
@@ -1044,19 +1038,14 @@ void ABalhwajeomEvidenceActor::SetInspectionLabel(
 
 	if (UImage* StatusImage = Cast<UImage>(LabelWidget->GetWidgetFromName(TEXT("UseCamera"))))
 	{
-		UTexture2D* StatusTexture = nullptr;
-		double LabelPositionX = 22.0;
-		if (!bCanBeCaptured)
-		{
-			StatusTexture = PhotoUnavailableIcon;
-		}
-		else
-		{
-			StatusTexture = EvidenceData.bAlreadyCollected
-				? PhotoCapturedIcon
-				: PhotoRequiredIcon;
-			LabelPositionX = EvidenceData.bAlreadyCollected ? 35.0 : 40.0;
-		}
+		const bool bUsePhotoRequiredIcon =
+			BalhwajeomEvidenceFocusGuideLayout::ShouldUsePhotoRequiredIcon(
+				bCanBeCaptured,
+				EvidenceData.bAlreadyCollected);
+		UTexture2D* StatusTexture = bUsePhotoRequiredIcon
+			? PhotoRequiredIcon.Get()
+			: PhotoUnavailableIcon.Get();
+		const double LabelPositionX = bUsePhotoRequiredIcon ? 40.0 : 22.0;
 		if (StatusTexture)
 		{
 			StatusImage->SetBrushFromTexture(StatusTexture, false);

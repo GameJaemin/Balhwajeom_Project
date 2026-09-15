@@ -29,7 +29,7 @@ public class Balhwajeom : ModuleRules
             "MediaAssets"
         });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "JMInteraction" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "JMInteraction", "MultiShadowText" });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"Balhwajeom",
