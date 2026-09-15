@@ -250,13 +250,13 @@ void AJMItemInspectionPreviewActor::RotatePreview(float ScreenDeltaX, float Scre
 	FQuat DeltaRotation = FQuat::Identity;
 	if (ViewSettings.bAllowYawRotation)
 	{
-		const float YawRadians = FMath::DegreesToRadians(ScreenDeltaX * ViewSettings.RotationSensitivity);
+		const float YawRadians = FMath::DegreesToRadians(-ScreenDeltaX * ViewSettings.RotationSensitivity);
 		DeltaRotation = FQuat(FVector::UpVector, YawRadians) * DeltaRotation;
 	}
 
 	if (ViewSettings.bAllowPitchRotation)
 	{
-		const float PitchRadians = FMath::DegreesToRadians(ScreenDeltaY * ViewSettings.RotationSensitivity);
+		const float PitchRadians = FMath::DegreesToRadians(-ScreenDeltaY * ViewSettings.RotationSensitivity);
 		DeltaRotation = FQuat(FVector::RightVector, PitchRadians) * DeltaRotation;
 	}
 

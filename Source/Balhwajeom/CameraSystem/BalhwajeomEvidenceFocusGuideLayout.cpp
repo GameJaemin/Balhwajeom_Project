@@ -4,6 +4,11 @@
 
 namespace BalhwajeomEvidenceFocusGuideLayout
 {
+	bool ShouldUsePhotoRequiredIcon(const bool bCanCapture, const bool bAlreadyCaptured)
+	{
+		return bCanCapture && !bAlreadyCaptured;
+	}
+
 	FVector2D CalculateWidgetPosition(const FVector2D& GuidePosition)
 	{
 		return GuidePosition + FVector2D(-33.5, -25.0);

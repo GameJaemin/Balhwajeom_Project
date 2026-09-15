@@ -11,7 +11,9 @@ public class ItemInspectorTests : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+			"InputCore",
 			"ItemInspectorRuntime",
+			"SlateCore",
 			"UMG",
 			"UnrealEd"
 		});

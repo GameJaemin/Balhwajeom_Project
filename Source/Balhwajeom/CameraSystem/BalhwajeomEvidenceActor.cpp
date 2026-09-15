@@ -16,6 +16,7 @@
 #include "ItemInspection/JMItemInspectionData.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
+#include "CameraSystem/BalhwajeomEvidenceFocusGuideLayout.h"
 #include "CameraSystem/PhotoWorldStoryActor.h"
 #include "Engine/StaticMesh.h"
 #include "NiagaraComponent.h"
@@ -72,13 +73,6 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 		PhotoRequiredIcon = PhotoRequiredIconAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UTexture2D> PhotoCapturedIconAsset(
-		TEXT("/Game/Balhwajeom/UI/Icons/T_EvidencePhotoCaptured.T_EvidencePhotoCaptured"));
-	if (PhotoCapturedIconAsset.Succeeded())
-	{
-		PhotoCapturedIcon = PhotoCapturedIconAsset.Object;
-	}
-
 	static ConstructorHelpers::FObjectFinder<UTexture2D> PhotoUnavailableIconAsset(
 		TEXT("/Game/Balhwajeom/UI/Icons/DotIcon.DotIcon"));
 	if (PhotoUnavailableIconAsset.Succeeded())
@@ -88,6 +82,9 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 
 	CameraFocusPoint = CreateDefaultSubobject<USceneComponent>(TEXT("CameraFocusPoint"));
 	CameraFocusPoint->SetupAttachment(EvidenceMesh);
+
+	StateEffectAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("StateEffectAnchor"));
+	StateEffectAnchor->SetupAttachment(EvidenceMesh);
 
 	// Sits slightly above the object so a freshly placed actor shows readable text before the
 	// designer positions it; +X points at the reader because the story widget faces its own +X.
@@ -99,6 +96,16 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 	StoryAnchor->SetRelativeLocation(FVector(0.0f, 0.0f, 60.0f));
 
 #if WITH_EDITORONLY_DATA
+	StateEffectAnchorArrow = CreateEditorOnlyDefaultSubobject<UArrowComponent>(
+		TEXT("StateEffectAnchorArrow"));
+	if (StateEffectAnchorArrow)
+	{
+		StateEffectAnchorArrow->SetupAttachment(StateEffectAnchor);
+		StateEffectAnchorArrow->ArrowColor = FColor(255, 180, 60);
+		StateEffectAnchorArrow->bIsScreenSizeScaled = true;
+		StateEffectAnchorArrow->SetHiddenInGame(true);
+	}
+
 	StoryAnchorArrow = CreateEditorOnlyDefaultSubobject<UArrowComponent>(TEXT("StoryAnchorArrow"));
 	if (StoryAnchorArrow)
 	{
@@ -242,12 +249,13 @@ void ABalhwajeomEvidenceActor::ApplyStateVisuals(
 
 	ActiveStateEffect = UNiagaraFunctionLibrary::SpawnSystemAttached(
 		Effect,
-		EvidenceMesh,
+		StateEffectAnchor,
 		NAME_None,
 		FVector::ZeroVector,
 		FRotator::ZeroRotator,
 		EAttachLocation::SnapToTarget,
 		/*bAutoDestroy*/ true);
+
 }
 
 void ABalhwajeomEvidenceActor::ReportStateMeshPivotShift(
@@ -1030,19 +1038,14 @@ void ABalhwajeomEvidenceActor::SetInspectionLabel(
 
 	if (UImage* StatusImage = Cast<UImage>(LabelWidget->GetWidgetFromName(TEXT("UseCamera"))))
 	{
-		UTexture2D* StatusTexture = nullptr;
-		double LabelPositionX = 22.0;
-		if (!bCanBeCaptured)
-		{
-			StatusTexture = PhotoUnavailableIcon;
-		}
-		else
-		{
-			StatusTexture = EvidenceData.bAlreadyCollected
-				? PhotoCapturedIcon
-				: PhotoRequiredIcon;
-			LabelPositionX = EvidenceData.bAlreadyCollected ? 35.0 : 40.0;
-		}
+		const bool bUsePhotoRequiredIcon =
+			BalhwajeomEvidenceFocusGuideLayout::ShouldUsePhotoRequiredIcon(
+				bCanBeCaptured,
+				EvidenceData.bAlreadyCollected);
+		UTexture2D* StatusTexture = bUsePhotoRequiredIcon
+			? PhotoRequiredIcon.Get()
+			: PhotoUnavailableIcon.Get();
+		const double LabelPositionX = bUsePhotoRequiredIcon ? 40.0 : 22.0;
 		if (StatusTexture)
 		{
 			StatusImage->SetBrushFromTexture(StatusTexture, false);

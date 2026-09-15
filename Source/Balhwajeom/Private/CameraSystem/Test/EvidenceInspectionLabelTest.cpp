@@ -361,14 +361,14 @@ bool FEvidenceInspectionNonFarLabelTest::RunTest(const FString& Parameters)
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FEvidencePhotoCaptureRefreshesIconTest,
-	"Balhwajeom.Camera.Evidence.ObjectLabel.PhotoCaptureRefreshesIcon",
+	FEvidencePhotoCaptureReturnsToDefaultIconTest,
+	"Balhwajeom.Camera.Evidence.ObjectLabel.PhotoCaptureReturnsToDefaultIcon",
 	EAutomationTestFlags::EditorContext |
 	EAutomationTestFlags::EngineFilter
 )
 
 
-bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
+bool FEvidencePhotoCaptureReturnsToDefaultIconTest::RunTest(const FString& Parameters)
 {
 	UGameInstance* GameInstance = NewObject<UGameInstance>(GEngine);
 	GameInstance->InitializeStandalone();
@@ -401,7 +401,7 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 	{
 		Evidence->DispatchBeginPlay();
 	}
-	// This test exercises the camera-to-check transition independently of the
+	// This test exercises the camera-to-default-dot transition independently of the
 	// configured object's current data-authored capture availability.
 	FEvidenceActorTestAccessor::SetCanBeCaptured(Evidence, true);
 	UJMInspectableComponent* ItemInspection = Evidence->GetItemInspectionComponent();
@@ -438,9 +438,9 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 	UTexture2D* RequiredIcon = LoadObject<UTexture2D>(
 		nullptr,
 		TEXT("/Game/Balhwajeom/UI/Icons/T_EvidencePhotoRequired.T_EvidencePhotoRequired"));
-	UTexture2D* CapturedIcon = LoadObject<UTexture2D>(
+	UTexture2D* DefaultIcon = LoadObject<UTexture2D>(
 		nullptr,
-		TEXT("/Game/Balhwajeom/UI/Icons/T_EvidencePhotoCaptured.T_EvidencePhotoCaptured"));
+		TEXT("/Game/Balhwajeom/UI/Icons/DotIcon.DotIcon"));
 	TestEqual(
 		TEXT("Uncaptured evidence should use the camera icon"),
 		FEvidenceActorTestAccessor::GetStatusIconResource(Evidence),
@@ -493,9 +493,9 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 			TEXT("A matching photo event should mark this actor collected"),
 			Evidence->GetEvidenceData().bAlreadyCollected);
 		TestEqual(
-			TEXT("A matching photo event should immediately swap to the check icon"),
+			TEXT("A matching photo event should return to the default dot icon"),
 			FEvidenceActorTestAccessor::GetStatusIconResource(Evidence),
-			static_cast<UObject*>(CapturedIcon));
+			static_cast<UObject*>(DefaultIcon));
 		const TOptional<double> CapturedLabelX =
 			FEvidenceActorTestAccessor::GetLabelContainerPositionX(Evidence);
 		TestTrue(
@@ -504,9 +504,9 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 		if (CapturedLabelX.IsSet())
 		{
 			TestEqual(
-				TEXT("Captured evidence should position its label at X=35"),
+				TEXT("Captured evidence should use the default label position X=22"),
 				CapturedLabelX.GetValue(),
-				35.0);
+				22.0);
 		}
 	}
 

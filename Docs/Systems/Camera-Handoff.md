@@ -105,6 +105,8 @@ PIE에서는 먼저 FOV를 바꿔도 같은 실제 거리에서 초점 판정이
 - `StateMesh` — 이 상태에서 보여줄 메시. 교체하면 `CameraTargetBounds`(촬영·상호작용 트레이스 볼륨)와 상태 아이콘 위치를 함께 갱신하고, 3D 인스펙션도 새 메시로 다시 구성한다. 로드로 상태를 복원할 때도 적용한다.
 - `StateEffect` — 이 상태로 **전환될 때 1회** 재생할 Niagara System. `EvidenceMesh`에 Attach되고, 상태가 또 바뀌면 이전 이펙트를 정지한다. 로드 복원 시에는 재생하지 않는다.
 
+이펙트 위치는 배치된 Evidence Actor의 `StateEffectAnchor` 컴포넌트를 선택해 오브젝트마다 지정한다. `StoryAnchor`처럼 Details의 Transform이나 뷰포트 이동 도구로 위치를 조정할 수 있고, 주황색 화살표로 위치와 방향을 확인할 수 있다. Niagara는 이 앵커에 Attach된다.
+
 둘 다 CSV에서 전체 에셋 경로로 적는다.
 
 ```csv

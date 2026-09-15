@@ -192,6 +192,8 @@ public:
 	int32 GetStatementTextFontSize() const { return StatementTextFontSize; }
 	UFont* GetSelectedPhotoResultFont() const { return SelectedPhotoResultFont; }
 	int32 GetSelectedPhotoResultFontSize() const { return SelectedPhotoResultFontSize; }
+	UFont* GetAnalysisResultFont() const { return AnalysisResultFont; }
+	int32 GetAnalysisResultFontSize() const { return AnalysisResultFontSize; }
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Statement Style")
 	TObjectPtr<UFont> KeywordFont;
@@ -212,6 +214,16 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Statement Style", meta = (ClampMin = "8", ClampMax = "40"))
 	int32 SelectedPhotoResultFontSize = 11;
+
+	/** Photo detail widget only: font for TXT_PopupBody once a photo's analysis sentence has been
+	 * solved (its ResultText), shown left-aligned instead of the puzzle's default centered style.
+	 * Every other TXT_PopupBody case (plain natural-language photos, the statement body) keeps
+	 * this widget's own Designer-authored justification/font untouched. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Photo Style")
+	TObjectPtr<UFont> AnalysisResultFont;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Photo Style", meta = (ClampMin = "8", ClampMax = "40"))
+	int32 AnalysisResultFontSize = 24;
 
 private:
 	UPROPERTY(meta = (BindWidgetOptional)) TObjectPtr<UTextBlock> TXT_PopupTitle;
@@ -588,6 +600,7 @@ private:
 	void RefreshPuzzleControls();
 	void BuildSentenceBuilder(const FSentenceDefinition& Sentence);
 	void SetPhotoPuzzleErrorStyle(bool bError);
+	void ApplyPopupBodyResultStyle(bool bIsSolvedAnalysisResult);
 	void BuildPhotoSlots(const FSentenceDefinition& Sentence);
 	void HidePuzzleControls();
 	void ValidateActivePuzzle(bool bExplicitStatementSubmit);
@@ -727,6 +740,14 @@ private:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TXT_PopupBody;
+
+	/** TXT_PopupBody's Designer-authored font, cached the moment each fresh detail widget is bound
+	 * (see BindActiveDetailWidgets), so OpenPhoto can switch a solved analysis sentence's
+	 * ResultText to a different font and still restore this default for every other case (plain
+	 * natural-language photos, the statement body, etc). UTextLayoutWidget's Justification has no
+	 * public getter to cache the same way, so that default is just the ETextJustify::Center
+	 * literal at the OpenPhoto call site -- true for every current TXT_PopupBody instance today. */
+	FSlateFontInfo DefaultPopupBodyFont;
 
 	/** Shows the captured PNG for the photo currently open in the popup. Collapsed for non-photo popups (e.g. the statement). */
 	UPROPERTY(meta = (BindWidgetOptional))
