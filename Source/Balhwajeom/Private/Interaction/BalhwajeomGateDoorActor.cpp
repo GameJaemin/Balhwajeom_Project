@@ -228,6 +228,17 @@ void ABalhwajeomGateDoorActor::RefreshLabelForLockState()
 }
 
 
+void ABalhwajeomGateDoorActor::CheckDoorFullyOpenedBroadcast()
+{
+	if (bHasBroadcastDoorOpened || !DoorInteraction || !DoorInteraction->IsOpen())
+	{
+		return;
+	}
+	bHasBroadcastDoorOpened = true;
+	OnDoorFullyOpened.Broadcast();
+}
+
+
 void ABalhwajeomGateDoorActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -235,6 +246,7 @@ void ABalhwajeomGateDoorActor::Tick(float DeltaSeconds)
 	// The unlock condition is story state the door does not own, so there is nothing to
 	// subscribe to that is cheaper than this throttled poll.
 	RefreshLabelForLockState();
+	CheckDoorFullyOpenedBroadcast();
 
 	if (ObjectLabelWidget && DoorMesh)
 	{
