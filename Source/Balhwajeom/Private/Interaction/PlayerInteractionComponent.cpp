@@ -471,12 +471,14 @@ bool UPlayerInteractionComponent::RequestInspect()
 				OnInspectionSucceeded.Broadcast(InspectionText);
 				RestoreGameInputAfterInspectionMessage(this);
 
-				// A successful investigation interaction consumes this input completely.
-				// Do not chain the separate item-inspection modal after it: that modal needs
-				// another F to close and turns every evidence -> next target transition into
-				// an unintended two-step interaction. The item inspector remains the fallback
-				// below when the evidence has no investigation interaction to execute.
-				return true;
+				// Reaching this branch already means the actor explicitly opted into item
+				// inspection (HasFocusedItemInspection). Complete its investigation-side
+				// progression first, then open the 3D inspector with the same input. Returning
+				// here used to make configured evidence behave differently depending on whether
+				// its ObjectID had a valid investigation interaction.
+				return BalhwajeomItemInspection::TryInspect(
+					FocusedItemActor.Get(),
+					Cast<APawn>(GetOwner()));
 			}
 		}
 		return BalhwajeomItemInspection::TryInspect(FocusedItemActor.Get(), Cast<APawn>(GetOwner()));
