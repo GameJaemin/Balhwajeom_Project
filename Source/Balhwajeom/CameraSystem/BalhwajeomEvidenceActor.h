@@ -236,11 +236,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inspection|UI")
 	TObjectPtr<UTexture2D> PhotoRequiredIcon;
 
-	/** Status icon used after this evidence has been photographed. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inspection|UI")
-	TObjectPtr<UTexture2D> PhotoCapturedIcon;
-
-	/** Status icon used when the current evidence state cannot be photographed. */
+	/** Default status icon used when this evidence cannot or no longer needs to be photographed. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inspection|UI")
 	TObjectPtr<UTexture2D> PhotoUnavailableIcon;
 

@@ -8,6 +8,32 @@
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FEvidenceStatusIconUsesTwoStatesTest,
+	"Balhwajeom.Camera.Evidence.FocusGuide.RuntimeUsesTwoIconStates",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FEvidenceStatusIconUsesTwoStatesTest::RunTest(const FString& Parameters)
+{
+	TestTrue(
+		TEXT("Capture-enabled uncaptured evidence should use the camera icon"),
+		BalhwajeomEvidenceFocusGuideLayout::ShouldUsePhotoRequiredIcon(true, false));
+	TestFalse(
+		TEXT("Capture-disabled evidence should use the default dot icon"),
+		BalhwajeomEvidenceFocusGuideLayout::ShouldUsePhotoRequiredIcon(false, false));
+	TestFalse(
+		TEXT("Captured evidence should use the default dot icon"),
+		BalhwajeomEvidenceFocusGuideLayout::ShouldUsePhotoRequiredIcon(true, true));
+	TestFalse(
+		TEXT("Captured and disabled evidence should use the default dot icon"),
+		BalhwajeomEvidenceFocusGuideLayout::ShouldUsePhotoRequiredIcon(false, true));
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FEvidenceFocusGuideCentersOnGuidePositionTest,
 	"Balhwajeom.Camera.Evidence.FocusGuide.RuntimeCentersOnGuidePosition",
 	EAutomationTestFlags::EditorContext |
@@ -39,14 +65,14 @@ bool FEvidenceFocusGuidePreservesAuthoredIconSizeTest::RunTest(const FString& Pa
 	UTexture2D* RequiredIcon = LoadObject<UTexture2D>(
 		nullptr,
 		TEXT("/Game/Balhwajeom/UI/Icons/T_EvidencePhotoRequired.T_EvidencePhotoRequired"));
-	UTexture2D* CapturedIcon = LoadObject<UTexture2D>(
+	UTexture2D* DefaultIcon = LoadObject<UTexture2D>(
 		nullptr,
-		TEXT("/Game/Balhwajeom/UI/Icons/T_EvidencePhotoCaptured.T_EvidencePhotoCaptured"));
+		TEXT("/Game/Balhwajeom/UI/Icons/DotIcon.DotIcon"));
 	if (!TestNotNull(TEXT("Required evidence icon should load"), RequiredIcon))
 	{
 		return false;
 	}
-	if (!TestNotNull(TEXT("Captured evidence icon should load"), CapturedIcon))
+	if (!TestNotNull(TEXT("Default evidence icon should load"), DefaultIcon))
 	{
 		return false;
 	}
@@ -65,13 +91,13 @@ bool FEvidenceFocusGuidePreservesAuthoredIconSizeTest::RunTest(const FString& Pa
 		TEXT("Required-icon swap should preserve the authored 67x50 brush size"),
 		StatusImage->GetBrush().ImageSize.Equals(FVector2D(67.0, 50.0)));
 
-	BalhwajeomEvidenceFocusGuideLayout::ApplyStatusTexture(StatusImage, CapturedIcon);
+	BalhwajeomEvidenceFocusGuideLayout::ApplyStatusTexture(StatusImage, DefaultIcon);
 	TestEqual(
-		TEXT("Runtime texture swap should apply the captured icon"),
+		TEXT("Runtime texture swap should apply the default icon"),
 		StatusImage->GetBrush().GetResourceObject(),
-		static_cast<UObject*>(CapturedIcon));
+		static_cast<UObject*>(DefaultIcon));
 	TestTrue(
-		TEXT("Captured-icon swap should preserve the authored 67x50 brush size"),
+		TEXT("Default-icon swap should preserve the authored 67x50 brush size"),
 		StatusImage->GetBrush().ImageSize.Equals(FVector2D(67.0, 50.0)));
 	return true;
 }

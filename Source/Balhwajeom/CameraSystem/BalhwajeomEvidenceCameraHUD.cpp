@@ -49,11 +49,11 @@ ABalhwajeomEvidenceCameraHUD::ABalhwajeomEvidenceCameraHUD()
 		PhotoRequiredIcon = PhotoRequiredIconAsset.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UTexture2D> PhotoCapturedIconAsset(
-		TEXT("/Game/Balhwajeom/UI/Icons/T_EvidencePhotoCaptured.T_EvidencePhotoCaptured"));
-	if (PhotoCapturedIconAsset.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UTexture2D> PhotoUnavailableIconAsset(
+		TEXT("/Game/Balhwajeom/UI/Icons/DotIcon.DotIcon"));
+	if (PhotoUnavailableIconAsset.Succeeded())
 	{
-		PhotoCapturedIcon = PhotoCapturedIconAsset.Object;
+		PhotoUnavailableIcon = PhotoUnavailableIconAsset.Object;
 	}
 }
 
@@ -146,20 +146,29 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 
 		const ABalhwajeomEvidenceActor* DisplayedEvidence =
 			Cast<ABalhwajeomEvidenceActor>(PhotoCamera->GetDisplayedFocusTarget());
-		const bool bShowInvestigationCaptureSymbol =
-			bResolvedInvestigationDefinitions &&
-			StateDefinition.bCanCapture &&
-			!StateDefinition.PhotoID.IsNone();
+		const bool bShowInvestigationStatusIcon = bResolvedInvestigationDefinitions;
 		const bool bShowLegacyCaptureSymbol = !bUsesInvestigationData;
 		const bool bShowStatusIcon =
-			bShowInvestigationCaptureSymbol || bShowLegacyCaptureSymbol;
+			bShowInvestigationStatusIcon || bShowLegacyCaptureSymbol;
+		bool bCanCapture = false;
 		bool bAlreadyCaptured = false;
-		if (bShowStatusIcon)
+		if (bShowInvestigationStatusIcon)
 		{
-			bAlreadyCaptured = bShowInvestigationCaptureSymbol
-				? InvestigationSubsystem->HasCapturedPhoto(StateDefinition.PhotoID)
-				: DisplayedEvidence && DisplayedEvidence->GetEvidenceData().bAlreadyCollected;
+			bCanCapture = StateDefinition.bCanCapture && !StateDefinition.PhotoID.IsNone();
+			bAlreadyCaptured = bCanCapture &&
+				InvestigationSubsystem->HasCapturedPhoto(StateDefinition.PhotoID);
 		}
+		else if (bShowLegacyCaptureSymbol)
+		{
+			bCanCapture = TargetInfo.bCanBeCaptured;
+			bAlreadyCaptured = DisplayedEvidence
+				? DisplayedEvidence->GetEvidenceData().bAlreadyCollected
+				: TargetInfo.EvidenceData.bAlreadyCollected;
+		}
+		const bool bUsePhotoRequiredIcon =
+			BalhwajeomEvidenceFocusGuideLayout::ShouldUsePhotoRequiredIcon(
+				bCanCapture,
+				bAlreadyCaptured);
 
 		FText NearLabelText;
 		if (bShowCenteredText)
@@ -181,7 +190,7 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 			DisplayedGuidePosition,
 			GuideOpacity,
 			bShowStatusIcon,
-			bAlreadyCaptured,
+			bUsePhotoRequiredIcon,
 			NearLabelText);
 	}
 	else
@@ -282,7 +291,7 @@ void ABalhwajeomEvidenceCameraHUD::UpdateFocusGuideWidget(
 	const FVector2D& GuidePosition,
 	const float GuideOpacity,
 	const bool bShowStatusIcon,
-	const bool bAlreadyCaptured,
+	const bool bUsePhotoRequiredIcon,
 	const FText& LabelText)
 {
 	const bool bShowLabel = !LabelText.IsEmptyOrWhitespace();
@@ -294,9 +303,9 @@ void ABalhwajeomEvidenceCameraHUD::UpdateFocusGuideWidget(
 
 	if (FocusGuideStatusImage)
 	{
-		UTexture2D* StatusTexture = bAlreadyCaptured
-			? PhotoCapturedIcon.Get()
-			: PhotoRequiredIcon.Get();
+		UTexture2D* StatusTexture = bUsePhotoRequiredIcon
+			? PhotoRequiredIcon.Get()
+			: PhotoUnavailableIcon.Get();
 		BalhwajeomEvidenceFocusGuideLayout::ApplyStatusTexture(
 			FocusGuideStatusImage,
 			StatusTexture);
