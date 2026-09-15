@@ -44,6 +44,7 @@ UJMItemInspectionWidgetBase::UJMItemInspectionWidgetBase(const FObjectInitialize
 void UJMItemInspectionWidgetBase::NativeConstruct()
 {
 	Super::NativeConstruct();
+	SetVisibility(ESlateVisibility::Visible);
 
 	BuildDefaultWidgetTreeIfNeeded();
 	ResolveSimpleTransitionLayers();
@@ -85,7 +86,7 @@ FReply UJMItemInspectionWidgetBase::NativeOnKeyDown(const FGeometry& InGeometry,
 
 FReply UJMItemInspectionWidgetBase::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	if (bPreviewInputEnabled && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsPointerOverPreviewArea(InMouseEvent))
+	if (bPreviewInputEnabled && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsPointerOverInteractionArea(InGeometry, InMouseEvent))
 	{
 		bPreviewDragging = true;
 		return FReply::Handled().CaptureMouse(TakeWidget());
@@ -107,7 +108,7 @@ FReply UJMItemInspectionWidgetBase::NativeOnMouseButtonUp(const FGeometry& InGeo
 
 FReply UJMItemInspectionWidgetBase::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	if (bPreviewDragging && (!bPreviewInputEnabled || !IsPointerOverPreviewArea(InMouseEvent)
+	if (bPreviewDragging && (!bPreviewInputEnabled || !IsPointerOverInteractionArea(InGeometry, InMouseEvent)
 		|| !InMouseEvent.IsMouseButtonDown(EKeys::LeftMouseButton)))
 	{
 		bPreviewDragging = false;
@@ -126,7 +127,7 @@ FReply UJMItemInspectionWidgetBase::NativeOnMouseMove(const FGeometry& InGeometr
 
 FReply UJMItemInspectionWidgetBase::NativeOnMouseWheel(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
-	if (bPreviewInputEnabled && IsPointerOverPreviewArea(InMouseEvent))
+	if (bPreviewInputEnabled && IsPointerOverInteractionArea(InGeometry, InMouseEvent))
 	{
 		OnPreviewZoomed.Broadcast(InMouseEvent.GetWheelDelta());
 		return FReply::Handled();
@@ -443,14 +444,11 @@ void UJMItemInspectionWidgetBase::SetTextBlockOrHide(UTextBlock* TextBlock, cons
 	TextBlock->SetVisibility(Text.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 }
 
-bool UJMItemInspectionWidgetBase::IsPointerOverPreviewArea(const FPointerEvent& InMouseEvent) const
+bool UJMItemInspectionWidgetBase::IsPointerOverInteractionArea(
+	const FGeometry& InGeometry,
+	const FPointerEvent& InMouseEvent) const
 {
-	if (!PreviewPanel)
-	{
-		return false;
-	}
-
-	return PreviewPanel->GetCachedGeometry().IsUnderLocation(InMouseEvent.GetScreenSpacePosition());
+	return InGeometry.IsUnderLocation(InMouseEvent.GetScreenSpacePosition());
 }
 
 void UJMItemInspectionWidgetBase::ResolveSimpleTransitionLayers()
