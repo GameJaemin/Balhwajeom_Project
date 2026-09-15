@@ -1,14 +1,12 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "CameraSystem/BalhwajeomCapturePhotoWidget.h"
-#include "Components/Image.h"
-#include "Components/VerticalBox.h"
+#include "Components/Border.h"
 #include "Components/CanvasPanel.h"
-#include "Components/CanvasPanelSlot.h"
+#include "Components/Image.h"
+#include "Components/RetainerBox.h"
+#include "Components/VerticalBox.h"
 #include "Editor.h"
-#include "Engine/TextureRenderTarget2D.h"
-#include "Slate/WidgetRenderer.h"
-#include "RenderingThread.h"
 #include "Components/TextBlock.h"
 #include "Components/WrapBox.h"
 #include "Components/WrapBoxSlot.h"
@@ -69,69 +67,185 @@ bool FCapturePhotoFlightTest::RunTest(const FString& Parameters)
 		: nullptr;
 	if (!TestNotNull(TEXT("Live capture widget"), Widget)) return false;
 	Widget->AddToRoot();
-	FWidgetRenderer Renderer(true);
-	auto SlateWidget = Widget->TakeWidget();
-	for (const float DrawScale : {0.67f, 1.0f, 1.5f})
+	URetainerBox* CardComposite = Cast<URetainerBox>(
+		Widget->GetWidgetFromName(TEXT("CardComposite")));
+	if (!TestNotNull(TEXT("Card visuals are composited before animation"), CardComposite))
 	{
-		const FVector2D Size(1920, 1080);
-		UTextureRenderTarget2D* Target = FWidgetRenderer::CreateTargetFor(Size, TF_Bilinear, true);
-		Target->AddToRoot();
-		auto Draw = [&]()
-		{
-			Widget->ForceLayoutPrepass();
-			Renderer.DrawWidget(Target, SlateWidget, DrawScale, Size, 1.0f / 60.0f);
-			FlushRenderingCommands();
-		};
-		auto Center = [](UWidget* Item)
-		{
-			const FGeometry G = Item->GetCachedGeometry();
-			return FVector2D(G.LocalToAbsolute(G.GetLocalSize() * 0.5f));
-		};
-		// Reuse the same widget after its previous flight. Rebuild an initially
-		// collapsed keyword list, then repeat with a different keyword count.
-		for (int32 Capture = 0; Capture < 3; ++Capture)
-		{
-			TArray<FText> Words;
-			for (int32 I = 0; I < Capture; ++I) Words.Add(FText::FromString(TEXT("Keyword")));
-			Widget->PresentCapture(
-				nullptr,
-				FText::FromString(TEXT("Sentence")),
-				Words,
-				Capture % 2 == 0);
-			TestFalse(TEXT("Previous capture geometry is invalidated"), Widget->IsFlightReady());
-			// Include an ancestor scale/translation to exercise local vs viewport units.
-			FWidgetTransform Ancestor;
-			Ancestor.Scale = FVector2D(0.8f, 1.1f);
-			Ancestor.Translation = FVector2D(35, -18);
-			Widget->CardRoot->SetRenderTransform(Ancestor);
-			for (int32 Frame = 0; Frame < 5; ++Frame)
-			{
-				Draw();
-			}
-			if (!TestTrue(TEXT("Fresh rendered layout becomes ready"), Widget->IsFlightReady())) continue;
-			const FVector2D Destination = Center(Widget->TabFlyTarget);
-			const FVector2D KeywordOrigin = Capture ? Center(Widget->KeywordList) : FVector2D::ZeroVector;
-			Widget->ApplyFlyToTab(Widget->FlyDuration / Widget->GetFlyDuration());
-			// Make the final invisible image paintable so its actual rendered center can be measured.
-			Widget->CapturedPhotoImage->SetRenderOpacity(1);
-			Draw();
-			TestTrue(FString::Printf(TEXT("Photo reaches marker scale=%g capture=%d"), DrawScale, Capture),
-				Center(Widget->CapturedPhotoImage).Equals(Destination, 1.0f));
-			if (Capture)
-			{
-				TestTrue(TEXT("Keywords remain at origin until photo arrives"),
-					Center(Widget->KeywordList).Equals(KeywordOrigin, 1.0f));
-				Widget->ApplyFlyToTab(1);
-				Widget->KeywordList->SetRenderOpacity(1);
-				Draw();
-				TestTrue(FString::Printf(TEXT("Keywords reach same marker scale=%g capture=%d"), DrawScale, Capture),
-					Center(Widget->KeywordList).Equals(Destination, 1.0f));
-			}
-			Widget->SetVisibility(ESlateVisibility::Collapsed);
-			Draw();
-		}
-		Target->RemoveFromRoot();
+		Widget->RemoveFromRoot();
+		return false;
 	}
+
+	TArray<FText> Words;
+	Words.Add(FText::FromString(TEXT("Keyword 1")));
+	Words.Add(FText::FromString(TEXT("Keyword 2")));
+	Words.Add(FText::FromString(TEXT("Keyword 3")));
+	Widget->PresentCapture(
+		nullptr,
+		FText::FromString(TEXT("Sentence")),
+		Words,
+		true);
+
+	TestTrue(TEXT("AE presentation can start without TAB target geometry"), Widget->IsPresentationReady());
+	TestTrue(TEXT("AE timeline ends at trimmed frame 73"),
+		FMath::IsNearlyEqual(Widget->GetAnimationDuration(), 73.0f / 60.0f));
+	TestEqual(TEXT("one animated widget exists per granted keyword"),
+		Widget->KeywordList->GetChildrenCount(), 3);
+
+	auto ApplyAtFrame = [Widget](const float Frame)
+	{
+		Widget->ApplyPresentationTimeline((Frame / 60.0f) / Widget->GetAnimationDuration());
+	};
+
+	ApplyAtFrame(0.0f);
+	const FWidgetTransform CardStart = CardComposite->GetRenderTransform();
+	TestTrue(TEXT("card enters from the right"), CardStart.Translation.X > 0.0f);
+	TestTrue(TEXT("card starts at the AE quarter turn"),
+		FMath::IsNearlyEqual(CardStart.Angle, 90.0f));
+	TestTrue(TEXT("AE reference scale is ignored"),
+		CardStart.Scale.Equals(FVector2D(1.0f, 1.0f)));
+	TestEqual(TEXT("card is visible from its first frame"), CardComposite->GetRenderOpacity(), 1.0f);
+	TestEqual(TEXT("screen dimmer stays fully visible during entry"),
+		Widget->ScreenDimmer->GetRenderOpacity(), 1.0f);
+	const float Keyword1StartX =
+		Widget->KeywordList->GetChildAt(0)->GetRenderTransform().Translation.X;
+	for (int32 KeywordIndex = 0; KeywordIndex < 3; ++KeywordIndex)
+	{
+		UWidget* Keyword = Widget->KeywordList->GetChildAt(KeywordIndex);
+		TestTrue(TEXT("keyword starts to the right"), Keyword->GetRenderTransform().Translation.X > 0.0f);
+		TestTrue(TEXT("keyword starts rotated"),
+			FMath::IsNearlyEqual(Keyword->GetRenderTransform().Angle, 90.0f));
+		TestEqual(TEXT("keyword starts transparent"), Keyword->GetRenderOpacity(), 0.0f);
+	}
+
+	auto TestAeEntrySample = [this, CardStart](
+		const TCHAR* What,
+		const FWidgetTransform& Transform,
+		const float ExpectedRemainingRatio)
+	{
+		TestTrue(What,
+			FMath::IsNearlyEqual(
+				Transform.Translation.X / CardStart.Translation.X,
+				ExpectedRemainingRatio,
+				0.002f) &&
+			FMath::IsNearlyEqual(
+				Transform.Angle / CardStart.Angle,
+				ExpectedRemainingRatio,
+				0.002f));
+	};
+
+	ApplyAtFrame(5.0f);
+	TestAeEntrySample(
+		TEXT("card matches AE temporal bezier at 25 percent"),
+		CardComposite->GetRenderTransform(),
+		0.3094796f);
+
+	ApplyAtFrame(10.0f);
+	TestAeEntrySample(
+		TEXT("card matches AE temporal bezier at 50 percent"),
+		CardComposite->GetRenderTransform(),
+		0.1101237f);
+
+	ApplyAtFrame(15.0f);
+	TestAeEntrySample(
+		TEXT("card matches AE temporal bezier at 75 percent"),
+		CardComposite->GetRenderTransform(),
+		0.0235550f);
+	const FWidgetTransform Keyword1MidEntry =
+		Widget->KeywordList->GetChildAt(0)->GetRenderTransform();
+	TestTrue(TEXT("keywords use the same AE temporal bezier"),
+		FMath::IsNearlyEqual(
+			Keyword1MidEntry.Translation.X / Keyword1StartX,
+			0.1101237f,
+			0.002f) &&
+		FMath::IsNearlyEqual(
+			Keyword1MidEntry.Angle / CardStart.Angle,
+			0.1101237f,
+			0.002f));
+
+	ApplyAtFrame(20.0f);
+	TestTrue(TEXT("card finishes its 20-frame entrance"),
+		CardComposite->GetRenderTransform().Translation.IsNearlyZero() &&
+		FMath::IsNearlyZero(CardComposite->GetRenderTransform().Angle));
+	TestTrue(TEXT("card never scales during entry"),
+		CardComposite->GetRenderTransform().Scale.Equals(FVector2D(1.0f, 1.0f)));
+	const float Keyword1X = Widget->KeywordList->GetChildAt(0)->GetRenderTransform().Translation.X;
+	const float Keyword2X = Widget->KeywordList->GetChildAt(1)->GetRenderTransform().Translation.X;
+	const float Keyword3X = Widget->KeywordList->GetChildAt(2)->GetRenderTransform().Translation.X;
+	TestTrue(TEXT("keywords follow at five-frame intervals"),
+		Keyword1X < Keyword2X && Keyword2X < Keyword3X);
+
+	ApplyAtFrame(35.0f);
+	for (int32 KeywordIndex = 0; KeywordIndex < 3; ++KeywordIndex)
+	{
+		UWidget* Keyword = Widget->KeywordList->GetChildAt(KeywordIndex);
+		TestTrue(TEXT("every keyword finishes in its authored layout slot"),
+			Keyword->GetRenderTransform().Translation.IsNearlyZero());
+		TestEqual(TEXT("every keyword is opaque after entering"), Keyword->GetRenderOpacity(), 1.0f);
+	}
+
+	auto TestAeExitPosition = [this, Widget](
+		const TCHAR* What,
+		const float ExpectedProgress)
+	{
+		TestTrue(What,
+			FMath::IsNearlyEqual(
+				Widget->CardRoot->GetRenderTransform().Translation.Y /
+					Widget->ExitOffset.Y,
+				ExpectedProgress,
+				0.002f));
+	};
+
+	ApplyAtFrame(58.0f);
+	TestAeExitPosition(
+		TEXT("exit position matches AE temporal bezier at 25 percent"),
+		0.0288015f);
+	TestEqual(TEXT("opacity remains unchanged before its linear fade"),
+		CardComposite->GetRenderOpacity(), 1.0f);
+
+	ApplyAtFrame(63.0f);
+	TestAeExitPosition(
+		TEXT("exit position matches AE temporal bezier at 50 percent"),
+		0.1327807f);
+	TestEqual(TEXT("card remains opaque until AE fade frame 63"),
+		CardComposite->GetRenderOpacity(), 1.0f);
+	TestEqual(TEXT("screen dimmer remains fixed until fade starts"),
+		Widget->ScreenDimmer->GetRenderOpacity(), 1.0f);
+
+	ApplyAtFrame(68.0f);
+	TestAeExitPosition(
+		TEXT("exit position matches AE temporal bezier at 75 percent"),
+		0.3640511f);
+	TestEqual(TEXT("composited card keeps a linear fade"),
+		CardComposite->GetRenderOpacity(), 0.5f);
+	TestEqual(TEXT("photo does not fade independently"),
+		Widget->CapturedPhotoImage->GetRenderOpacity(), 1.0f);
+	TestEqual(TEXT("card background does not fade independently"),
+		Widget->CardBackground->GetRenderOpacity(), 1.0f);
+	TestEqual(TEXT("sentence does not fade independently"),
+		Widget->SentenceBackground->GetRenderOpacity(), 1.0f);
+	TestTrue(TEXT("screen dimmer fades linearly without moving"),
+		FMath::IsNearlyEqual(
+			Widget->ScreenDimmer->GetRenderOpacity(), 0.5f, 0.002f) &&
+		Widget->ScreenDimmer->GetRenderTransform().Translation.IsNearlyZero());
+	for (int32 KeywordIndex = 0; KeywordIndex < 3; ++KeywordIndex)
+	{
+		TestEqual(TEXT("each keyword keeps the same linear fade"),
+			Widget->KeywordList->GetChildAt(KeywordIndex)->GetRenderOpacity(), 0.5f);
+	}
+
+	ApplyAtFrame(73.0f);
+	TestTrue(TEXT("shared root completes the downward exit"),
+		Widget->CardRoot->GetRenderTransform().Translation.Y > 0.0f);
+	TestEqual(TEXT("composited card is fully faded at the end"),
+		CardComposite->GetRenderOpacity(), 0.0f);
+	TestEqual(TEXT("screen dimmer is fully faded at the end"),
+		Widget->ScreenDimmer->GetRenderOpacity(), 0.0f);
+	for (int32 KeywordIndex = 0; KeywordIndex < 3; ++KeywordIndex)
+	{
+		TestEqual(TEXT("each keyword is fully faded at the end"),
+			Widget->KeywordList->GetChildAt(KeywordIndex)->GetRenderOpacity(), 0.0f);
+	}
+
 	Widget->RemoveFromRoot();
 	return !HasAnyErrors();
 }

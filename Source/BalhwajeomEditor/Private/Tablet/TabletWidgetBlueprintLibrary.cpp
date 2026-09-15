@@ -13,6 +13,7 @@
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
 #include "Components/PanelWidget.h"
+#include "Components/RetainerBox.h"
 #include "Components/ScaleBox.h"
 #include "Components/ScaleBoxSlot.h"
 #include "Components/ScrollBox.h"
@@ -3619,6 +3620,20 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 	CardSlot->SetSize(FVector2D(928.0f, 721.0f));
 	CardSlot->SetZOrder(1);
 
+	URetainerBox* CardComposite = Tree->ConstructWidget<URetainerBox>(
+		URetainerBox::StaticClass(), TEXT("CardComposite"));
+	CardComposite->bIsVariable = true;
+	CardComposite->SetRetainRendering(true);
+	UCanvasPanelSlot* CardCompositeSlot = Card->AddChildToCanvas(CardComposite);
+	CardCompositeSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+	CardCompositeSlot->SetOffsets(FMargin(0.0f));
+	CardCompositeSlot->SetZOrder(1);
+
+	UCanvasPanel* CardVisualRoot = Tree->ConstructWidget<UCanvasPanel>(
+		UCanvasPanel::StaticClass(), TEXT("CardVisualRoot"));
+	CardVisualRoot->bIsVariable = true;
+	CardComposite->SetContent(CardVisualRoot);
+
 	UBorder* CardBackground = Tree->ConstructWidget<UBorder>(
 		UBorder::StaticClass(), TEXT("CardBackground"));
 	CardBackground->bIsVariable = true;
@@ -3628,7 +3643,7 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 		CardBackground->SetBrushFromTexture(BlackBackground);
 	}
 	CardBackground->SetBrushColor(FLinearColor::White);
-	UCanvasPanelSlot* BackgroundSlot = Card->AddChildToCanvas(CardBackground);
+	UCanvasPanelSlot* BackgroundSlot = CardVisualRoot->AddChildToCanvas(CardBackground);
 	BackgroundSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
 	BackgroundSlot->SetOffsets(FMargin(0.0f));
 	BackgroundSlot->SetZOrder(0);
@@ -3637,7 +3652,7 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 		UImage::StaticClass(), TEXT("CapturedPhotoImage"));
 	Photo->bIsVariable = true;
 	Photo->SetColorAndOpacity(FLinearColor::White);
-	UCanvasPanelSlot* PhotoSlot = Card->AddChildToCanvas(Photo);
+	UCanvasPanelSlot* PhotoSlot = CardVisualRoot->AddChildToCanvas(Photo);
 	PhotoSlot->SetPosition(FVector2D(50.0f, 40.0f));
 	PhotoSlot->SetSize(FVector2D(830.0f, 469.0f));
 	PhotoSlot->SetZOrder(1);
@@ -3647,7 +3662,7 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 	SentenceBackground->bIsVariable = true;
 	SentenceBackground->SetBrushColor(FLinearColor::Transparent);
 	SentenceBackground->SetPadding(FMargin(10.0f, 6.0f));
-	UCanvasPanelSlot* SentenceSlot = Card->AddChildToCanvas(SentenceBackground);
+	UCanvasPanelSlot* SentenceSlot = CardVisualRoot->AddChildToCanvas(SentenceBackground);
 	SentenceSlot->SetPosition(FVector2D(170.0f, 520.0f));
 	SentenceSlot->SetSize(FVector2D(588.0f, 165.0f));
 	SentenceSlot->SetZOrder(1);
