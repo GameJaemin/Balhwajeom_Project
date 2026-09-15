@@ -3,6 +3,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "CameraSystem/BalhwajeomCameraGameMode.h"
 #include "Components/DirectionalLightComponent.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/PointLightComponent.h"
 #include "Components/TextBlock.h"
@@ -47,6 +48,20 @@ bool FItemInspectionAssetsTest::RunTest(const FString& Parameters)
 		|| !TestNotNull(TEXT("Inspector Widget Blueprint asset"), WidgetBlueprint)) return false;
 	if (WidgetBlueprint && WidgetBlueprint->WidgetTree)
 	{
+		const UWidget* Backdrop = WidgetBlueprint->WidgetTree->FindWidget(TEXT("Backdrop"));
+		const UWidget* MainRow = WidgetBlueprint->WidgetTree->FindWidget(TEXT("MainRow"));
+		const UWidget* ControlsPanel = WidgetBlueprint->WidgetTree->FindWidget(TEXT("ControlsHintPanel"));
+		const UCanvasPanelSlot* BackdropSlot = Backdrop ? Cast<UCanvasPanelSlot>(Backdrop->Slot) : nullptr;
+		const UCanvasPanelSlot* MainRowSlot = MainRow ? Cast<UCanvasPanelSlot>(MainRow->Slot) : nullptr;
+		const UCanvasPanelSlot* ControlsSlot = ControlsPanel ? Cast<UCanvasPanelSlot>(ControlsPanel->Slot) : nullptr;
+		TestNotNull(TEXT("Backdrop uses an explicit canvas layer"), BackdropSlot);
+		TestNotNull(TEXT("Inspection content uses an explicit canvas layer"), MainRowSlot);
+		TestNotNull(TEXT("Controls hint uses an explicit canvas layer"), ControlsSlot);
+		if (BackdropSlot && MainRowSlot && ControlsSlot)
+		{
+			TestTrue(TEXT("Backdrop is behind inspection content"), BackdropSlot->GetZOrder() < MainRowSlot->GetZOrder());
+			TestTrue(TEXT("Controls hint is above inspection content"), ControlsSlot->GetZOrder() > MainRowSlot->GetZOrder());
+		}
 		TestNotNull(TEXT("Editable controls hint row"), Cast<UHorizontalBox>(
 			WidgetBlueprint->WidgetTree->FindWidget(TEXT("ControlsHintRow"))));
 		const UTextBlock* CloseKey = Cast<UTextBlock>(
