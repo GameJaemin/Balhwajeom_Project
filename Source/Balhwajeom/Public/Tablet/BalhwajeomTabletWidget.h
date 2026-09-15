@@ -46,6 +46,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPersonFolderTabRequested, i
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnTabletBlankDropped, int32, SlotIndex, FName, WordID, int32, OriginSlotIndex);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTabletPhotoSlotDropped, int32, SlotIndex, FName, PhotoID);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPhotoSlotClicked, int32, SlotIndex);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletWordChipClicked, FName, WordID);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletBlankClicked, int32, SlotIndex);
 
 /** Runtime-created photo entry shared by the folder grid and the statement tile. */
 UCLASS()
@@ -401,8 +403,14 @@ public:
 		int32 InStatementFontSize = 14);
 	FName GetWordID() const { return WordID; }
 
+	/** Broadcast on a plain left-click (no drag detected), so a candidate keyword can be placed
+	 * into the puzzle's first empty blank with a single click instead of a drag. */
+	UPROPERTY()
+	FOnTabletWordChipClicked OnWordChipClicked;
+
 protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
 	virtual void NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
@@ -443,13 +451,20 @@ public:
 	void SetEmpty();
 	void SetErrorStyle(bool bInError);
 	int32 GetSlotIndex() const { return SlotIndex; }
+	bool IsFilled() const { return !FilledWordID.IsNone(); }
 
 	UPROPERTY()
 	FOnTabletBlankDropped OnBlankDropped;
 
+	/** Broadcast on a plain left-click (no drag detected) while filled, so the placed keyword can
+	 * be removed with a single click instead of a drag. Never fires while empty. */
+	UPROPERTY()
+	FOnTabletBlankClicked OnBlankClicked;
+
 protected:
 	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
 
 private:
@@ -725,6 +740,17 @@ private:
 	 * judged once the whole puzzle is filled in). */
 	UFUNCTION()
 	void HandleSentenceBlankDropped(int32 SlotIndex, FName WordID, int32 OriginSlotIndex);
+
+	/** Bound to a UBalhwajeomTabletWordChip's OnWordChipClicked; places the clicked keyword into the
+	 * active puzzle's first empty blank (lowest SlotIndex), same as dragging it there. No-op if every
+	 * blank is already filled or there is no active blank puzzle (e.g. the folder's plain word list). */
+	UFUNCTION()
+	void HandleWordChipClicked(FName WordID);
+
+	/** Bound to a UBalhwajeomTabletSentenceBlank's OnBlankClicked; clears that blank's word back out,
+	 * same as picking it up and dropping it nowhere. */
+	UFUNCTION()
+	void HandleSentenceBlankClicked(int32 SlotIndex);
 
 	/** Bound to a UBalhwajeomTabletPhotoSlot's OnPhotoSlotDropped; fills that photo evidence slot. */
 	UFUNCTION()

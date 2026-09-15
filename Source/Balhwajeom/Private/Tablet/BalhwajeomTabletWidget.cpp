@@ -959,6 +959,7 @@ void UBalhwajeomTabletWidget::RefreshPuzzleControls()
 						true,
 						ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFont() : nullptr,
 						ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFontSize() : 14);
+					Chip->OnWordChipClicked.AddUniqueDynamic(this, &ThisClass::HandleWordChipClicked);
 					WB_PuzzleWords->AddChild(Chip);
 				}
 			}
@@ -999,6 +1000,7 @@ void UBalhwajeomTabletWidget::RefreshPuzzleControls()
 						true,
 						ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFont() : nullptr,
 						ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFontSize() : 14);
+					Chip->OnWordChipClicked.AddUniqueDynamic(this, &ThisClass::HandleWordChipClicked);
 					if (UWrapBoxSlot* ChipSlot = Cast<UWrapBoxSlot>(WB_PuzzleWords->AddChild(Chip)))
 					{
 						ChipSlot->SetVerticalAlignment(VAlign_Center);
@@ -1151,6 +1153,7 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 				StatementFont,
 				StatementFontSize);
 			Blank->OnBlankDropped.AddUniqueDynamic(this, &ThisClass::HandleSentenceBlankDropped);
+			Blank->OnBlankClicked.AddUniqueDynamic(this, &ThisClass::HandleSentenceBlankClicked);
 			ActiveBlanksBySlot.Add(BlankSlotIndex, Blank);
 			AddToCurrentLine(Blank);
 			++BlankSlotIndex;
@@ -1345,6 +1348,56 @@ void UBalhwajeomTabletWidget::HandleSentenceBlankDropped(
 	}
 
 	EvaluatePuzzleIfComplete();
+}
+
+void UBalhwajeomTabletWidget::HandleWordChipClicked(const FName WordID)
+{
+	if (WordID.IsNone() || ActiveBlanksBySlot.IsEmpty())
+	{
+		// No active blank puzzle to place it into (e.g. the folder's plain acquired-word list).
+		return;
+	}
+
+	// Same destination a drag would pick: the lowest-index blank that isn't already filled.
+	TArray<int32> SlotIndices;
+	ActiveBlanksBySlot.GetKeys(SlotIndices);
+	SlotIndices.Sort();
+	for (const int32 SlotIndex : SlotIndices)
+	{
+		const bool bSlotFilled = ActiveSubmission.SubmittedWords.ContainsByPredicate(
+			[SlotIndex](const FSubmittedWordSlot& Candidate) { return Candidate.SlotIndex == SlotIndex; });
+		if (!bSlotFilled)
+		{
+			HandleSentenceBlankDropped(SlotIndex, WordID, INDEX_NONE);
+			return;
+		}
+	}
+}
+
+void UBalhwajeomTabletWidget::HandleSentenceBlankClicked(const int32 SlotIndex)
+{
+	UBalhwajeomTabletSentenceBlank* Blank = ActiveBlanksBySlot.FindRef(SlotIndex);
+	if (!Blank || !Blank->IsFilled())
+	{
+		return;
+	}
+
+	ActiveSubmission.SubmittedWords.RemoveAll(
+		[SlotIndex](const FSubmittedWordSlot& Candidate) { return Candidate.SlotIndex == SlotIndex; });
+	Blank->SetEmpty();
+
+	if (TXT_PuzzleFeedback)
+	{
+		TXT_PuzzleFeedback->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	FSentenceDefinition Sentence;
+	if (Investigation && Investigation->GetSentenceDefinition(ActiveSentenceID, Sentence) &&
+		Sentence.SentenceType == ESentenceType::PhotoAnalysis)
+	{
+		SetPhotoPuzzleErrorStyle(false);
+	}
 }
 
 void UBalhwajeomTabletWidget::HandlePhotoSlotDropped(const int32 SlotIndex, const FName PhotoID)
@@ -1906,6 +1959,7 @@ void UBalhwajeomTabletWidget::RefreshAcquiredWordsDisplay()
 					true,
 					ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFont() : nullptr,
 					ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFontSize() : 14);
+				Chip->OnWordChipClicked.AddUniqueDynamic(this, &ThisClass::HandleWordChipClicked);
 				WB_PuzzleWords->AddChild(Chip);
 			}
 		}
@@ -1933,6 +1987,7 @@ void UBalhwajeomTabletWidget::RefreshAcquiredWordsDisplay()
 			continue;
 		}
 		Chip->Configure(Record.WordID, Word.DisplayWord);
+		Chip->OnWordChipClicked.AddUniqueDynamic(this, &ThisClass::HandleWordChipClicked);
 		if (UWrapBoxSlot* ChipSlot = Cast<UWrapBoxSlot>(WB_PuzzleWords->AddChild(Chip)))
 		{
 			ChipSlot->SetVerticalAlignment(VAlign_Center);
@@ -2472,6 +2527,19 @@ FReply UBalhwajeomTabletWordChip::NativeOnMouseButtonDown(const FGeometry& InGeo
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
+FReply UBalhwajeomTabletWordChip::NativeOnMouseButtonUp(
+	const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// Only reached when NativeOnDragDetected never fired (a plain click, mouse never moved past the
+	// drag threshold) -- an actual drag's mouse-up is consumed by the drop target instead.
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		OnWordChipClicked.Broadcast(WordID);
+		return FReply::Handled();
+	}
+	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
+}
+
 void UBalhwajeomTabletWordChip::NativeOnDragDetected(
 	const FGeometry& InGeometry,
 	const FPointerEvent& InMouseEvent,
@@ -2646,6 +2714,19 @@ FReply UBalhwajeomTabletSentenceBlank::NativeOnMouseButtonDown(const FGeometry& 
 		return FReply::Handled().DetectDrag(TakeWidget(), EKeys::LeftMouseButton);
 	}
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+FReply UBalhwajeomTabletSentenceBlank::NativeOnMouseButtonUp(
+	const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// Only reached when NativeOnDragDetected never fired (a plain click) -- an actual drag's
+	// mouse-up is consumed by whichever blank it gets dropped on instead.
+	if (!FilledWordID.IsNone() && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		OnBlankClicked.Broadcast(SlotIndex);
+		return FReply::Handled();
+	}
+	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
 }
 
 void UBalhwajeomTabletSentenceBlank::NativeOnDragDetected(
