@@ -12,6 +12,7 @@
 #include "Components/Image.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
+#include "Components/PanelWidget.h"
 #include "Components/ScaleBox.h"
 #include "Components/ScaleBoxSlot.h"
 #include "Components/ScrollBox.h"
@@ -24,6 +25,9 @@
 #include "Components/WidgetSwitcherSlot.h"
 #include "Components/WrapBox.h"
 #include "Editor.h"
+#include "EdGraph/EdGraph.h"
+#include "EdGraph/EdGraphPin.h"
+#include "EdGraphSchema_K2.h"
 #include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
 #include "Engine/Font.h"
@@ -35,7 +39,12 @@
 #include "IAssetTools.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "K2Node_CallFunction.h"
+#include "K2Node_FunctionEntry.h"
+#include "K2Node_FunctionResult.h"
+#include "K2Node_VariableGet.h"
 #include "Misc/PackageName.h"
+#include "MultiShadowText.h"
 #include "Tablet/BalhwajeomMessengerDataAssets.h"
 #include "Tablet/BalhwajeomMessengerDateSeparator.h"
 #include "Tablet/BalhwajeomMessengerKeywordWidget.h"
@@ -133,10 +142,154 @@ namespace TabletDesigner
 	const FLinearColor RedBadge(0.78f, 0.08f, 0.06f, 1.0f);
 	const FLinearColor MessengerAccent(0.91f, 0.60f, 0.18f, 1.0f);
 
+	bool RebuildMultiShadowSetLabelTextGraph(UWidgetBlueprint* Blueprint)
+	{
+		UEdGraph* SetLabelTextGraph = nullptr;
+		for (UEdGraph* FunctionGraph : Blueprint->FunctionGraphs)
+		{
+			if (FunctionGraph && FunctionGraph->GetFName() == TEXT("SetLabelText"))
+			{
+				SetLabelTextGraph = FunctionGraph;
+				break;
+			}
+		}
+		if (!SetLabelTextGraph)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Evidence focus-guide layout configuration failed: SetLabelText graph missing."));
+			return false;
+		}
+
+		UK2Node_FunctionEntry* EntryNode = nullptr;
+		for (UEdGraphNode* Node : SetLabelTextGraph->Nodes)
+		{
+			if (UK2Node_FunctionEntry* Candidate = Cast<UK2Node_FunctionEntry>(Node))
+			{
+				EntryNode = Candidate;
+				break;
+			}
+		}
+		if (!EntryNode)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Evidence focus-guide layout configuration failed: SetLabelText entry node missing."));
+			return false;
+		}
+
+		UEdGraphPin* TextInputPin = nullptr;
+		for (UEdGraphPin* Pin : EntryNode->Pins)
+		{
+			if (Pin && Pin->Direction == EGPD_Output &&
+				Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Text)
+			{
+				TextInputPin = Pin;
+				break;
+			}
+		}
+		if (!TextInputPin)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Evidence focus-guide layout configuration failed: SetLabelText FText input missing."));
+			return false;
+		}
+
+		const UFunction* SetTextFunction = UMultiShadowTextWidget::StaticClass()->FindFunctionByName(TEXT("SetText"));
+		if (!SetTextFunction)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Evidence focus-guide layout configuration failed: Multi Shadow Text SetText missing."));
+			return false;
+		}
+
+		const UEdGraphSchema_K2* Schema = GetDefault<UEdGraphSchema_K2>();
+		UK2Node_VariableGet* ExistingGetLabelNode = nullptr;
+		UK2Node_CallFunction* ExistingSetTextNode = nullptr;
+		for (UEdGraphNode* Node : SetLabelTextGraph->Nodes)
+		{
+			if (UK2Node_VariableGet* VariableGet = Cast<UK2Node_VariableGet>(Node);
+				VariableGet && VariableGet->GetVarName() == TEXT("LabelText"))
+			{
+				ExistingGetLabelNode = VariableGet;
+			}
+			else if (UK2Node_CallFunction* CallFunction = Cast<UK2Node_CallFunction>(Node);
+				CallFunction && CallFunction->GetTargetFunction() == SetTextFunction)
+			{
+				ExistingSetTextNode = CallFunction;
+			}
+		}
+		if (ExistingGetLabelNode && ExistingSetTextNode)
+		{
+			UEdGraphPin* EntryExecPin = Schema->FindExecutionPin(*EntryNode, EGPD_Output);
+			UEdGraphPin* SetTextExecPin = Schema->FindExecutionPin(*ExistingSetTextNode, EGPD_Input);
+			UEdGraphPin* SetTextSelfPin = ExistingSetTextNode->FindPin(UEdGraphSchema_K2::PN_Self);
+			UEdGraphPin* SetTextValuePin = ExistingSetTextNode->FindPin(TEXT("InText"));
+			UEdGraphPin* LabelValuePin = ExistingGetLabelNode->GetValuePin();
+			if (EntryExecPin && SetTextExecPin && SetTextSelfPin && SetTextValuePin && LabelValuePin &&
+				EntryExecPin->LinkedTo.Contains(SetTextExecPin) &&
+				LabelValuePin->LinkedTo.Contains(SetTextSelfPin) &&
+				TextInputPin->LinkedTo.Contains(SetTextValuePin))
+			{
+				return true;
+			}
+		}
+
+		SetLabelTextGraph->Modify();
+		TArray<UEdGraphNode*> NodesToRemove;
+		for (UEdGraphNode* Node : SetLabelTextGraph->Nodes)
+		{
+			if (Node != EntryNode && !Node->IsA<UK2Node_FunctionResult>())
+			{
+				NodesToRemove.Add(Node);
+			}
+		}
+		for (UEdGraphNode* Node : NodesToRemove)
+		{
+			SetLabelTextGraph->RemoveNode(Node);
+		}
+
+		FGraphNodeCreator<UK2Node_VariableGet> GetLabelCreator(*SetLabelTextGraph);
+		UK2Node_VariableGet* GetLabelNode = GetLabelCreator.CreateNode();
+		GetLabelNode->VariableReference.SetSelfMember(TEXT("LabelText"));
+		GetLabelNode->NodePosX = EntryNode->NodePosX + 240;
+		GetLabelNode->NodePosY = EntryNode->NodePosY + 120;
+		GetLabelCreator.Finalize();
+
+		FGraphNodeCreator<UK2Node_CallFunction> SetTextCreator(*SetLabelTextGraph);
+		UK2Node_CallFunction* SetTextNode = SetTextCreator.CreateNode();
+		SetTextNode->SetFromFunction(SetTextFunction);
+		SetTextNode->NodePosX = EntryNode->NodePosX + 480;
+		SetTextNode->NodePosY = EntryNode->NodePosY;
+		SetTextCreator.Finalize();
+
+		UEdGraphPin* EntryExecPin = Schema->FindExecutionPin(*EntryNode, EGPD_Output);
+		UEdGraphPin* SetTextExecPin = Schema->FindExecutionPin(*SetTextNode, EGPD_Input);
+		UEdGraphPin* SetTextSelfPin = SetTextNode->FindPin(UEdGraphSchema_K2::PN_Self);
+		UEdGraphPin* SetTextValuePin = SetTextNode->FindPin(TEXT("InText"));
+		UEdGraphPin* LabelValuePin = GetLabelNode->GetValuePin();
+		const bool bConnected =
+			EntryExecPin && SetTextExecPin && SetTextSelfPin && SetTextValuePin && LabelValuePin &&
+			Schema->TryCreateConnection(EntryExecPin, SetTextExecPin) &&
+			Schema->TryCreateConnection(LabelValuePin, SetTextSelfPin) &&
+			Schema->TryCreateConnection(TextInputPin, SetTextValuePin);
+		if (!bConnected)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Evidence focus-guide layout configuration failed: SetLabelText graph wiring failed."));
+			return false;
+		}
+
+		FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+		return true;
+	}
+
 	bool SaveAndCompile(UWidgetBlueprint* Blueprint)
 	{
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
+		if (Blueprint->Status == BS_Error)
+		{
+			UE_LOG(
+				LogTemp,
+				Error,
+				TEXT("Widget Blueprint compile failed; refusing to save %s."),
+				*Blueprint->GetPathName());
+			return false;
+		}
 
 		UPackage* Package = Blueprint->GetOutermost();
 		Package->MarkPackageDirty();
@@ -2462,6 +2615,201 @@ bool UTabletWidgetBlueprintLibrary::InspectWidgetBlueprintByPath(const FString& 
 	return true;
 }
 
+bool UTabletWidgetBlueprintLibrary::ConfigureObjectLabelLayout()
+{
+	static const TCHAR* ObjectLabelPath =
+		TEXT("/Game/Balhwajeom/UI/Inspection/WBP_ObjectLabel.WBP_ObjectLabel");
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, ObjectLabelPath);
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Object label layout configuration failed: asset missing."));
+		return false;
+	}
+
+	USizeBox* LabelContainer = Cast<USizeBox>(
+		Blueprint->WidgetTree->FindWidget(TEXT("LabelContainer")));
+	if (!LabelContainer)
+	{
+		LabelContainer = Cast<USizeBox>(
+			Blueprint->WidgetTree->FindWidget(TEXT("SizeBox_0")));
+	}
+	if (!LabelContainer)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Object label layout configuration failed: SizeBox missing."));
+		return false;
+	}
+
+	if (LabelContainer->GetFName() != TEXT("LabelContainer"))
+	{
+		const FName OldName = LabelContainer->GetFName();
+		Blueprint->Modify();
+		LabelContainer->Modify();
+#if WITH_EDITORONLY_DATA
+		if (Blueprint->WidgetVariableNameToGuidMap.Contains(OldName))
+		{
+			Blueprint->OnVariableRenamed(OldName, TEXT("LabelContainer"));
+		}
+#endif
+		LabelContainer->SetDisplayLabel(TEXT("LabelContainer"));
+		if (!LabelContainer->Rename(
+			TEXT("LabelContainer"),
+			Blueprint->WidgetTree,
+			REN_DontCreateRedirectors))
+		{
+			UE_LOG(LogTemp, Error, TEXT("Object label layout configuration failed: rename failed."));
+			return false;
+		}
+	}
+
+	UCanvasPanelSlot* LabelContainerSlot =
+		Cast<UCanvasPanelSlot>(LabelContainer->Slot);
+	if (!LabelContainerSlot)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Object label layout configuration failed: Canvas slot missing."));
+		return false;
+	}
+
+	FVector2D Position = LabelContainerSlot->GetPosition();
+	Position.X = 22.0;
+	LabelContainerSlot->SetPosition(Position);
+
+	const bool bSaved = TabletDesigner::SaveAndCompile(Blueprint);
+	UE_LOG(
+		LogTemp,
+		Display,
+		TEXT("OBJECT_LABEL_LAYOUT Result=%s LabelContainerX=%.1f"),
+		bSaved ? TEXT("Success") : TEXT("Failure"),
+		Position.X);
+	return bSaved;
+}
+
+bool UTabletWidgetBlueprintLibrary::ConfigureEvidenceFocusGuideLayout()
+{
+	static const TCHAR* FocusGuidePath =
+		TEXT("/Game/Balhwajeom/UI/Camera/WBP_EvidenceFocusGuide.WBP_EvidenceFocusGuide");
+	static const TCHAR* ObjectLabelPath =
+		TEXT("/Game/Balhwajeom/UI/Inspection/WBP_ObjectLabel.WBP_ObjectLabel");
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, FocusGuidePath);
+	UWidgetBlueprint* ObjectLabelBlueprint = LoadObject<UWidgetBlueprint>(nullptr, ObjectLabelPath);
+	if (!Blueprint || !Blueprint->WidgetTree || !ObjectLabelBlueprint || !ObjectLabelBlueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Evidence focus-guide layout configuration failed: focus guide or object label asset missing."));
+		return false;
+	}
+
+	UMultiShadowTextWidget* ReferenceLabel = Cast<UMultiShadowTextWidget>(
+		ObjectLabelBlueprint->WidgetTree->FindWidget(TEXT("LabelText")));
+	UWidget* ExistingLabel = Blueprint->WidgetTree->FindWidget(TEXT("LabelText"));
+	if (!ReferenceLabel || !ExistingLabel)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Evidence focus-guide layout configuration failed: LabelText missing or reference is not Multi Shadow Text."));
+		return false;
+	}
+
+	if (!ExistingLabel->IsA<UMultiShadowTextWidget>())
+	{
+		UPanelWidget* LabelParent = ExistingLabel->GetParent();
+		if (!LabelParent)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Evidence focus-guide layout configuration failed: LabelText parent missing."));
+			return false;
+		}
+
+		const FName LabelName = ExistingLabel->GetFName();
+		const FText ExistingText = Cast<UTextBlock>(ExistingLabel)
+			? CastChecked<UTextBlock>(ExistingLabel)->GetText()
+			: FText::GetEmpty();
+		UMultiShadowTextWidget* Replacement = Blueprint->WidgetTree->ConstructWidget<UMultiShadowTextWidget>(
+			UMultiShadowTextWidget::StaticClass(),
+			TEXT("LabelText_MultiShadowReplacement"));
+		Replacement->bIsVariable = true;
+		Replacement->SetText(ExistingText);
+		Replacement->SetVisibility(ExistingLabel->GetVisibility());
+		Replacement->SetIsEnabled(ExistingLabel->GetIsEnabled());
+		Replacement->SetRenderOpacity(ExistingLabel->GetRenderOpacity());
+		Replacement->SetRenderTransform(ExistingLabel->GetRenderTransform());
+		Replacement->SetRenderTransformPivot(ExistingLabel->GetRenderTransformPivot());
+		if (!LabelParent->ReplaceChild(ExistingLabel, Replacement))
+		{
+			UE_LOG(LogTemp, Error, TEXT("Evidence focus-guide layout configuration failed: replacing LabelText in its parent failed."));
+			return false;
+		}
+
+		const FName TrashName = MakeUniqueObjectName(
+			GetTransientPackage(),
+			ExistingLabel->GetClass(),
+			TEXT("TRASH_LabelText"));
+		ExistingLabel->Rename(*TrashName.ToString(), GetTransientPackage(), REN_DontCreateRedirectors);
+		if (!Replacement->Rename(*LabelName.ToString(), Blueprint->WidgetTree, REN_DontCreateRedirectors))
+		{
+			UE_LOG(LogTemp, Error, TEXT("Evidence focus-guide layout configuration failed: preserving the LabelText name failed."));
+			return false;
+		}
+
+		// Reconstruct variable getter references now that LabelText has a new widget type.
+		FBlueprintEditorUtils::ReplaceVariableReferences(Blueprint, LabelName, LabelName);
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+	}
+
+	UMultiShadowTextWidget* FocusGuideLabel = Cast<UMultiShadowTextWidget>(
+		Blueprint->WidgetTree->FindWidget(TEXT("LabelText")));
+	if (!FocusGuideLabel)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Evidence focus-guide layout configuration failed: LabelText replacement failed."));
+		return false;
+	}
+
+	FocusGuideLabel->Modify();
+	FocusGuideLabel->bIsVariable = true;
+	FocusGuideLabel->Font = ReferenceLabel->Font;
+	FocusGuideLabel->TextColor = ReferenceLabel->TextColor;
+	FocusGuideLabel->Justification = ReferenceLabel->Justification;
+	FocusGuideLabel->bAutoWrapText = ReferenceLabel->bAutoWrapText;
+	FocusGuideLabel->WrapTextAt = ReferenceLabel->WrapTextAt;
+	FocusGuideLabel->ShadowLayers = ReferenceLabel->ShadowLayers;
+	if (!TabletDesigner::RebuildMultiShadowSetLabelTextGraph(Blueprint))
+	{
+		return false;
+	}
+
+	UImage* StatusImage = Cast<UImage>(
+		Blueprint->WidgetTree->FindWidget(TEXT("UseCamera")));
+	USizeBox* LabelContainer = Cast<USizeBox>(
+		Blueprint->WidgetTree->FindWidget(TEXT("SizeBox_0")));
+	UCanvasPanelSlot* StatusSlot = StatusImage
+		? Cast<UCanvasPanelSlot>(StatusImage->Slot)
+		: nullptr;
+	UCanvasPanelSlot* LabelContainerSlot = LabelContainer
+		? Cast<UCanvasPanelSlot>(LabelContainer->Slot)
+		: nullptr;
+	if (!StatusSlot || !LabelContainerSlot)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Evidence focus-guide layout configuration failed: required Canvas slots missing."));
+		return false;
+	}
+
+	Blueprint->Modify();
+	StatusSlot->Modify();
+	LabelContainerSlot->Modify();
+	StatusSlot->SetAnchors(FAnchors(0.0f));
+	StatusSlot->SetAutoSize(false);
+	StatusSlot->SetSize(FVector2D(67.0, 50.0));
+	StatusSlot->SetPosition(FVector2D(33.5, 25.0));
+	StatusSlot->SetAlignment(FVector2D(0.5, 0.5));
+	LabelContainerSlot->SetAnchors(FAnchors(0.0f));
+	LabelContainerSlot->SetPosition(FVector2D(77.0, 25.0));
+	LabelContainerSlot->SetAlignment(FVector2D(0.0, 0.5));
+
+	const bool bSaved = TabletDesigner::SaveAndCompile(Blueprint);
+	UE_LOG(
+		LogTemp,
+		Display,
+		TEXT("EVIDENCE_FOCUS_GUIDE_LAYOUT Result=%s IconSize=(67,50) IconCenter=(33.5,25) LabelPosition=(77,25) ShadowLayers=%d"),
+		bSaved ? TEXT("Success") : TEXT("Failure"),
+		FocusGuideLabel->ShadowLayers.Num());
+	return bSaved;
+}
+
 bool UTabletWidgetBlueprintLibrary::SetButtonIconTexture(
 	const FString& AssetPath, const FString& ButtonName, const FString& TexturePath)
 {
@@ -3938,20 +4286,21 @@ bool UTabletWidgetBlueprintLibrary::CenterItemInspectionWidget()
 		TEXT("/ItemInspector/UI/WBP_JMItemInspection.WBP_JMItemInspection"));
 	if (!Blueprint || !TabletDesigner::ClearWidgetTree(Blueprint)) return false;
 	UWidgetTree* Tree = Blueprint->WidgetTree;
-	UOverlay* Root = Tree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("InspectorRoot"));
+	UCanvasPanel* Root = Tree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("InspectorRoot"));
 	Tree->RootWidget = Root;
 	UBorder* Backdrop = Tree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Backdrop"));
 	Backdrop->SetBrushColor(FLinearColor(0.02f, 0.02f, 0.025f, 0.92f));
-	UOverlaySlot* BackdropSlot = Root->AddChildToOverlay(Backdrop);
-	BackdropSlot->SetHorizontalAlignment(HAlign_Fill);
-	BackdropSlot->SetVerticalAlignment(VAlign_Fill);
+	UCanvasPanelSlot* BackdropSlot = Root->AddChildToCanvas(Backdrop);
+	BackdropSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+	BackdropSlot->SetOffsets(FMargin(0.0f));
+	BackdropSlot->SetZOrder(-100);
 	UScaleBox* Content = Tree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("MainRow"));
 	Content->SetStretch(EStretch::ScaleToFit);
 	Content->SetStretchDirection(EStretchDirection::DownOnly);
-	UOverlaySlot* ContentSlot = Root->AddChildToOverlay(Content);
-	ContentSlot->SetHorizontalAlignment(HAlign_Fill);
-	ContentSlot->SetVerticalAlignment(VAlign_Fill);
-	ContentSlot->SetPadding(FMargin(48.0f));
+	UCanvasPanelSlot* ContentSlot = Root->AddChildToCanvas(Content);
+	ContentSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+	ContentSlot->SetOffsets(FMargin(48.0f));
+	ContentSlot->SetZOrder(0);
 	USizeBox* Size = Tree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("PreviewSizeBox"));
 	Size->SetWidthOverride(720.0f);
 	Size->SetHeightOverride(720.0f);
@@ -3966,6 +4315,62 @@ bool UTabletWidgetBlueprintLibrary::CenterItemInspectionWidget()
 	UImage* Preview = Tree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("PreviewImage"));
 	Preview->bIsVariable = true;
 	Panel->SetContent(Preview);
+
+	// Keep the controls presentation in the Widget Blueprint so designers can freely
+	// adjust wording, spacing, colors, and typography without touching runtime code.
+	UBorder* ControlsHintPanel = Tree->ConstructWidget<UBorder>(
+		UBorder::StaticClass(), TEXT("ControlsHintPanel"));
+	ControlsHintPanel->bIsVariable = true;
+	ControlsHintPanel->SetBrushColor(FLinearColor(0.015f, 0.015f, 0.02f, 0.78f));
+	ControlsHintPanel->SetPadding(FMargin(20.0f, 10.0f));
+	ControlsHintPanel->SetVisibility(ESlateVisibility::HitTestInvisible);
+	UCanvasPanelSlot* ControlsSlot = Root->AddChildToCanvas(ControlsHintPanel);
+	ControlsSlot->SetAnchors(FAnchors(0.5f, 1.0f));
+	ControlsSlot->SetAlignment(FVector2D(0.5f, 1.0f));
+	ControlsSlot->SetPosition(FVector2D(0.0f, -52.0f));
+	ControlsSlot->SetAutoSize(true);
+	ControlsSlot->SetZOrder(100);
+
+	UHorizontalBox* ControlsRow = Tree->ConstructWidget<UHorizontalBox>(
+		UHorizontalBox::StaticClass(), TEXT("ControlsHintRow"));
+	ControlsRow->bIsVariable = true;
+	ControlsHintPanel->SetContent(ControlsRow);
+
+	UFont* KoreanFont = LoadObject<UFont>(nullptr,
+		TEXT("/Game/Balhwajeom/UI/JE/Freesentation-4Regular_Font.Freesentation-4Regular_Font"));
+	const auto AddHintText = [Tree, ControlsRow, KoreanFont](
+		const FName Name,
+		const TCHAR* Value,
+		const FLinearColor& Color,
+		const FMargin& Padding)
+	{
+		UTextBlock* Text = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), Name);
+		Text->bIsVariable = true;
+		Text->SetText(FText::FromString(Value));
+		Text->SetColorAndOpacity(FSlateColor(Color));
+		Text->SetShadowOffset(FVector2D(1.0f, 1.0f));
+		Text->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f));
+		FSlateFontInfo Font = Text->GetFont();
+		Font.FontObject = KoreanFont;
+		Font.Size = 22;
+		Font.OutlineSettings.OutlineSize = 1;
+		Font.OutlineSettings.OutlineColor = FLinearColor(0.0f, 0.0f, 0.0f, 0.7f);
+		Text->SetFont(Font);
+		if (UHorizontalBoxSlot* Slot = ControlsRow->AddChildToHorizontalBox(Text))
+		{
+			Slot->SetVerticalAlignment(VAlign_Center);
+			Slot->SetPadding(Padding);
+		}
+	};
+
+	const FLinearColor KeyColor(1.0f, 0.78f, 0.30f, 1.0f);
+	const FLinearColor LabelColor(0.94f, 0.94f, 0.96f, 1.0f);
+	const FLinearColor SeparatorColor(0.58f, 0.58f, 0.62f, 1.0f);
+	AddHintText(TEXT("CloseKeyText"), TEXT("[F]"), KeyColor, FMargin(0.0f, 0.0f, 8.0f, 0.0f));
+	AddHintText(TEXT("CloseActionText"), TEXT("닫기"), LabelColor, FMargin(0.0f, 0.0f, 18.0f, 0.0f));
+	AddHintText(TEXT("ControlsSeparatorText"), TEXT("/"), SeparatorColor, FMargin(0.0f, 0.0f, 18.0f, 0.0f));
+	AddHintText(TEXT("RotateKeyText"), TEXT("[마우스 클릭]"), KeyColor, FMargin(0.0f, 0.0f, 8.0f, 0.0f));
+	AddHintText(TEXT("RotateActionText"), TEXT("회전하기"), LabelColor, FMargin(0.0f));
 	return TabletDesigner::SaveAndCompile(Blueprint);
 }
 

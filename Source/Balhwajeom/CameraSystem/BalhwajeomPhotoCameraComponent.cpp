@@ -405,9 +405,35 @@ bool UBalhwajeomPhotoCameraComponent::IsLockedByStoryState() const
 }
 
 
+bool UBalhwajeomPhotoCameraComponent::IsCaptureResultBlockingInput() const
+{
+	if (PendingCapture.IsSet())
+	{
+		return true;
+	}
+
+	if (const APlayerController* PlayerController =
+		Cast<APlayerController>(GetOwningController(this)))
+	{
+		if (const ABalhwajeomEvidenceCameraHUD* CameraHUD =
+			Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD()))
+		{
+			return CameraHUD->IsCapturePhotoPresentationActive();
+		}
+	}
+
+	return false;
+}
+
 void UBalhwajeomPhotoCameraComponent::ToggleCameraMode()
 {
 	if (BalhwajeomItemInspection::IsOpen(GetOwner())) return;
+
+	// Raising or lowering the camera under the result card would strand it mid-flight.
+	if (IsCaptureResultBlockingInput())
+	{
+		return;
+	}
 
 	// The lock only refuses entry. Leaving is always allowed, otherwise a lock applied
 	// while the player is already in camera mode would trap them there.
@@ -481,46 +507,14 @@ void UBalhwajeomPhotoCameraComponent::LookPitch(float Value)
 	}
 }
 
-void UBalhwajeomPhotoCameraComponent::PanHorizontal(float Value)
-{
-	if (PhotoCamera)
-	{
-		PanCamera(CameraPanRightDirection, Value);
-	}
-}
-
-void UBalhwajeomPhotoCameraComponent::PanVertical(float Value)
-{
-	if (PhotoCamera)
-	{
-		const float AbsolutePitch = FMath::Abs(
-			FRotator::NormalizeAxis(PhotoCamera->GetComponentRotation().Pitch));
-		const float SlowdownStart = FMath::Min(
-			VerticalPanSlowdownStartPitch, VerticalPanDisablePitch);
-		const float DisablePitch = FMath::Max(
-			VerticalPanSlowdownStartPitch, VerticalPanDisablePitch);
-
-		float SpeedScale = 1.0f;
-		if (FMath::IsNearlyEqual(SlowdownStart, DisablePitch))
-		{
-			SpeedScale = AbsolutePitch < SlowdownStart ? 1.0f : 0.0f;
-		}
-		else
-		{
-			const float SlowdownAlpha = FMath::Clamp(
-				(AbsolutePitch - SlowdownStart) / (DisablePitch - SlowdownStart),
-				0.0f,
-				1.0f);
-			SpeedScale = 1.0f - FMath::SmoothStep(0.0f, 1.0f, SlowdownAlpha);
-		}
-
-		PanCamera(FVector::UpVector, Value * SpeedScale);
-	}
-}
-
 void UBalhwajeomPhotoCameraComponent::ZoomCamera(float Value)
 {
 	if (!bIsInCameraMode || bIsCameraTransitioning || !PhotoCamera || FMath::IsNearlyZero(Value))
+	{
+		return;
+	}
+
+	if (IsCaptureResultBlockingInput())
 	{
 		return;
 	}
@@ -537,6 +531,15 @@ void UBalhwajeomPhotoCameraComponent::TakePhoto()
 	{
 		return;
 	}
+
+	// One shutter press owns the screen until its photo and keywords have flown to TAB.
+	// Held left click would otherwise stack shutter sounds and flashes under the card,
+	// and the second capture would be refused deeper in with a confusing yellow message.
+	if (IsCaptureResultBlockingInput())
+	{
+		return;
+	}
+
 	if (USoundBase* Sound = ShutterSound.LoadSynchronous())
 	{
 		UGameplayStatics::PlaySound2D(this, Sound);
@@ -549,12 +552,12 @@ void UBalhwajeomPhotoCameraComponent::TakePhoto()
 	if (bEnableEvidenceFocusSystem)
 	{
 		UpdateEvidenceFocus(0.0f);
-		// A successful evidence shot flashes only after the viewport pixels have been
-		// copied. Otherwise the white shutter overlay becomes the saved photograph.
-		if (!TryCaptureActiveFocusTarget())
-		{
-			TriggerPhotoFlash();
-		}
+		// The shutter flashes the instant the button is pressed, evidence or not, so
+		// a capture never reads as a frame late. The HUD draws no overlay while the
+		// clean screenshot frame renders, so the white rect cannot become the saved
+		// photograph, and it holds the flash clock until those pixels arrive.
+		TriggerPhotoFlash();
+		TryCaptureActiveFocusTarget();
 		return;
 	}
 
@@ -686,14 +689,6 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 	SavedFirstPersonFieldOfView = PhotoCamera->FieldOfView;
 	SavedPhotoPostProcessSettings = PhotoCamera->PostProcessSettings;
 	SavedPostProcessBlendWeight = PhotoCamera->PostProcessBlendWeight;
-	CameraModeEntryWorldLocation = PhotoCamera->GetComponentLocation();
-	CameraPanWorldOffset = FVector::ZeroVector;
-	CameraPanRightDirection = PhotoCamera->GetRightVector();
-	CameraPanRightDirection.Z = 0.0f;
-	if (!CameraPanRightDirection.Normalize())
-	{
-		CameraPanRightDirection = FVector::RightVector;
-	}
 	NormalCamera->SetActive(false);
 	PhotoCamera->SetActive(true);
 
@@ -761,7 +756,6 @@ void UBalhwajeomPhotoCameraComponent::ExitCameraMode()
 			bFocusBlurInitializationFailed = false;
 		}
 	}
-	CameraPanWorldOffset = FVector::ZeroVector;
 	FocusGuideTraceElapsed = 0.0f;
 	EarlyGuideRescanElapsed = 0.0f;
 	SetComponentTickEnabled(false);
@@ -857,32 +851,6 @@ void UBalhwajeomPhotoCameraComponent::FinishCameraTransition()
 {
 	bIsCameraTransitioning = false;
 	OnCameraTransitionFinished.Broadcast();
-}
-
-void UBalhwajeomPhotoCameraComponent::PanCamera(const FVector& ScreenDirection, float Value)
-{
-	if (!bIsInCameraMode || bIsCameraTransitioning || !PhotoCamera || !GetWorld() || FMath::IsNearlyZero(Value))
-	{
-		return;
-	}
-
-	const FVector Delta = ScreenDirection.GetSafeNormal() * Value * CameraPanSpeed * GetWorld()->GetDeltaSeconds();
-	CameraPanWorldOffset += Delta;
-
-	// Clamp each axis independently. A vector-length clamp creates a circular
-	// boundary; independent horizontal/vertical limits create a square pan area.
-	const float PanLimit = FMath::Max(CameraPanMaxDistance, 0.0f);
-	const float HorizontalOffset = FMath::Clamp(
-		FVector::DotProduct(CameraPanWorldOffset, CameraPanRightDirection),
-		-PanLimit,
-		PanLimit);
-	const float VerticalOffset = FMath::Clamp(
-		FVector::DotProduct(CameraPanWorldOffset, FVector::UpVector),
-		-PanLimit,
-		PanLimit);
-	CameraPanWorldOffset =
-		CameraPanRightDirection * HorizontalOffset + FVector::UpVector * VerticalOffset;
-	PhotoCamera->SetWorldLocation(CameraModeEntryWorldLocation + CameraPanWorldOffset);
 }
 
 void UBalhwajeomPhotoCameraComponent::ShowPhotoFeedback(const FString& Message, const FColor& Color) const
@@ -1628,9 +1596,8 @@ void UBalhwajeomPhotoCameraComponent::HandleScreenshotCaptured(
 	const FString AbsolutePath = PendingCapture->AbsolutePath;
 	ClearScreenshotDelegates();
 
-	// The pixels above represent the unflashed viewport. Start the visual shutter
-	// response now so it remains visible to the player but cannot contaminate the PNG.
-	TriggerPhotoFlash();
+	// The pixels above represent the unflashed viewport. The flash started at the
+	// shutter press and was held by the HUD; it resumes now that the overlays are back.
 	ShowPhotoFeedback(TEXT("사진을 저장하고 있다."), FColor::Silver);
 
 	if (Width <= 0 || Height <= 0 || Colors.Num() != Width * Height)

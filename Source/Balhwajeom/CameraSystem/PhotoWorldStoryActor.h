@@ -37,7 +37,8 @@ public:
 	void StartStory(
 		const TArray<FPhotoStoryCue>& InCues,
 		const TArray<FText>& LegacyLines,
-		const TSoftObjectPtr<USoundBase>& InVoice);
+		const TSoftObjectPtr<USoundBase>& InCueSound,
+		float InLastCueDurationSeconds);
 
 	/** Stops narration and fades this presentation out, for example when a new photo replaces it. */
 	UFUNCTION(BlueprintCallable, Category = "Photo Story")
@@ -56,6 +57,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Photo Story")
 	TObjectPtr<UWidgetComponent> StoryWidgetComponent;
 
+	/** Opposite-facing copy so the caption is equally bright and readable from either side. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Photo Story")
+	TObjectPtr<UWidgetComponent> BackStoryWidgetComponent;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Photo Story")
 	TObjectPtr<UAudioComponent> StoryAudioComponent;
 
@@ -72,14 +77,19 @@ protected:
 		meta = (ClampMin = "0.1", UIMin = "0.1", Units = "s"))
 	float LegacySecondsPerLine = 2.5f;
 
-	/** How long the final cue remains visible when this story has no StoryVoice. */
+	/** Compatibility fallback for invalid or legacy per-photo final-cue durations. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Photo Story|Timing",
 		meta = (ClampMin = "0.1", UIMin = "0.1", Units = "s"))
-	float NoVoiceLastCueDuration = 2.5f;
+	float DefaultLastCueDuration = 2.5f;
 
 private:
-	void HandleVoiceLoaded();
-	void PlayLoadedVoice();
+	void InitializeStoryWidgets();
+	void SetStoryWidgetsVisible(bool bVisible);
+	void SetStoryWidgetsText(const FText& Text);
+	void SetStoryWidgetsOpacity(float Opacity);
+	void SetStoryWidgetsFontSize(int32 FontSize);
+	void HandleCueSoundLoaded();
+	void PlayCueSound(int32 CueIndex);
 	void ApplyCue(int32 CueIndex);
 	void ScheduleNextCue();
 	void HandleCueTimer();
@@ -87,12 +97,9 @@ private:
 	void UpdateFadeOut();
 	void UpdateScaleTransition();
 
-	UFUNCTION()
-	void HandleAudioFinished();
-
 	TArray<FPhotoStoryCue> StoryCues;
-	TSoftObjectPtr<USoundBase> StoryVoice;
-	TSharedPtr<FStreamableHandle> VoiceLoadHandle;
+	TSoftObjectPtr<USoundBase> StoryCueSound;
+	TSharedPtr<FStreamableHandle> CueSoundLoadHandle;
 	FTimerHandle CueTimer;
 	FTimerHandle FadeTimer;
 	FTimerHandle ScaleTimer;
@@ -103,7 +110,7 @@ private:
 	int32 FontSizeTransitionStart = 32;
 	int32 FontSizeTransitionTarget = 32;
 	float ScaleTransitionDuration = 0.0f;
+	float LastCueDurationSeconds = 2.5f;
 	bool bFinishing = false;
 	bool bThirdPersonScaleRequested = false;
-	bool bPlayingWithoutVoice = false;
 };

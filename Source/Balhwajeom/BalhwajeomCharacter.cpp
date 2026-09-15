@@ -96,17 +96,6 @@ void ABalhwajeomCharacter::Look(const FInputActionValue& Value)
 
 void ABalhwajeomCharacter::DoMove(float Right, float Forward)
 {
-	if (UBalhwajeomPhotoCameraComponent* PhotoCamera = FindComponentByClass<UBalhwajeomPhotoCameraComponent>())
-	{
-		if (PhotoCamera->IsInCameraMode())
-		{
-			// While the photo camera is active, WASD pans the shot instead of walking the character.
-			PhotoCamera->PanVertical(Forward);
-			PhotoCamera->PanHorizontal(Right);
-			return;
-		}
-	}
-
 	if (GetController() != nullptr)
 	{
 		// find out which way is forward

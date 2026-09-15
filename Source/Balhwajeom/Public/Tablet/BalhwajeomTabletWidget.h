@@ -6,6 +6,7 @@
 #include "Components/Button.h"
 #include "Investigation/InvestigationRuntimeTypes.h"
 #include "Investigation/SentenceDefinitions.h"
+#include "Styling/SlateBrush.h"
 #include "BalhwajeomTabletWidget.generated.h"
 
 class UBorder;
@@ -350,6 +351,9 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UTextBlock> LabelText;
+
+	/** Photo-style (non-statement) chip's background brush before hover, so mouse-leave can restore it after ApplyKeywordHoverBrush overwrites Background's brush on hover. */
+	FSlateBrush NormalBrush;
 };
 
 /**
@@ -838,6 +842,10 @@ private:
 	/** Blank widgets for the sentence currently open, keyed by SlotIndex. Rebuilt each PreparePuzzle. */
 	UPROPERTY(Transient)
 	TMap<int32, TObjectPtr<UBalhwajeomTabletSentenceBlank>> ActiveBlanksBySlot;
+
+	/** Generated static fragments kept separately because explicit line breaks still use nested layout state. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UTextBlock>> ActiveSentenceSegments;
 
 	/** Photo evidence slot widgets for the sentence currently open, keyed by SlotIndex. Rebuilt each PreparePuzzle. */
 	UPROPERTY(Transient)

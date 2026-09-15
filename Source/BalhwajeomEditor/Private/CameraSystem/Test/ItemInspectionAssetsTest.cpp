@@ -3,7 +3,11 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "CameraSystem/BalhwajeomCameraGameMode.h"
 #include "Components/DirectionalLightComponent.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Components/HorizontalBox.h"
 #include "Components/PointLightComponent.h"
+#include "Components/TextBlock.h"
+#include "Blueprint/WidgetTree.h"
 #include "Engine/Blueprint.h"
 #include "Engine/DirectionalLight.h"
 #include "Engine/PointLight.h"
@@ -28,6 +32,7 @@
 #include "Materials/Material.h"
 #include "Misc/PackageName.h"
 #include "UObject/SavePackage.h"
+#include "WidgetBlueprint.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FItemInspectionAssetsTest, "Balhwajeom.ItemInspection.AssetsAndFixture",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -36,8 +41,49 @@ bool FItemInspectionAssetsTest::RunTest(const FString& Parameters)
 	UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, TEXT("/ItemInspector/Item/SM_OldKey.SM_OldKey"));
 	UMaterial* Material = LoadObject<UMaterial>(nullptr, TEXT("/ItemInspector/ItemInspection/M_JMItemPreviewAlpha.M_JMItemPreviewAlpha"));
 	UClass* Widget = LoadClass<UJMItemInspectionWidgetBase>(nullptr, TEXT("/ItemInspector/UI/WBP_JMItemInspection.WBP_JMItemInspection_C"));
+	UWidgetBlueprint* WidgetBlueprint = LoadObject<UWidgetBlueprint>(
+		nullptr, TEXT("/ItemInspector/UI/WBP_JMItemInspection.WBP_JMItemInspection"));
 	if (!TestNotNull(TEXT("Original key mesh"), Mesh) || !TestNotNull(TEXT("Original alpha material"), Material)
-		|| !TestNotNull(TEXT("Original inspector WBP"), Widget)) return false;
+		|| !TestNotNull(TEXT("Original inspector WBP"), Widget)
+		|| !TestNotNull(TEXT("Inspector Widget Blueprint asset"), WidgetBlueprint)) return false;
+	if (WidgetBlueprint && WidgetBlueprint->WidgetTree)
+	{
+		const UWidget* Backdrop = WidgetBlueprint->WidgetTree->FindWidget(TEXT("Backdrop"));
+		const UWidget* MainRow = WidgetBlueprint->WidgetTree->FindWidget(TEXT("MainRow"));
+		const UWidget* ControlsPanel = WidgetBlueprint->WidgetTree->FindWidget(TEXT("ControlsHintPanel"));
+		const UCanvasPanelSlot* BackdropSlot = Backdrop ? Cast<UCanvasPanelSlot>(Backdrop->Slot) : nullptr;
+		const UCanvasPanelSlot* MainRowSlot = MainRow ? Cast<UCanvasPanelSlot>(MainRow->Slot) : nullptr;
+		const UCanvasPanelSlot* ControlsSlot = ControlsPanel ? Cast<UCanvasPanelSlot>(ControlsPanel->Slot) : nullptr;
+		TestNotNull(TEXT("Backdrop uses an explicit canvas layer"), BackdropSlot);
+		TestNotNull(TEXT("Inspection content uses an explicit canvas layer"), MainRowSlot);
+		TestNotNull(TEXT("Controls hint uses an explicit canvas layer"), ControlsSlot);
+		if (BackdropSlot && MainRowSlot && ControlsSlot)
+		{
+			TestTrue(TEXT("Backdrop is behind inspection content"), BackdropSlot->GetZOrder() < MainRowSlot->GetZOrder());
+			TestTrue(TEXT("Controls hint is above inspection content"), ControlsSlot->GetZOrder() > MainRowSlot->GetZOrder());
+		}
+		TestNotNull(TEXT("Editable controls hint row"), Cast<UHorizontalBox>(
+			WidgetBlueprint->WidgetTree->FindWidget(TEXT("ControlsHintRow"))));
+		const UTextBlock* CloseKey = Cast<UTextBlock>(
+			WidgetBlueprint->WidgetTree->FindWidget(TEXT("CloseKeyText")));
+		const UTextBlock* CloseAction = Cast<UTextBlock>(
+			WidgetBlueprint->WidgetTree->FindWidget(TEXT("CloseActionText")));
+		const UTextBlock* RotateKey = Cast<UTextBlock>(
+			WidgetBlueprint->WidgetTree->FindWidget(TEXT("RotateKeyText")));
+		const UTextBlock* RotateAction = Cast<UTextBlock>(
+			WidgetBlueprint->WidgetTree->FindWidget(TEXT("RotateActionText")));
+		TestNotNull(TEXT("F close key hint"), CloseKey);
+		TestNotNull(TEXT("Close action hint"), CloseAction);
+		TestNotNull(TEXT("Mouse rotation key hint"), RotateKey);
+		TestNotNull(TEXT("Rotation action hint"), RotateAction);
+		if (CloseKey && CloseAction && RotateKey && RotateAction)
+		{
+			TestEqual(TEXT("Close key hint text"), CloseKey->GetText().ToString(), FString(TEXT("[F]")));
+			TestEqual(TEXT("Close action hint text"), CloseAction->GetText().ToString(), FString(TEXT("닫기")));
+			TestEqual(TEXT("Rotate key hint text"), RotateKey->GetText().ToString(), FString(TEXT("[마우스 클릭]")));
+			TestEqual(TEXT("Rotate action hint text"), RotateAction->GetText().ToString(), FString(TEXT("회전하기")));
+		}
+	}
 	TestEqual(TEXT("UI material domain"), Material->MaterialDomain, MD_UI);
 	UInputAction* InteractAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Balhwajeom/Input/IA_Interact.IA_Interact"));
 	UInputMappingContext* InteractionContext = LoadObject<UInputMappingContext>(nullptr, TEXT("/Game/Balhwajeom/Input/IMC_Interaction.IMC_Interaction"));

@@ -8,6 +8,7 @@
 
 class UCanvasPanel;
 class UImage;
+class UTextBlock;
 
 
 /**
@@ -68,6 +69,13 @@ private:
 	/** First of the named widgets that actually exists in the player HUD, or null. */
 	UImage* FindHudIcon(const TArray<FName>& SourceIconNames) const;
 
+	/**
+	 * Shows the current step's HintMessage next to whichever icon HintTarget highlighted,
+	 * using that highlight's just-updated rectangle. Collapses when the message is empty
+	 * or its icon is not currently shown.
+	 */
+	void UpdateHintMessage(EBalhwajeomTutorialHintTarget HintTarget);
+
 	UPROPERTY(Transient)
 	TObjectPtr<UCanvasPanel> RootCanvas;
 
@@ -79,6 +87,10 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> TabletHighlight;
+
+	/** Built last so it draws above both highlights. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> HintMessageText;
 
 	float CurrentDimOpacity = 0.0f;
 };

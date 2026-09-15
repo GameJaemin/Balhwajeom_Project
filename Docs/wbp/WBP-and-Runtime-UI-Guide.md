@@ -489,8 +489,9 @@ TAB 버튼 위의 `15/32` 표시는 별도 WBP가 아니라 `UBalhwajeomKeywordC
 
 - 표시 텍스트 위젯: `StoryText`
 - 데이터: `DT_Photos.WorldStoryCues` 또는 레거시 `WorldStoryLines`
-- 음성: `DT_Photos.StoryVoice`
+- 문장 효과음: `DT_Photos.StoryCueSound`. 각 문장이 나타날 때마다 처음부터 재생되며, 비어 있거나 로드에 실패해도 자막은 계속 진행된다. `StoryVoice`는 태블릿·침대 회상용 음성으로 유지된다.
 - 자막 전환 시점: 각 `FPhotoStoryCue.StartTimeSeconds`
+- 마지막 문장 유지 시간: `DT_Photos.LastCueDurationSeconds`. 시간이 지나면 월드 스토리의 기본 페이드 아웃이 시작된다.
 
 이 자막은 촬영 장면 연출용이므로 태블릿에서 사진을 다시 열 때 반복 표시하지 않는다.
 

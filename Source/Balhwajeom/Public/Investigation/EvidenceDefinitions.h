@@ -73,6 +73,16 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 	TSoftObjectPtr<UStaticMesh> StateMesh;
 
 	/**
+	 * Local offset applied to the evidence mesh while this state is active, on top of the
+	 * placement authored in the level. Swapping StateMesh keeps the component transform, so a
+	 * mesh exported on a different pivot lands somewhere else; this nudges it back without
+	 * touching the art or the other states. Zero means "use the authored placement", which is
+	 * what every state wants once its meshes share a pivot.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Presentation", meta = (Units = "cm"))
+	FVector StateMeshOffset = FVector::ZeroVector;
+
+	/**
 	 * Niagara system played once when this state is entered. It is deliberately skipped when a
 	 * level load restores an already-advanced state, so a one-shot burst does not replay.
 	 */
@@ -87,6 +97,15 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inspection", meta = (MultiLine = "true"))
 	FText NearLabel;
+
+	/**
+	 * Prevents this state from opening the rotating 3D inspector even when the
+	 * owning Evidence Actor has Enable 3D Inspection checked. Enable this on a
+	 * PostCaptureStateID destination when the photographed object should no
+	 * longer open the 3D view.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inspection|3D")
+	bool bDisable3DInspection = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture")
 	bool bCanCapture = false;

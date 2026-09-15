@@ -7,8 +7,8 @@
 #include "BalhwajeomEvidenceCameraHUD.generated.h"
 
 class UImage;
+class UMultiShadowTextWidget;
 class UTexture2D;
-class UTextBlock;
 class UUserWidget;
 class UBalhwajeomCapturePhotoWidget;
 
@@ -33,6 +33,13 @@ public:
 	/** Plays a short photo-card-to-gallery animation after a new evidence item is acquired. */
 	UFUNCTION(BlueprintCallable, Category = "Camera|Evidence")
 	void TriggerEvidenceSavedAnimation(const FText& EvidenceName);
+
+	/** True from the moment the capture card appears until it has flown to TAB. */
+	UFUNCTION(BlueprintPure, Category = "Camera|Evidence")
+	bool IsCapturePhotoPresentationActive() const
+	{
+		return EvidenceSavedAnimationStartTime >= 0.0f;
+	}
 
 	/** Shows the captured image, its sentence, and newly granted keywords before flying to TAB. */
 	void TriggerCapturePhotoPresentation(
@@ -60,6 +67,9 @@ private:
 	void UpdateViewfinder();
 	bool EnsureViewfinderWidget();
 	void HideViewfinderWidget();
+
+	/** Full-screen shutter flash. Its clock only advances on frames it can draw. */
+	void DrawPhotoFlash();
 
 	void UpdateCapturePhotoPresentation();
 	bool EnsureCapturePhotoWidget();
@@ -92,7 +102,7 @@ private:
 	TObjectPtr<UImage> FocusGuideStatusImage;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> FocusGuideLabelText;
+	TObjectPtr<UMultiShadowTextWidget> FocusGuideLabelText;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Camera|Evidence")
 	TSubclassOf<UBalhwajeomCapturePhotoWidget> CapturePhotoWidgetClass;
@@ -100,7 +110,8 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UBalhwajeomCapturePhotoWidget> CapturePhotoWidget;
 
-	float PhotoFlashEndTime = -1.0f;
+	/** Shutter flash time left, in seconds. Frozen while the screenshot frame renders. */
+	float PhotoFlashRemaining = 0.0f;
 	float EvidenceSavedAnimationStartTime = -1.0f;
 	float CapturePhotoLayoutWaitStartTime = -1.0f;
 	bool bCapturePhotoMovementLocked = false;

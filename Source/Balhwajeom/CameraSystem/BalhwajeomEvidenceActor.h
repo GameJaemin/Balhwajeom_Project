@@ -22,6 +22,7 @@ class UInspectionComponent;
 class UJMInspectableComponent;
 class UJMItemInspectionData;
 class UTexture2D;
+class UTextRenderComponent;
 class UWidgetComponent;
 class UBalhwajeomInvestigationSubsystem;
 class UStoryStateSubsystem;
@@ -102,6 +103,12 @@ public:
 		EPlayerInspectionDistanceState DistanceState,
 		const FText& LabelText);
 
+	/** Combines the actor opt-in, progression availability, and active-state override. */
+	static bool ShouldEnable3DInspectionForState(
+		bool bInspectionRequested,
+		bool bProgressionAllowsInspection,
+		bool bStateDisablesInspection);
+
 	/** Per-object distance thresholds and text used by the normal inspection system. */
 	UFUNCTION(BlueprintPure, Category = "Inspection")
 	UInspectionComponent* GetInspectionComponent() const { return InspectionComponent; }
@@ -138,6 +145,12 @@ protected:
 
 	/** Applies the state's mesh and plays its one-shot effect. Only the mesh is applied on a load. */
 	void ApplyStateVisuals(const struct FEvidenceStateDefinition& State, bool bInitialApply);
+
+	/** Names a state whose mesh sits on a different pivot than the one it replaced. */
+	void ReportStateMeshPivotShift(
+		const struct FEvidenceStateDefinition& State,
+		const UStaticMesh* PreviousMesh,
+		const UStaticMesh* NewMesh) const;
 
 	UFUNCTION()
 	void HandleEvidenceStateChanged(FGuid ChangedInstanceID, FName PreviousStateID, FName NewStateID);
@@ -202,6 +215,16 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inspection|3D")
 	TObjectPtr<UJMInspectableComponent> ItemInspectionComponent;
 
+	/**
+	 * Whether the level or Blueprint ticked ItemInspectionComponent.bInspectionEnabled by hand.
+	 * That flag is derived state every ConfigureItemInspection() rewrites, so it is captured
+	 * once at BeginPlay and treated as the same opt-in bEnable3DInspection gives.
+	 */
+	bool bAuthoredItemInspectionEnabled = false;
+
+	/** Derived from the active FEvidenceStateDefinition. */
+	bool bCurrentStateDisables3DInspection = false;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UJMItemInspectionData> RuntimeItemInspectionData;
 
@@ -236,6 +259,10 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Evidence|Progression")
 	bool bProgressionAvailable = true;
 
+	/** Evidence mesh placement as authored, i.e. the origin StateMeshOffset is measured from. */
+	FVector EvidenceMeshBaselineRelativeLocation = FVector::ZeroVector;
+	bool bEvidenceMeshBaselineCaptured = false;
+
 	/** Completion condition that changes this object's normal F interaction into removal. */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Evidence|Progression")
 	FGameplayTag ClearRequiredTag;
@@ -262,8 +289,8 @@ protected:
 
 	/**
 	 * Where the world-locked 3D story text appears and which way it faces. Move and rotate this
-	 * in a derived Blueprint or directly on the placed instance; its +X axis is the reading
-	 * direction, so point the arrow at where the player will be standing.
+	 * in a derived Blueprint or directly on the placed instance. Its rotation is absolute, so it
+	 * keeps this world angle when the evidence mesh is rotated. +X is the reading direction.
 	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Evidence|Story")
 	TObjectPtr<USceneComponent> StoryAnchor;
@@ -272,6 +299,10 @@ protected:
 	/** Editor-only reading-direction indicator for StoryAnchor. */
 	UPROPERTY()
 	TObjectPtr<UArrowComponent> StoryAnchorArrow;
+
+	/** Editor-only sample caption that makes the anchor's final reading angle obvious. */
+	UPROPERTY()
+	TObjectPtr<UTextRenderComponent> StoryAnchorPreviewText;
 #endif
 
 	/** Presentation actor spawned at StoryAnchor. The native class is used when this is empty. */

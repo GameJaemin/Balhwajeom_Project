@@ -38,6 +38,14 @@ UMultiShadowTextWidget::UMultiShadowTextWidget()
 }
 
 
+void UMultiShadowTextWidget::SetText(const FText& InText)
+{
+	Text = InText;
+	RebuildShadowWidgets();
+	InvalidateLayoutAndVolatility();
+}
+
+
 TSharedRef<SWidget> UMultiShadowTextWidget::RebuildWidget()
 {
 	MyOverlay = SNew(SOverlay);

@@ -130,6 +130,7 @@ protected:
 private:
 #if WITH_DEV_AUTOMATION_TESTS
 	friend class FCapturePhotoFlightTest;
+	friend class FCapturePhotoMultilineSentenceTest;
 #endif
 	void ApplyWidgetFly(UWidget* Widget, const FVector2D& LocalTravel, float Alpha);
 

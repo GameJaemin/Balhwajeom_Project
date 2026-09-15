@@ -753,6 +753,7 @@ void UBalhwajeomTabletWidget::HidePuzzleControls()
 		WB_SentenceBuilder->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	ActiveBlanksBySlot.Reset();
+	ActiveSentenceSegments.Reset();
 	if (TXT_PuzzlePhotoLabel)
 	{
 		TXT_PuzzlePhotoLabel->SetVisibility(ESlateVisibility::Collapsed);
@@ -856,7 +857,10 @@ void UBalhwajeomTabletWidget::RefreshPuzzleControls()
 				{
 					USpacer* EmptyCell = WidgetTree->ConstructWidget<USpacer>();
 					EmptyCell->SetSize(FVector2D(106.0f, 39.0f));
-					WB_PuzzleWords->AddChild(EmptyCell);
+					if (UWrapBoxSlot* EmptySlot = Cast<UWrapBoxSlot>(WB_PuzzleWords->AddChild(EmptyCell)))
+					{
+						EmptySlot->SetVerticalAlignment(VAlign_Center);
+					}
 					continue;
 				}
 				UBalhwajeomTabletWordChip* Chip = Cast<UBalhwajeomTabletWordChip>(
@@ -869,7 +873,10 @@ void UBalhwajeomTabletWidget::RefreshPuzzleControls()
 						true,
 						ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFont() : nullptr,
 						ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFontSize() : 14);
-					WB_PuzzleWords->AddChild(Chip);
+					if (UWrapBoxSlot* ChipSlot = Cast<UWrapBoxSlot>(WB_PuzzleWords->AddChild(Chip)))
+					{
+						ChipSlot->SetVerticalAlignment(VAlign_Center);
+					}
 				}
 			}
 		}
@@ -904,6 +911,7 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 	}
 	WB_SentenceBuilder->ClearChildren();
 	ActiveBlanksBySlot.Reset();
+	ActiveSentenceSegments.Reset();
 
 	TArray<FString> Segments;
 	Sentence.SentenceTemplate.ToString().ParseIntoArray(Segments, TEXT("[]"), false);
@@ -915,29 +923,65 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 	const int32 StatementFontSize = bStatementStyle && ActiveDetailWidget
 		? ActiveDetailWidget->GetStatementTextFontSize()
 		: 16;
+	const int32 SegmentFontSize = bStatementStyle ? StatementFontSize : 27;
+	int32 BlankSlotIndex = 0;
+	bool bForceNextChildToNewLine = false;
+	auto AddSentenceChild = [this, &bForceNextChildToNewLine](UWidget* Child)
+	{
+		if (UWrapBoxSlot* Slot = Cast<UWrapBoxSlot>(WB_SentenceBuilder->AddChild(Child)))
+		{
+			Slot->SetNewLine(bForceNextChildToNewLine);
+			Slot->SetVerticalAlignment(VAlign_Center);
+		}
+		bForceNextChildToNewLine = false;
+	};
+	auto AddEmptyLine = [this, SegmentFontSize, &AddSentenceChild]()
+	{
+		USpacer* Spacer = WidgetTree->ConstructWidget<USpacer>();
+		Spacer->SetSize(FVector2D(1.0f, static_cast<float>(SegmentFontSize)));
+		AddSentenceChild(Spacer);
+		if (UWrapBoxSlot* Slot = Cast<UWrapBoxSlot>(Spacer->Slot))
+		{
+			Slot->SetFillEmptySpace(true);
+		}
+	};
 
 	for (int32 SegmentIndex = 0; SegmentIndex < Segments.Num(); ++SegmentIndex)
 	{
-		if (!Segments[SegmentIndex].IsEmpty())
+		FString NormalizedSegment = Segments[SegmentIndex]
+			.Replace(TEXT("\r\n"), TEXT("\n"))
+			.Replace(TEXT("\r"), TEXT("\n"));
+		TArray<FString> Lines;
+		NormalizedSegment.ParseIntoArray(Lines, TEXT("\n"), false);
+		for (int32 LineIndex = 0; LineIndex < Lines.Num(); ++LineIndex)
 		{
-			UTextBlock* SegmentText = WidgetTree->ConstructWidget<UTextBlock>();
-			SegmentText->SetText(FText::FromString(Segments[SegmentIndex]));
-			FSlateFontInfo Font = SegmentText->GetFont();
-			Font.Size = bStatementStyle ? StatementFontSize : 27;
-			if (bStatementStyle)
+			if (LineIndex > 0)
 			{
-				Font.FontObject = StatementFont;
+				if (bForceNextChildToNewLine)
+				{
+					AddEmptyLine();
+				}
+				bForceNextChildToNewLine = true;
 			}
-			SegmentText->SetFont(Font);
-			SegmentText->SetColorAndOpacity(FSlateColor(
-				bStatementStyle ? FLinearColor::Black : FLinearColor::White));
-			if (UWrapBoxSlot* WrapSlot = Cast<UWrapBoxSlot>(WB_SentenceBuilder->AddChild(SegmentText)))
+			if (!Lines[LineIndex].IsEmpty())
 			{
-				WrapSlot->SetVerticalAlignment(VAlign_Center);
+				UTextBlock* SegmentText = WidgetTree->ConstructWidget<UTextBlock>();
+				SegmentText->SetText(FText::FromString(Lines[LineIndex]));
+				FSlateFontInfo Font = SegmentText->GetFont();
+				Font.Size = SegmentFontSize;
+				if (bStatementStyle)
+				{
+					Font.FontObject = StatementFont;
+				}
+				SegmentText->SetFont(Font);
+				SegmentText->SetColorAndOpacity(FSlateColor(
+					bStatementStyle ? FLinearColor::Black : FLinearColor::White));
+				ActiveSentenceSegments.Add(SegmentText);
+				AddSentenceChild(SegmentText);
 			}
 		}
 
-		if (SegmentIndex < SlotCount)
+		if (SegmentIndex < Segments.Num() - 1 && BlankSlotIndex < SlotCount)
 		{
 			UBalhwajeomTabletSentenceBlank* Blank = Cast<UBalhwajeomTabletSentenceBlank>(
 				UUserWidget::CreateWidgetInstance(*WidgetTree, UBalhwajeomTabletSentenceBlank::StaticClass(), NAME_None));
@@ -946,16 +990,14 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 				continue;
 			}
 			Blank->Configure(
-				SegmentIndex,
+				BlankSlotIndex,
 				bStatementStyle,
 				StatementFont,
 				StatementFontSize);
 			Blank->OnBlankDropped.AddUniqueDynamic(this, &ThisClass::HandleSentenceBlankDropped);
-			ActiveBlanksBySlot.Add(SegmentIndex, Blank);
-			if (UWrapBoxSlot* WrapSlot = Cast<UWrapBoxSlot>(WB_SentenceBuilder->AddChild(Blank)))
-			{
-				WrapSlot->SetVerticalAlignment(VAlign_Center);
-			}
+			ActiveBlanksBySlot.Add(BlankSlotIndex, Blank);
+			AddSentenceChild(Blank);
+			++BlankSlotIndex;
 		}
 	}
 
@@ -977,14 +1019,16 @@ void UBalhwajeomTabletWidget::SetPhotoPuzzleErrorStyle(const bool bError)
 	const FLinearColor TextColor = bError
 		? FLinearColor(0.761f, 0.471f, 0.471f, 1.0f) // #C27878
 		: FLinearColor::White;
-	for (int32 ChildIndex = 0; ChildIndex < WB_SentenceBuilder->GetChildrenCount(); ++ChildIndex)
+	for (UTextBlock* Segment : ActiveSentenceSegments)
 	{
-		if (UTextBlock* Segment = Cast<UTextBlock>(WB_SentenceBuilder->GetChildAt(ChildIndex)))
+		if (Segment)
 		{
 			Segment->SetColorAndOpacity(FSlateColor(TextColor));
 		}
-		else if (UBalhwajeomTabletSentenceBlank* Blank =
-			Cast<UBalhwajeomTabletSentenceBlank>(WB_SentenceBuilder->GetChildAt(ChildIndex)))
+	}
+	for (const TPair<int32, TObjectPtr<UBalhwajeomTabletSentenceBlank>>& Pair : ActiveBlanksBySlot)
+	{
+		if (UBalhwajeomTabletSentenceBlank* Blank = Pair.Value)
 		{
 			Blank->SetErrorStyle(bError);
 		}
@@ -1675,7 +1719,10 @@ void UBalhwajeomTabletWidget::RefreshAcquiredWordsDisplay()
 			continue;
 		}
 		Chip->Configure(Record.WordID, Word.DisplayWord);
-		WB_PuzzleWords->AddChild(Chip);
+		if (UWrapBoxSlot* ChipSlot = Cast<UWrapBoxSlot>(WB_PuzzleWords->AddChild(Chip)))
+		{
+			ChipSlot->SetVerticalAlignment(VAlign_Center);
+		}
 	}
 	WB_PuzzleWords->SetVisibility(
 		FolderWords.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
@@ -2057,11 +2104,16 @@ void UBalhwajeomTabletWordChip::Configure(
 		bStatementStyle
 			? FLinearColor(1.0f, 1.0f, 1.0f, 0.0f)
 			: FLinearColor(0.30f, 0.24f, 0.16f, 1.0f));
-	Background->SetPadding(bStatementStyle ? FMargin(5.0f, 3.0f) : FMargin(10.0f, 6.0f));
+	Background->SetPadding(bStatementStyle ? FMargin(6.0f, 11.0f, 5.0f, 3.0f) : FMargin(10.0f, 6.0f));
 	if (bStatementStyle)
 	{
 		ApplyKeywordHoverBrush(Background);
 		Background->SetBrushColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.0f));
+	}
+	else
+	{
+		// Captured so NativeOnMouseLeave can undo ApplyKeywordHoverBrush's brush swap.
+		NormalBrush = Background->Background;
 	}
 
 	LabelText = WidgetTree->ConstructWidget<UTextBlock>();
@@ -2097,8 +2149,18 @@ void UBalhwajeomTabletWordChip::NativeOnMouseEnter(
 	const FPointerEvent& InMouseEvent)
 {
 	Super::NativeOnMouseEnter(InGeometry, InMouseEvent);
-	if (bStatementStyle && Background && LabelText)
+	if (!Background || !LabelText)
 	{
+		return;
+	}
+	if (bStatementStyle)
+	{
+		Background->SetBrushColor(FLinearColor::White);
+		LabelText->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
+	}
+	else
+	{
+		ApplyKeywordHoverBrush(Background);
 		Background->SetBrushColor(FLinearColor::White);
 		LabelText->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
 	}
@@ -2107,10 +2169,19 @@ void UBalhwajeomTabletWordChip::NativeOnMouseEnter(
 void UBalhwajeomTabletWordChip::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
 {
 	Super::NativeOnMouseLeave(InMouseEvent);
-	if (bStatementStyle && Background && LabelText)
+	if (!Background || !LabelText)
+	{
+		return;
+	}
+	if (bStatementStyle)
 	{
 		Background->SetBrushColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.0f));
 		LabelText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+	}
+	else
+	{
+		Background->SetBrush(NormalBrush);
+		LabelText->SetColorAndOpacity(FSlateColor(FLinearColor(0.96f, 0.91f, 0.82f, 1.0f)));
 	}
 }
 
@@ -2141,7 +2212,7 @@ void UBalhwajeomTabletWordChip::NativeOnDragDetected(
 			bStatementStyle
 				? FLinearColor::White
 				: FLinearColor(0.30f, 0.24f, 0.16f, 0.9f));
-		DragVisual->SetPadding(bStatementStyle ? FMargin(5.0f, 3.0f) : FMargin(10.0f, 6.0f));
+		DragVisual->SetPadding(bStatementStyle ? FMargin(6.0f, 9.0f, 5.0f, 3.0f) : FMargin(10.0f, 6.0f));
 		if (bStatementStyle)
 		{
 			ApplyKeywordHoverBrush(DragVisual);

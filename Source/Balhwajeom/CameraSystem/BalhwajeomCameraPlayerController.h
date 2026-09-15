@@ -4,13 +4,16 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "GameplayTagContainer.h"
 #include "Investigation/InvestigationRuntimeTypes.h"
 #include "BalhwajeomCameraPlayerController.generated.h"
 
 class UUserWidget;
 class UWidget;
+class UTexture2D;
 class UBalhwajeomInvestigationSubsystem;
 class UBalhwajeomKeywordCounterWidget;
+class UStoryStateSubsystem;
 
 /** Owns mouse-look input and forwards it to the possessed Project Self character. */
 UCLASS(Blueprintable)
@@ -167,10 +170,19 @@ private:
 	void HandleMouseYaw(float Value);
 	void EnsureKeywordCounter();
 	void RefreshKeywordCounter();
+	void BindHudModeEvents();
+	void RefreshHudModeIcons();
 	void HideInspectionMessage();
 
 	UFUNCTION()
+	void HandleHudModeTagChanged(FGameplayTag StateTag);
+
+	UFUNCTION()
 	void HandleWordAcquired(const FAcquiredWordRecord& WordRecord);
+
+	/** Bound to OnPhotoGalleryReset so the keyword counter drops the stale pre-reset total. */
+	UFUNCTION()
+	void HandleInvestigationPhotoGalleryReset();
 	bool ShouldShowInteractionPrompt() const;
 	bool IsInteractionPromptSuppressedByTablet() const;
 	bool IsInteractionPromptSuppressedByPhotoCamera() const;
@@ -187,6 +199,28 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UBalhwajeomInvestigationSubsystem> BoundInvestigationSubsystem;
+
+	/** Story state source used to keep the two WBP_HUID mode buttons in sync. */
+	UPROPERTY(Transient)
+	TObjectPtr<UStoryStateSubsystem> BoundHudStoryStateSubsystem;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Mode Buttons")
+	TObjectPtr<UTexture2D> CameraButtonIdleTexture;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Mode Buttons")
+	TObjectPtr<UTexture2D> CameraButtonClickedTexture;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Mode Buttons")
+	TObjectPtr<UTexture2D> TabletButtonIdleTexture;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Mode Buttons")
+	TObjectPtr<UTexture2D> TabletButtonClickedTexture;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Mode Buttons")
+	FName CameraButtonImageName = TEXT("Image_Camera");
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Mode Buttons")
+	FName TabletButtonImageName = TEXT("Image_TAB");
 
 	FTimerHandle InspectionMessageTimerHandle;
 };

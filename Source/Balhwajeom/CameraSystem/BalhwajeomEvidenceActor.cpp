@@ -5,7 +5,10 @@
 #include "Components/ArrowComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/SceneComponent.h"
+#include "Components/SizeBox.h"
+#include "Components/TextRenderComponent.h"
 #include "Components/Image.h"
 #include "Components/WidgetComponent.h"
 #include "Interaction/InspectionComponent.h"
@@ -90,6 +93,9 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 	// designer positions it; +X points at the reader because the story widget faces its own +X.
 	StoryAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("StoryAnchor"));
 	StoryAnchor->SetupAttachment(EvidenceMesh);
+	// Follow the evidence position, but keep the authored reading angle in world space.
+	StoryAnchor->SetAbsolute(/*bNewAbsoluteLocation*/ false, /*bNewAbsoluteRotation*/ true,
+		/*bNewAbsoluteScale*/ false);
 	StoryAnchor->SetRelativeLocation(FVector(0.0f, 0.0f, 60.0f));
 
 #if WITH_EDITORONLY_DATA
@@ -100,6 +106,20 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 		StoryAnchorArrow->ArrowColor = FColor(140, 200, 255);
 		StoryAnchorArrow->bIsScreenSizeScaled = true;
 		StoryAnchorArrow->SetHiddenInGame(true);
+	}
+
+	StoryAnchorPreviewText = CreateEditorOnlyDefaultSubobject<UTextRenderComponent>(
+		TEXT("StoryAnchorPreviewText"));
+	if (StoryAnchorPreviewText)
+	{
+		StoryAnchorPreviewText->SetupAttachment(StoryAnchor);
+		StoryAnchorPreviewText->SetText(NSLOCTEXT(
+			"BalhwajeomEvidence", "StoryAnchorPreview", "Story Anchor 예시 텍스트"));
+		StoryAnchorPreviewText->SetHorizontalAlignment(EHTA_Center);
+		StoryAnchorPreviewText->SetVerticalAlignment(EVRTA_TextCenter);
+		StoryAnchorPreviewText->SetWorldSize(18.0f);
+		StoryAnchorPreviewText->SetTextRenderColor(FColor(140, 220, 255));
+		StoryAnchorPreviewText->SetHiddenInGame(true);
 	}
 #endif
 
@@ -153,6 +173,8 @@ void ABalhwajeomEvidenceActor::ApplyStateVisuals(
 	const FEvidenceStateDefinition& State,
 	bool bInitialApply)
 {
+	bool bMeshPresentationChanged = false;
+
 	// The mesh is applied on a load too, otherwise a restored state shows the wrong object.
 	if (EvidenceMesh && !State.StateMesh.IsNull())
 	{
@@ -161,16 +183,41 @@ void ABalhwajeomEvidenceActor::ApplyStateVisuals(
 		UStaticMesh* StateMesh = State.StateMesh.LoadSynchronous();
 		if (StateMesh && EvidenceMesh->GetStaticMesh() != StateMesh)
 		{
+			const UStaticMesh* PreviousMesh = EvidenceMesh->GetStaticMesh();
 			EvidenceMesh->SetStaticMesh(StateMesh);
-			// Photo focus and interaction traces run against this volume, so it has to follow.
-			FitCameraTargetBoundsToMesh();
-			UpdateObjectLabelPlacement();
+			// Per-instance material overrides are indexed by slot, so the placement's overrides
+			// survive the swap and hide the new mesh's own materials -- the '_e' memory look
+			// never appears on any object whose placement overrode a material.
+			EvidenceMesh->EmptyOverrideMaterials();
+			ReportStateMeshPivotShift(State, PreviousMesh, StateMesh);
+			bMeshPresentationChanged = true;
 		}
 		else if (!StateMesh)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("%s: state '%s' could not load StateMesh '%s'."),
 				*GetName(), *State.StateID.ToString(), *State.StateMesh.ToString());
 		}
+	}
+
+	// Applied on every state, not just on a swap, so leaving an offset state puts the mesh back.
+	if (EvidenceMesh && bEvidenceMeshBaselineCaptured)
+	{
+		// The offset is authored in the mesh's own space, the space the pivot difference was
+		// measured in, so it has to be rotated and scaled into the placement before it is added.
+		const FVector DesiredLocation = EvidenceMeshBaselineRelativeLocation +
+			EvidenceMesh->GetRelativeTransform().TransformVector(State.StateMeshOffset);
+		if (!EvidenceMesh->GetRelativeLocation().Equals(DesiredLocation))
+		{
+			EvidenceMesh->SetRelativeLocation(DesiredLocation);
+			bMeshPresentationChanged = true;
+		}
+	}
+
+	if (bMeshPresentationChanged)
+	{
+		// Photo focus and interaction traces run against this volume, so it has to follow.
+		FitCameraTargetBoundsToMesh();
+		UpdateObjectLabelPlacement();
 	}
 
 	if (ActiveStateEffect.IsValid())
@@ -203,12 +250,50 @@ void ABalhwajeomEvidenceActor::ApplyStateVisuals(
 		/*bAutoDestroy*/ true);
 }
 
+void ABalhwajeomEvidenceActor::ReportStateMeshPivotShift(
+	const FEvidenceStateDefinition& State,
+	const UStaticMesh* PreviousMesh,
+	const UStaticMesh* NewMesh) const
+{
+	// An authored offset means somebody already knows the pivots differ.
+	if (!PreviousMesh || !NewMesh || !State.StateMeshOffset.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FVector PivotShift =
+		NewMesh->GetBounds().Origin - PreviousMesh->GetBounds().Origin;
+	// Variants exported from one source share a pivot, so a real difference means the new mesh
+	// will sit somewhere else entirely. That reads as "the mesh is broken", so name it here
+	// instead of leaving it to be found by eye.
+	if (PivotShift.Size() <= 1.0f)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("%s: state '%s' swaps to a mesh sitting %s from the previous pivot, so it will not ")
+		TEXT("land where the object was placed. Re-export it on the same pivot, or set that ")
+		TEXT("state's StateMeshOffset to %s in DT_EvidenceStates."),
+		*GetName(),
+		*State.StateID.ToString(),
+		*PivotShift.ToString(),
+		*(-PivotShift).ToString());
+}
+
 void ABalhwajeomEvidenceActor::BeginPlay()
 {
 	Super::BeginPlay();
 
 	bActorBaselineHidden = IsHidden();
 	bActorBaselineCollisionEnabled = GetActorEnableCollision();
+	if (EvidenceMesh)
+	{
+		// Captured before any state applies, so StateMeshOffset always measures from the
+		// placement the level author sees in the editor.
+		EvidenceMeshBaselineRelativeLocation = EvidenceMesh->GetRelativeLocation();
+		bEvidenceMeshBaselineCaptured = true;
+	}
 	FitCameraTargetBoundsToMesh();
 	if (CameraTargetBounds)
 	{
@@ -253,7 +338,25 @@ void ABalhwajeomEvidenceActor::BeginPlay()
 		}
 	}
 
+	// bInspectionEnabled is derived state that every ConfigureItemInspection() rewrites.
+	// The component is visible in the details panel, so it is the flag designers reach for;
+	// read the authored tick before anything overwrites it instead of silently dropping it.
+	bAuthoredItemInspectionEnabled =
+		ItemInspectionComponent && ItemInspectionComponent->bInspectionEnabled;
+	if (bAuthoredItemInspectionEnabled && !bEnable3DInspection)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("%s: ItemInspectionComponent 'Inspection Enabled' is ticked while 'Enable 3D Inspection' is off. ")
+			TEXT("Honouring it, but 'Enable 3D Inspection' on the Evidence Actor is the switch this system reads."),
+			*GetName());
+	}
+
 	RegisterWithInvestigationSystem();
+
+	// Registration bails out on a missing ObjectID or DT_EvidenceStates row, and it owns the
+	// only other path to ConfigureItemInspection(). Without this the inspector would have no
+	// InspectionData, and CanInspect() would refuse every F press without saying why.
+	ConfigureItemInspection();
 }
 
 void ABalhwajeomEvidenceActor::ConfigureItemInspection()
@@ -263,15 +366,29 @@ void ABalhwajeomEvidenceActor::ConfigureItemInspection()
 		return;
 	}
 
-	ItemInspectionComponent->bInspectionEnabled =
-		bEnable3DInspection && bProgressionAvailable &&
-		!bProgressionCleared && !bProgressionRemovalPending;
+	const bool bInspectionRequested =
+		bEnable3DInspection || bAuthoredItemInspectionEnabled;
+	const bool bProgressionAllowsInspection =
+		bProgressionAvailable && !bProgressionCleared && !bProgressionRemovalPending;
+	ItemInspectionComponent->bInspectionEnabled = ShouldEnable3DInspectionForState(
+		bInspectionRequested,
+		bProgressionAllowsInspection,
+		bCurrentStateDisables3DInspection);
 	ItemInspectionComponent->InspectionData = nullptr;
 	RuntimeItemInspectionData = nullptr;
-	if (!bEnable3DInspection || !bProgressionAvailable ||
-		bProgressionCleared || bProgressionRemovalPending ||
-		!EvidenceMesh || !EvidenceMesh->GetStaticMesh())
+	if (!ItemInspectionComponent->bInspectionEnabled)
 	{
+		return;
+	}
+
+	if (!EvidenceMesh || !EvidenceMesh->GetStaticMesh())
+	{
+		// CanInspect() needs InspectionData as well as the flag, so leaving the flag on
+		// would only turn a missing mesh into another silent "F does nothing".
+		UE_LOG(LogTemp, Warning,
+			TEXT("%s: 3D inspection is enabled but EvidenceMesh has no Static Mesh to show."),
+			*GetName());
+		ItemInspectionComponent->bInspectionEnabled = false;
 		return;
 	}
 
@@ -346,6 +463,13 @@ bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplay
 {
 	OutDisplayText = FText::GetEmpty();
 	if (!bProgressionAvailable || bProgressionCleared || bProgressionRemovalPending)
+	{
+		return false;
+	}
+	// Do not let rapid interaction restart the presentation. StopStory fades the old actor, so
+	// replacing it here used to leave the fading caption underneath the newly spawned caption.
+	// The weak pointer becomes invalid automatically after the final cue and fade have completed.
+	if (ActiveWorldStory.IsValid())
 	{
 		return false;
 	}
@@ -464,6 +588,10 @@ bool ABalhwajeomEvidenceActor::PlayWorldStoryForState(FName StateID)
 	{
 		return false;
 	}
+	if (ActiveWorldStory.IsValid())
+	{
+		return false;
+	}
 
 	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
 	FEvidenceStateDefinition State;
@@ -486,7 +614,6 @@ bool ABalhwajeomEvidenceActor::PlayWorldStoryForState(FName StateID)
 		return false;
 	}
 
-	StopWorldStory();
 	ActiveWorldStory = APhotoWorldStoryActor::SpawnAndStart(
 		GetWorld(),
 		StoryActorClass,
@@ -526,7 +653,8 @@ bool ABalhwajeomEvidenceActor::PlayWorldStoryForState(FName StateID)
 
 bool ABalhwajeomEvidenceActor::CanRequestInvestigationInteraction() const
 {
-	if (!bProgressionAvailable || bProgressionCleared || bProgressionRemovalPending)
+	if (!bProgressionAvailable || bProgressionCleared || bProgressionRemovalPending ||
+		ActiveWorldStory.IsValid())
 	{
 		return false;
 	}
@@ -594,6 +722,7 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID, bool bInit
 	}
 	const FName PreviousStateID = CurrentStateID;
 	CurrentStateID = State.StateID;
+	bCurrentStateDisables3DInspection = State.bDisable3DInspection;
 	bCanBeCaptured = State.bCanCapture;
 	EvidenceData.bAlreadyCollected = !State.PhotoID.IsNone() &&
 		Investigation->HasCapturedPhoto(State.PhotoID);
@@ -862,6 +991,16 @@ bool ABalhwajeomEvidenceActor::ShouldDisplayInspectionLabel(
 		!LabelText.IsEmptyOrWhitespace();
 }
 
+bool ABalhwajeomEvidenceActor::ShouldEnable3DInspectionForState(
+	const bool bInspectionRequested,
+	const bool bProgressionAllowsInspection,
+	const bool bStateDisablesInspection)
+{
+	return bInspectionRequested
+		&& bProgressionAllowsInspection
+		&& !bStateDisablesInspection;
+}
+
 void ABalhwajeomEvidenceActor::SetInspectionLabel(
 	const FText& LabelText,
 	bool bVisible)
@@ -892,6 +1031,7 @@ void ABalhwajeomEvidenceActor::SetInspectionLabel(
 	if (UImage* StatusImage = Cast<UImage>(LabelWidget->GetWidgetFromName(TEXT("UseCamera"))))
 	{
 		UTexture2D* StatusTexture = nullptr;
+		double LabelPositionX = 22.0;
 		if (!bCanBeCaptured)
 		{
 			StatusTexture = PhotoUnavailableIcon;
@@ -901,10 +1041,23 @@ void ABalhwajeomEvidenceActor::SetInspectionLabel(
 			StatusTexture = EvidenceData.bAlreadyCollected
 				? PhotoCapturedIcon
 				: PhotoRequiredIcon;
+			LabelPositionX = EvidenceData.bAlreadyCollected ? 35.0 : 40.0;
 		}
 		if (StatusTexture)
 		{
 			StatusImage->SetBrushFromTexture(StatusTexture, false);
+		}
+
+		if (USizeBox* LabelContainer = Cast<USizeBox>(
+			LabelWidget->GetWidgetFromName(TEXT("LabelContainer"))))
+		{
+			if (UCanvasPanelSlot* LabelContainerSlot =
+				Cast<UCanvasPanelSlot>(LabelContainer->Slot))
+			{
+				FVector2D Position = LabelContainerSlot->GetPosition();
+				Position.X = LabelPositionX;
+				LabelContainerSlot->SetPosition(Position);
+			}
 		}
 	}
 

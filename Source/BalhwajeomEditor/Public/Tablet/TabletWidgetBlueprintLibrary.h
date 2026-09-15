@@ -11,7 +11,7 @@ class UTabletWidgetBlueprintLibrary : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 
 public:
-	/** Rebuilds the item inspector as a centered, text-free preview. */
+	/** Rebuilds the item inspector as a centered preview with an editable bottom controls hint. */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Inspection")
 	static bool CenterItemInspectionWidget();
 
@@ -59,6 +59,14 @@ public:
 	/** Same dump as InspectTabletWidgetBlueprint, but for any Widget Blueprint by asset path (e.g. for reviewing a designer-authored WBP before wiring it up). */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool InspectWidgetBlueprintByPath(const FString& AssetPath);
+
+	/** Gives WBP_ObjectLabel's text container a stable name and its non-photo X=22 default. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Inspection")
+	static bool ConfigureObjectLabelLayout();
+
+	/** Matches the focus guide's icon layout and copies WBP_ObjectLabel's Multi Shadow Text styling. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Inspection")
+	static bool ConfigureEvidenceFocusGuideLayout();
 
 	/** Sets a named UButton's content to an Image using the given texture (e.g. an icon for a physical button). */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")

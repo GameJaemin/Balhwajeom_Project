@@ -19,11 +19,26 @@ APhotoWorldStoryActor::APhotoWorldStoryActor()
 
 	StoryWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("StoryWidget"));
 	StoryWidgetComponent->SetupAttachment(SceneRoot);
-	StoryWidgetComponent->SetWidgetSpace(EWidgetSpace::World);
-	StoryWidgetComponent->SetDrawAtDesiredSize(true);
-	StoryWidgetComponent->SetTwoSided(true);
-	StoryWidgetComponent->SetPivot(FVector2D(0.5f, 0.5f));
-	StoryWidgetComponent->SetRelativeScale3D(FVector(0.1f));
+
+	BackStoryWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("BackStoryWidget"));
+	BackStoryWidgetComponent->SetupAttachment(SceneRoot);
+	BackStoryWidgetComponent->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
+
+	const auto ConfigureStoryPanel = [](UWidgetComponent* Component)
+	{
+		Component->SetWidgetSpace(EWidgetSpace::World);
+		Component->SetDrawAtDesiredSize(true);
+		// Opposing front faces avoid the dim, mirrored back face of a single two-sided panel.
+		Component->SetTwoSided(false);
+		Component->SetBlendMode(EWidgetBlendMode::Transparent);
+		Component->SetBackgroundColor(FLinearColor::Transparent);
+		Component->SetTintColorAndOpacity(FLinearColor::White);
+		Component->SetPivot(FVector2D(0.5f, 0.5f));
+		Component->SetRelativeScale3D(FVector(0.1f));
+		Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	};
+	ConfigureStoryPanel(StoryWidgetComponent);
+	ConfigureStoryPanel(BackStoryWidgetComponent);
 
 	static ConstructorHelpers::FClassFinder<UPhotoWorldStoryWidget> DefaultStoryWidget(
 		TEXT("/Game/Balhwajeom/UI/PhotoStory/WBP_PhotoWorldStory"));
@@ -34,12 +49,77 @@ APhotoWorldStoryActor::APhotoWorldStoryActor()
 	}
 	StoryWidgetComponent->SetWidgetClass(StoryWidgetClass);
 	StoryWidgetComponent->SetVisibility(false);
+	BackStoryWidgetComponent->SetWidgetClass(StoryWidgetClass);
+	BackStoryWidgetComponent->SetVisibility(false);
 
 	StoryAudioComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("StoryAudio"));
 	StoryAudioComponent->SetupAttachment(SceneRoot);
 	StoryAudioComponent->bAutoActivate = false;
 	StoryAudioComponent->bAllowSpatialization = false;
-	StoryAudioComponent->OnAudioFinished.AddDynamic(this, &APhotoWorldStoryActor::HandleAudioFinished);
+}
+
+void APhotoWorldStoryActor::InitializeStoryWidgets()
+{
+	for (UWidgetComponent* Component : { StoryWidgetComponent.Get(), BackStoryWidgetComponent.Get() })
+	{
+		if (!Component)
+		{
+			continue;
+		}
+		if (StoryWidgetClass)
+		{
+			Component->SetWidgetClass(StoryWidgetClass);
+		}
+		Component->InitWidget();
+	}
+}
+
+void APhotoWorldStoryActor::SetStoryWidgetsVisible(bool bVisible)
+{
+	if (StoryWidgetComponent)
+	{
+		StoryWidgetComponent->SetVisibility(bVisible);
+	}
+	if (BackStoryWidgetComponent)
+	{
+		BackStoryWidgetComponent->SetVisibility(bVisible);
+	}
+}
+
+void APhotoWorldStoryActor::SetStoryWidgetsText(const FText& Text)
+{
+	for (UWidgetComponent* Component : { StoryWidgetComponent.Get(), BackStoryWidgetComponent.Get() })
+	{
+		if (UPhotoWorldStoryWidget* Widget = Component
+			? Cast<UPhotoWorldStoryWidget>(Component->GetUserWidgetObject()) : nullptr)
+		{
+			Widget->SetStoryText(Text);
+			Widget->SetRenderOpacity(1.0f);
+		}
+	}
+}
+
+void APhotoWorldStoryActor::SetStoryWidgetsOpacity(float Opacity)
+{
+	for (UWidgetComponent* Component : { StoryWidgetComponent.Get(), BackStoryWidgetComponent.Get() })
+	{
+		if (UUserWidget* Widget = Component ? Component->GetUserWidgetObject() : nullptr)
+		{
+			Widget->SetRenderOpacity(Opacity);
+		}
+	}
+}
+
+void APhotoWorldStoryActor::SetStoryWidgetsFontSize(int32 FontSize)
+{
+	for (UWidgetComponent* Component : { StoryWidgetComponent.Get(), BackStoryWidgetComponent.Get() })
+	{
+		if (UPhotoWorldStoryWidget* Widget = Component
+			? Cast<UPhotoWorldStoryWidget>(Component->GetUserWidgetObject()) : nullptr)
+		{
+			Widget->SetStoryFontSize(FontSize);
+		}
+	}
 }
 
 APhotoWorldStoryActor* APhotoWorldStoryActor::SpawnAndStart(
@@ -72,7 +152,8 @@ APhotoWorldStoryActor* APhotoWorldStoryActor::SpawnAndStart(
 	StoryActor->StartStory(
 		PhotoDefinition.WorldStoryCues,
 		PhotoDefinition.WorldStoryLines,
-		PhotoDefinition.StoryVoice);
+		PhotoDefinition.StoryCueSound,
+		PhotoDefinition.LastCueDurationSeconds);
 
 	// StartStory destroys itself when the authored cues turn out to be unusable.
 	return IsValid(StoryActor) ? StoryActor : nullptr;
@@ -81,7 +162,8 @@ APhotoWorldStoryActor* APhotoWorldStoryActor::SpawnAndStart(
 void APhotoWorldStoryActor::StartStory(
 	const TArray<FPhotoStoryCue>& InCues,
 	const TArray<FText>& LegacyLines,
-	const TSoftObjectPtr<USoundBase>& InVoice)
+	const TSoftObjectPtr<USoundBase>& InCueSound,
+	const float InLastCueDurationSeconds)
 {
 	StoryCues = InCues;
 	StoryCues.StableSort([](const FPhotoStoryCue& A, const FPhotoStoryCue& B)
@@ -102,7 +184,10 @@ void APhotoWorldStoryActor::StartStory(
 		}
 	}
 
-	StoryVoice = InVoice;
+	StoryCueSound = InCueSound;
+	LastCueDurationSeconds = InLastCueDurationSeconds >= 0.1f
+		? InLastCueDurationSeconds
+		: FMath::Max(DefaultLastCueDuration, 0.1f);
 	if (StoryCues.IsEmpty())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("%s cannot start: story cues are missing."), *GetName());
@@ -110,72 +195,68 @@ void APhotoWorldStoryActor::StartStory(
 		return;
 	}
 
-	if (StoryWidgetClass)
-	{
-		StoryWidgetComponent->SetWidgetClass(StoryWidgetClass);
-	}
-	StoryWidgetComponent->InitWidget();
+	InitializeStoryWidgets();
 	if (bThirdPersonScaleRequested)
 	{
 		TransitionToThirdPersonScale();
 	}
-	if (StoryVoice.IsNull())
-	{
-		bPlayingWithoutVoice = true;
-		CurrentCueIndex = 0;
-		ApplyCue(CurrentCueIndex);
-		StoryWidgetComponent->SetVisibility(true);
-		StoryStartTimeSeconds = GetWorld()->GetTimeSeconds();
-		ScheduleNextCue();
-		return;
-	}
 
-	if (StoryVoice.Get())
-	{
-		PlayLoadedVoice();
-		return;
-	}
-
-	VoiceLoadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
-		StoryVoice.ToSoftObjectPath(),
-		FStreamableDelegate::CreateUObject(this, &APhotoWorldStoryActor::HandleVoiceLoaded));
-	if (!VoiceLoadHandle.IsValid())
-	{
-		HandleVoiceLoaded();
-	}
-}
-
-void APhotoWorldStoryActor::HandleVoiceLoaded()
-{
-	VoiceLoadHandle.Reset();
-	if (!IsActorBeingDestroyed() && StoryVoice.Get())
-	{
-		PlayLoadedVoice();
-	}
-	else if (!IsActorBeingDestroyed())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("%s failed to load StoryVoice."), *GetName());
-		Destroy();
-	}
-}
-
-void APhotoWorldStoryActor::PlayLoadedVoice()
-{
-	USoundBase* Voice = StoryVoice.Get();
-	if (!Voice || !StoryAudioComponent || StoryCues.IsEmpty())
-	{
-		Destroy();
-		return;
-	}
-
+	// Text owns the presentation clock. It starts immediately and never waits for audio.
 	CurrentCueIndex = 0;
-	bPlayingWithoutVoice = false;
 	ApplyCue(CurrentCueIndex);
-	StoryWidgetComponent->SetVisibility(true);
+	SetStoryWidgetsVisible(true);
 	StoryStartTimeSeconds = GetWorld()->GetTimeSeconds();
-	StoryAudioComponent->SetSound(Voice);
-	StoryAudioComponent->Play();
 	ScheduleNextCue();
+
+	if (!StoryCueSound.IsNull() && !StoryCueSound.Get())
+	{
+		CueSoundLoadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
+			StoryCueSound.ToSoftObjectPath(),
+			FStreamableDelegate::CreateUObject(this, &APhotoWorldStoryActor::HandleCueSoundLoaded));
+		if (!CueSoundLoadHandle.IsValid())
+		{
+			HandleCueSoundLoaded();
+		}
+	}
+}
+
+void APhotoWorldStoryActor::HandleCueSoundLoaded()
+{
+	CueSoundLoadHandle.Reset();
+	if (IsActorBeingDestroyed() || bFinishing)
+	{
+		return;
+	}
+	if (StoryCueSound.Get())
+	{
+		// If the first caption appeared before its async sound was ready, play it now.
+		PlayCueSound(CurrentCueIndex);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("%s failed to load its Story Cue Sound; timed captions will continue."),
+			*GetName());
+	}
+}
+
+void APhotoWorldStoryActor::PlayCueSound(const int32 CueIndex)
+{
+	if (!StoryCues.IsValidIndex(CueIndex) ||
+		StoryCues[CueIndex].Text.IsEmptyOrWhitespace() ||
+		!StoryAudioComponent)
+	{
+		return;
+	}
+
+	USoundBase* Sound = StoryCueSound.Get();
+	if (!Sound)
+	{
+		return;
+	}
+	StoryAudioComponent->SetSound(Sound);
+	// Play restarts the one-shot when a new sentence replaces the previous one.
+	StoryAudioComponent->Play();
 }
 
 void APhotoWorldStoryActor::ApplyCue(int32 CueIndex)
@@ -185,12 +266,8 @@ void APhotoWorldStoryActor::ApplyCue(int32 CueIndex)
 		return;
 	}
 
-	if (UPhotoWorldStoryWidget* Widget =
-		Cast<UPhotoWorldStoryWidget>(StoryWidgetComponent->GetUserWidgetObject()))
-	{
-		Widget->SetStoryText(StoryCues[CueIndex].Text);
-		Widget->SetRenderOpacity(1.0f);
-	}
+	SetStoryWidgetsText(StoryCues[CueIndex].Text);
+	PlayCueSound(CueIndex);
 }
 
 void APhotoWorldStoryActor::ScheduleNextCue()
@@ -199,12 +276,9 @@ void APhotoWorldStoryActor::ScheduleNextCue()
 	const int32 NextCueIndex = CurrentCueIndex + 1;
 	if (!StoryCues.IsValidIndex(NextCueIndex))
 	{
-		if (bPlayingWithoutVoice)
-		{
-			GetWorldTimerManager().SetTimer(
-				CueTimer, this, &APhotoWorldStoryActor::FinishStory,
-				FMath::Max(NoVoiceLastCueDuration, 0.1f), false);
-		}
+		GetWorldTimerManager().SetTimer(
+			CueTimer, this, &APhotoWorldStoryActor::FinishStory,
+			FMath::Max(LastCueDurationSeconds, 0.1f), false);
 		return;
 	}
 
@@ -223,11 +297,6 @@ void APhotoWorldStoryActor::HandleCueTimer()
 		ApplyCue(CurrentCueIndex);
 	}
 	ScheduleNextCue();
-}
-
-void APhotoWorldStoryActor::HandleAudioFinished()
-{
-	FinishStory();
 }
 
 void APhotoWorldStoryActor::StopStory()
@@ -255,7 +324,7 @@ void APhotoWorldStoryActor::TransitionToThirdPersonScale()
 		return;
 	}
 
-	StoryWidgetComponent->InitWidget();
+	InitializeStoryWidgets();
 	UPhotoWorldStoryWidget* Widget =
 		Cast<UPhotoWorldStoryWidget>(StoryWidgetComponent->GetUserWidgetObject());
 	if (!Widget)
@@ -272,7 +341,7 @@ void APhotoWorldStoryActor::TransitionToThirdPersonScale()
 
 	if (ScaleTransitionDuration <= KINDA_SMALL_NUMBER)
 	{
-		Widget->SetStoryFontSize(FontSizeTransitionTarget);
+		SetStoryWidgetsFontSize(FontSizeTransitionTarget);
 		return;
 	}
 
@@ -286,13 +355,9 @@ void APhotoWorldStoryActor::UpdateScaleTransition()
 	const double Elapsed = GetWorld()->GetTimeSeconds() - ScaleStartTimeSeconds;
 	const float Alpha = FMath::Clamp(Elapsed / ScaleTransitionDuration, 0.0, 1.0);
 	const float SmoothAlpha = FMath::InterpEaseInOut(0.0f, 1.0f, Alpha, 2.0f);
-	if (UPhotoWorldStoryWidget* Widget =
-		Cast<UPhotoWorldStoryWidget>(StoryWidgetComponent->GetUserWidgetObject()))
-	{
-		Widget->SetStoryFontSize(FMath::RoundToInt(
-			FMath::Lerp(static_cast<float>(FontSizeTransitionStart),
-				static_cast<float>(FontSizeTransitionTarget), SmoothAlpha)));
-	}
+	SetStoryWidgetsFontSize(FMath::RoundToInt(
+		FMath::Lerp(static_cast<float>(FontSizeTransitionStart),
+			static_cast<float>(FontSizeTransitionTarget), SmoothAlpha)));
 
 	if (Alpha >= 1.0f)
 	{
@@ -324,10 +389,7 @@ void APhotoWorldStoryActor::UpdateFadeOut()
 {
 	const double Elapsed = GetWorld()->GetTimeSeconds() - FadeStartTimeSeconds;
 	const float Opacity = 1.0f - FMath::Clamp(Elapsed / FadeOutDuration, 0.0, 1.0);
-	if (UUserWidget* Widget = StoryWidgetComponent->GetUserWidgetObject())
-	{
-		Widget->SetRenderOpacity(Opacity);
-	}
+	SetStoryWidgetsOpacity(Opacity);
 	if (Opacity <= 0.0f)
 	{
 		Destroy();
@@ -340,10 +402,10 @@ void APhotoWorldStoryActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	GetWorldTimerManager().ClearTimer(CueTimer);
 	GetWorldTimerManager().ClearTimer(FadeTimer);
 	GetWorldTimerManager().ClearTimer(ScaleTimer);
-	if (VoiceLoadHandle.IsValid())
+	if (CueSoundLoadHandle.IsValid())
 	{
-		VoiceLoadHandle->CancelHandle();
-		VoiceLoadHandle.Reset();
+		CueSoundLoadHandle->CancelHandle();
+		CueSoundLoadHandle.Reset();
 	}
 	if (StoryAudioComponent)
 	{
