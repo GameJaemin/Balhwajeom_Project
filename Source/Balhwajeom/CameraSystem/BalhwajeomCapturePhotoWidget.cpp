@@ -164,7 +164,7 @@ void UBalhwajeomCapturePhotoWidget::PresentCapture(
 			{
 				Pill->SetBrushColor(KeywordBackgroundColor);
 			}
-			Pill->SetPadding(FMargin(20.0f, 10.0f));
+			Pill->SetPadding(FMargin(30.0f, 20.0f));
 
 			UTextBlock* Label = NewObject<UTextBlock>(Pill);
 			Label->SetText(Keyword);

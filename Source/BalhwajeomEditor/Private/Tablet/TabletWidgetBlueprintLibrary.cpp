@@ -636,7 +636,7 @@ namespace TabletDesigner
 
 		UCanvasPanel* BuildPersonFolderPage() const
 		{
-			UCanvasPanel* Page = Make<UCanvasPanel>(TEXT("Page_PersonFolder"));
+			UCanvasPanel* Page = Make<UCanvasPanel>(TEXT("Page_PersonFolder"), true);
 			if (UClass* PersonFolderClass = LoadClass<UUserWidget>(nullptr, PersonFolderClassPath))
 			{
 				FillCanvas(Page, MakeUserWidget(PersonFolderClass, TEXT("WBP_PersonFolder"), true));
@@ -1687,7 +1687,6 @@ namespace TabletDesigner
 		{
 			UWidgetSwitcher* Switcher = Make<UWidgetSwitcher>(TEXT("WidgetSwitcher_TabletPage"), true);
 			Switcher->AddChild(BuildHomePage());
-			Switcher->AddChild(BuildPersonFolderPage());
 			if (UClass* MessengerClass = LoadClass<UUserWidget>(nullptr, MessengerClassPath))
 			{
 				Switcher->AddChild(MakeUserWidget(MessengerClass, TEXT("WBP_Messenger"), true));
@@ -1715,6 +1714,12 @@ namespace TabletDesigner
 				TEXT("읽기 전용입니다.\n현재는 메모를 입력할 수 없습니다."), MemoPath, TEXT("IMG_MemoPage")));
 			Switcher->SetActiveWidgetIndex(0);
 			FillCanvas(LogicalScreen, Switcher, 0);
+
+			// Keep the desktop rendered underneath the person-folder window. The folder is a
+			// sibling layer of the page switcher, not one of its mutually exclusive pages.
+			UCanvasPanel* PersonFolderPage = BuildPersonFolderPage();
+			PersonFolderPage->SetVisibility(ESlateVisibility::Collapsed);
+			FillCanvas(LogicalScreen, PersonFolderPage, 5);
 			Place(LogicalScreen, BuildStatusBar(), 0, 0, 1440, 60, 10);
 			FillCanvas(LogicalScreen, BuildPopup(), 20);
 		}
