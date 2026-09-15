@@ -7,6 +7,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/Texture.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "ItemInspection/JMItemInspectionData.h"
 #include "ItemInspection/JMItemInspectionSurfaceWidgetBase.h"
@@ -97,6 +98,31 @@ void SetLightViewChannels(ULightComponent* LightComponent, bool bChannel0, bool 
 	LightComponent->ViewLightingChannels.bViewChannel2 = bChannel2;
 	LightComponent->ViewLightingChannels.bViewChannel3 = false;
 	LightComponent->ViewLightingChannels.bViewChannel4 = false;
+}
+
+void PreparePreviewTexturesForCapture(UStaticMeshComponent* PreviewMeshComponent)
+{
+	if (!PreviewMeshComponent)
+	{
+		return;
+	}
+
+	TArray<UTexture*> UsedTextures;
+	PreviewMeshComponent->GetUsedTextures(UsedTextures, EMaterialQualityLevel::High);
+	for (UTexture* Texture : UsedTextures)
+	{
+		if (!IsValid(Texture))
+		{
+			continue;
+		}
+
+		// SceneCapture renders only on demand. If it captures while a streamed texture
+		// still has a coarse mip resident, that blurry frame otherwise remains for the
+		// whole inspection session. Request the full source quality and wait once before
+		// the first capture; the timed residency expires after the preview is established.
+		Texture->SetForceMipLevelsToBeResident(5.0f);
+		Texture->WaitForStreaming();
+	}
 }
 }
 
@@ -234,6 +260,8 @@ bool AJMItemInspectionPreviewActor::ConfigurePreview(UJMItemInspectionData* Insp
 		SceneCapture->bCaptureEveryFrame = true;
 	}
 
+	PreparePreviewTexturesForCapture(PreviewMeshComponent);
+
 	ApplyViewSettings();
 	CapturePreview();
 	return true;
@@ -314,10 +342,10 @@ void AJMItemInspectionPreviewActor::BeginEnterTransition(const FJMItemInspection
 	}
 
 	const FJMItemInspectionViewSettings& ViewSettings = CurrentInspectionData->ViewSettings;
-	// Keep the same cursor-aligned angle sampled from the third-person camera.
-	// Rotating toward the authored inspection angle during the fly-in is what made
-	// the object visibly skew across the screen transition.
-	TransitionTargetRotation = Source.PreviewRelativeRotation.GetNormalized();
+	// The world actor rotation is only the entrance pose. The inspected item must
+	// settle at the Data Asset's authored rotation so level placement cannot change
+	// the final inspection view.
+	TransitionTargetRotation = ViewSettings.InitialRotation.Quaternion();
 	TransitionTargetOffset = ViewSettings.PreviewOffset;
 	TransitionTargetScale = FMath::Max(ViewSettings.PreviewScale, 0.01f);
 	TransitionTargetZoom = FMath::Clamp(
