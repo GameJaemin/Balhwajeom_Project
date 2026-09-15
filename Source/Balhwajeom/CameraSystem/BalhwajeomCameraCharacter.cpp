@@ -263,13 +263,8 @@ void ABalhwajeomCameraCharacter::MoveForward(float Value)
 		return;
 	}
 
-	if (PhotoCameraComponent && PhotoCameraComponent->IsInCameraMode())
-	{
-		PhotoCameraComponent->PanVertical(Value);
-		return;
-	}
-
-	if (ActiveCameraZone)
+	const bool bFirstPersonCameraMode = PhotoCameraComponent && PhotoCameraComponent->IsInCameraMode();
+	if (ActiveCameraZone && !bFirstPersonCameraMode)
 	{
 		AddMovementInput(ActiveCameraZone->GetPlanarForwardVector(), Value);
 		return;
@@ -290,13 +285,8 @@ void ABalhwajeomCameraCharacter::MoveRight(float Value)
 		return;
 	}
 
-	if (PhotoCameraComponent && PhotoCameraComponent->IsInCameraMode())
-	{
-		PhotoCameraComponent->PanHorizontal(Value);
-		return;
-	}
-
-	if (ActiveCameraZone)
+	const bool bFirstPersonCameraMode = PhotoCameraComponent && PhotoCameraComponent->IsInCameraMode();
+	if (ActiveCameraZone && !bFirstPersonCameraMode)
 	{
 		AddMovementInput(ActiveCameraZone->GetPlanarRightVector(), Value);
 		return;
