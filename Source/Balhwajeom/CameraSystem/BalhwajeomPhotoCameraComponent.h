@@ -109,12 +109,6 @@ public:
     void LookPitch(float Value);
 
     UFUNCTION(BlueprintCallable, Category = "Photo Camera")
-    void PanHorizontal(float Value);
-
-    UFUNCTION(BlueprintCallable, Category = "Photo Camera")
-    void PanVertical(float Value);
-
-    UFUNCTION(BlueprintCallable, Category = "Photo Camera")
     void ZoomCamera(float Value);
 
     UFUNCTION(BlueprintCallable, Category = "Photo Camera")
@@ -179,7 +173,6 @@ protected:
     void ExitCameraMode();
     void SwitchCameraAtFadeOut();
     void FinishCameraTransition();
-    void PanCamera(const FVector& ScreenDirection, float Value);
     void ShowPhotoFeedback(const FString& Message, const FColor& Color) const;
     void TriggerPhotoFlash() const;
 	void SetCameraUIHiddenForScreenshot(bool bHidden) const;
@@ -354,22 +347,6 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Audio")
     TSoftObjectPtr<USoundBase> ShutterSound;
 
-    /** Camera pan speed along the fixed entry Right axis and world Up axis, in cm/s. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Pan", meta = (ClampMin = "0.0"))
-    float CameraPanSpeed = 80.0f;
-
-    /** Half-size of the square pan area on both the horizontal and vertical axes. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Pan", meta = (ClampMin = "0.0"))
-    float CameraPanMaxDistance = 150.0f;
-
-    /** W/S begins slowing down when the absolute camera pitch reaches this angle. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Pan", meta = (ClampMin = "0.0", ClampMax = "89.0"))
-    float VerticalPanSlowdownStartPitch = 45.0f;
-
-    /** W/S is fully disabled at and beyond this absolute camera pitch. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Pan", meta = (ClampMin = "0.0", ClampMax = "89.0"))
-    float VerticalPanDisablePitch = 70.0f;
-
     /** Mouse-wheel zoom step in degrees of field of view. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Zoom", meta = (ClampMin = "0.1"))
     float CameraZoomStep = 5.0f;
@@ -410,9 +387,6 @@ protected:
     FTimerHandle CameraTransitionTimerHandle;
     FTransform SavedFirstPersonRelativeTransform;
     FRotator SavedExplorationControlRotation = FRotator::ZeroRotator;
-    FVector CameraModeEntryWorldLocation = FVector::ZeroVector;
-    FVector CameraPanWorldOffset = FVector::ZeroVector;
-    FVector CameraPanRightDirection = FVector::RightVector;
     float SavedFirstPersonFieldOfView = 90.0f;
     bool bHasSavedExplorationControlRotation = false;
 
