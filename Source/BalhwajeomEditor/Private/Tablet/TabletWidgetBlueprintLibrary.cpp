@@ -2462,6 +2462,74 @@ bool UTabletWidgetBlueprintLibrary::InspectWidgetBlueprintByPath(const FString& 
 	return true;
 }
 
+bool UTabletWidgetBlueprintLibrary::ConfigureObjectLabelLayout()
+{
+	static const TCHAR* ObjectLabelPath =
+		TEXT("/Game/Balhwajeom/UI/Inspection/WBP_ObjectLabel.WBP_ObjectLabel");
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, ObjectLabelPath);
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Object label layout configuration failed: asset missing."));
+		return false;
+	}
+
+	USizeBox* LabelContainer = Cast<USizeBox>(
+		Blueprint->WidgetTree->FindWidget(TEXT("LabelContainer")));
+	if (!LabelContainer)
+	{
+		LabelContainer = Cast<USizeBox>(
+			Blueprint->WidgetTree->FindWidget(TEXT("SizeBox_0")));
+	}
+	if (!LabelContainer)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Object label layout configuration failed: SizeBox missing."));
+		return false;
+	}
+
+	if (LabelContainer->GetFName() != TEXT("LabelContainer"))
+	{
+		const FName OldName = LabelContainer->GetFName();
+		Blueprint->Modify();
+		LabelContainer->Modify();
+#if WITH_EDITORONLY_DATA
+		if (Blueprint->WidgetVariableNameToGuidMap.Contains(OldName))
+		{
+			Blueprint->OnVariableRenamed(OldName, TEXT("LabelContainer"));
+		}
+#endif
+		LabelContainer->SetDisplayLabel(TEXT("LabelContainer"));
+		if (!LabelContainer->Rename(
+			TEXT("LabelContainer"),
+			Blueprint->WidgetTree,
+			REN_DontCreateRedirectors))
+		{
+			UE_LOG(LogTemp, Error, TEXT("Object label layout configuration failed: rename failed."));
+			return false;
+		}
+	}
+
+	UCanvasPanelSlot* LabelContainerSlot =
+		Cast<UCanvasPanelSlot>(LabelContainer->Slot);
+	if (!LabelContainerSlot)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Object label layout configuration failed: Canvas slot missing."));
+		return false;
+	}
+
+	FVector2D Position = LabelContainerSlot->GetPosition();
+	Position.X = 22.0;
+	LabelContainerSlot->SetPosition(Position);
+
+	const bool bSaved = TabletDesigner::SaveAndCompile(Blueprint);
+	UE_LOG(
+		LogTemp,
+		Display,
+		TEXT("OBJECT_LABEL_LAYOUT Result=%s LabelContainerX=%.1f"),
+		bSaved ? TEXT("Success") : TEXT("Failure"),
+		Position.X);
+	return bSaved;
+}
+
 bool UTabletWidgetBlueprintLibrary::SetButtonIconTexture(
 	const FString& AssetPath, const FString& ButtonName, const FString& TexturePath)
 {

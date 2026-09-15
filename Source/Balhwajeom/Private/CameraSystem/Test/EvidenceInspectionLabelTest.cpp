@@ -5,7 +5,9 @@
 #include "Blueprint/UserWidget.h"
 #include "CameraSystem/BalhwajeomEvidenceActor.h"
 #include "Components/BoxComponent.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/Image.h"
+#include "Components/SizeBox.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/Engine.h"
@@ -61,6 +63,27 @@ struct FEvidenceActorTestAccessor
 			? Cast<UImage>(LabelWidget->GetWidgetFromName(TEXT("UseCamera")))
 			: nullptr;
 		return StatusImage ? StatusImage->GetBrush().GetResourceObject() : nullptr;
+	}
+
+	static TOptional<double> GetLabelContainerPositionX(
+		ABalhwajeomEvidenceActor* Evidence)
+	{
+		if (!Evidence->ObjectLabelWidget)
+		{
+			return {};
+		}
+
+		Evidence->ObjectLabelWidget->InitWidget();
+		UUserWidget* LabelWidget = Evidence->ObjectLabelWidget->GetUserWidgetObject();
+		const USizeBox* LabelContainer = LabelWidget
+			? Cast<USizeBox>(LabelWidget->GetWidgetFromName(TEXT("LabelContainer")))
+			: nullptr;
+		const UCanvasPanelSlot* LabelContainerSlot = LabelContainer
+			? Cast<UCanvasPanelSlot>(LabelContainer->Slot)
+			: nullptr;
+		return LabelContainerSlot
+			? TOptional<double>(LabelContainerSlot->GetPosition().X)
+			: TOptional<double>();
 	}
 
 	static UBalhwajeomInvestigationSubsystem* GetInvestigationSubsystem(
@@ -159,6 +182,18 @@ bool FEvidenceNonCapturableUsesDotIconTest::RunTest(const FString& Parameters)
 		TEXT("Non-capturable evidence should use the dot icon"),
 		FEvidenceActorTestAccessor::GetStatusIconResource(Evidence),
 		static_cast<UObject*>(DotIcon));
+	const TOptional<double> NonCapturableLabelX =
+		FEvidenceActorTestAccessor::GetLabelContainerPositionX(Evidence);
+	TestTrue(
+		TEXT("Non-capturable evidence should expose its label container position"),
+		NonCapturableLabelX.IsSet());
+	if (NonCapturableLabelX.IsSet())
+	{
+		TestEqual(
+			TEXT("Non-capturable evidence should position its label at X=22"),
+			NonCapturableLabelX.GetValue(),
+			22.0);
+	}
 
 	GameInstance->Shutdown();
 	GEngine->DestroyWorldContext(World);
@@ -362,6 +397,18 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 		TEXT("Uncaptured evidence should use the camera icon"),
 		FEvidenceActorTestAccessor::GetStatusIconResource(Evidence),
 		static_cast<UObject*>(RequiredIcon));
+	const TOptional<double> UncapturedLabelX =
+		FEvidenceActorTestAccessor::GetLabelContainerPositionX(Evidence);
+	TestTrue(
+		TEXT("Uncaptured evidence should expose its label container position"),
+		UncapturedLabelX.IsSet());
+	if (UncapturedLabelX.IsSet())
+	{
+		TestEqual(
+			TEXT("Uncaptured evidence should position its label at X=40"),
+			UncapturedLabelX.GetValue(),
+			40.0);
+	}
 
 	UBalhwajeomInvestigationSubsystem* Investigation =
 		GameInstance->GetSubsystem<UBalhwajeomInvestigationSubsystem>();
@@ -401,6 +448,18 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 			TEXT("A matching photo event should immediately swap to the check icon"),
 			FEvidenceActorTestAccessor::GetStatusIconResource(Evidence),
 			static_cast<UObject*>(CapturedIcon));
+		const TOptional<double> CapturedLabelX =
+			FEvidenceActorTestAccessor::GetLabelContainerPositionX(Evidence);
+		TestTrue(
+			TEXT("Captured evidence should expose its label container position"),
+			CapturedLabelX.IsSet());
+		if (CapturedLabelX.IsSet())
+		{
+			TestEqual(
+				TEXT("Captured evidence should position its label at X=35"),
+				CapturedLabelX.GetValue(),
+				35.0);
+		}
 	}
 
 	GameInstance->Shutdown();

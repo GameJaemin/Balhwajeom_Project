@@ -5,7 +5,9 @@
 #include "Components/ArrowComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/SceneComponent.h"
+#include "Components/SizeBox.h"
 #include "Components/TextRenderComponent.h"
 #include "Components/Image.h"
 #include "Components/WidgetComponent.h"
@@ -1017,6 +1019,7 @@ void ABalhwajeomEvidenceActor::SetInspectionLabel(
 	if (UImage* StatusImage = Cast<UImage>(LabelWidget->GetWidgetFromName(TEXT("UseCamera"))))
 	{
 		UTexture2D* StatusTexture = nullptr;
+		double LabelPositionX = 22.0;
 		if (!bCanBeCaptured)
 		{
 			StatusTexture = PhotoUnavailableIcon;
@@ -1026,10 +1029,23 @@ void ABalhwajeomEvidenceActor::SetInspectionLabel(
 			StatusTexture = EvidenceData.bAlreadyCollected
 				? PhotoCapturedIcon
 				: PhotoRequiredIcon;
+			LabelPositionX = EvidenceData.bAlreadyCollected ? 35.0 : 40.0;
 		}
 		if (StatusTexture)
 		{
 			StatusImage->SetBrushFromTexture(StatusTexture, false);
+		}
+
+		if (USizeBox* LabelContainer = Cast<USizeBox>(
+			LabelWidget->GetWidgetFromName(TEXT("LabelContainer"))))
+		{
+			if (UCanvasPanelSlot* LabelContainerSlot =
+				Cast<UCanvasPanelSlot>(LabelContainer->Slot))
+			{
+				FVector2D Position = LabelContainerSlot->GetPosition();
+				Position.X = LabelPositionX;
+				LabelContainerSlot->SetPosition(Position);
+			}
 		}
 	}
 

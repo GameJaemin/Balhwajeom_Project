@@ -60,6 +60,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool InspectWidgetBlueprintByPath(const FString& AssetPath);
 
+	/** Gives WBP_ObjectLabel's text container a stable name and its non-photo X=22 default. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Inspection")
+	static bool ConfigureObjectLabelLayout();
+
 	/** Sets a named UButton's content to an Image using the given texture (e.g. an icon for a physical button). */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tablet")
 	static bool SetButtonIconTexture(const FString& AssetPath, const FString& ButtonName, const FString& TexturePath);
