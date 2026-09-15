@@ -103,6 +103,12 @@ public:
 		EPlayerInspectionDistanceState DistanceState,
 		const FText& LabelText);
 
+	/** Combines the actor opt-in, progression availability, and active-state override. */
+	static bool ShouldEnable3DInspectionForState(
+		bool bInspectionRequested,
+		bool bProgressionAllowsInspection,
+		bool bStateDisablesInspection);
+
 	/** Per-object distance thresholds and text used by the normal inspection system. */
 	UFUNCTION(BlueprintPure, Category = "Inspection")
 	UInspectionComponent* GetInspectionComponent() const { return InspectionComponent; }
@@ -215,6 +221,9 @@ protected:
 	 * once at BeginPlay and treated as the same opt-in bEnable3DInspection gives.
 	 */
 	bool bAuthoredItemInspectionEnabled = false;
+
+	/** Derived from the active FEvidenceStateDefinition. */
+	bool bCurrentStateDisables3DInspection = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UJMItemInspectionData> RuntimeItemInspectionData;

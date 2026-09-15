@@ -370,12 +370,13 @@ void ABalhwajeomEvidenceActor::ConfigureItemInspection()
 		bEnable3DInspection || bAuthoredItemInspectionEnabled;
 	const bool bProgressionAllowsInspection =
 		bProgressionAvailable && !bProgressionCleared && !bProgressionRemovalPending;
-
-	ItemInspectionComponent->bInspectionEnabled =
-		bInspectionRequested && bProgressionAllowsInspection;
+	ItemInspectionComponent->bInspectionEnabled = ShouldEnable3DInspectionForState(
+		bInspectionRequested,
+		bProgressionAllowsInspection,
+		bCurrentStateDisables3DInspection);
 	ItemInspectionComponent->InspectionData = nullptr;
 	RuntimeItemInspectionData = nullptr;
-	if (!bInspectionRequested || !bProgressionAllowsInspection)
+	if (!ItemInspectionComponent->bInspectionEnabled)
 	{
 		return;
 	}
@@ -721,6 +722,7 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID, bool bInit
 	}
 	const FName PreviousStateID = CurrentStateID;
 	CurrentStateID = State.StateID;
+	bCurrentStateDisables3DInspection = State.bDisable3DInspection;
 	bCanBeCaptured = State.bCanCapture;
 	EvidenceData.bAlreadyCollected = !State.PhotoID.IsNone() &&
 		Investigation->HasCapturedPhoto(State.PhotoID);
@@ -987,6 +989,16 @@ bool ABalhwajeomEvidenceActor::ShouldDisplayInspectionLabel(
 	return (DistanceState == EPlayerInspectionDistanceState::Middle ||
 			DistanceState == EPlayerInspectionDistanceState::Close) &&
 		!LabelText.IsEmptyOrWhitespace();
+}
+
+bool ABalhwajeomEvidenceActor::ShouldEnable3DInspectionForState(
+	const bool bInspectionRequested,
+	const bool bProgressionAllowsInspection,
+	const bool bStateDisablesInspection)
+{
+	return bInspectionRequested
+		&& bProgressionAllowsInspection
+		&& !bStateDisablesInspection;
 }
 
 void ABalhwajeomEvidenceActor::SetInspectionLabel(

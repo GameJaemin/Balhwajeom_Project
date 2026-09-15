@@ -56,7 +56,6 @@ APhotoWorldStoryActor::APhotoWorldStoryActor()
 	StoryAudioComponent->SetupAttachment(SceneRoot);
 	StoryAudioComponent->bAutoActivate = false;
 	StoryAudioComponent->bAllowSpatialization = false;
-	StoryAudioComponent->OnAudioFinished.AddDynamic(this, &APhotoWorldStoryActor::HandleAudioFinished);
 }
 
 void APhotoWorldStoryActor::InitializeStoryWidgets()
@@ -153,7 +152,8 @@ APhotoWorldStoryActor* APhotoWorldStoryActor::SpawnAndStart(
 	StoryActor->StartStory(
 		PhotoDefinition.WorldStoryCues,
 		PhotoDefinition.WorldStoryLines,
-		PhotoDefinition.StoryVoice);
+		PhotoDefinition.StoryCueSound,
+		PhotoDefinition.LastCueDurationSeconds);
 
 	// StartStory destroys itself when the authored cues turn out to be unusable.
 	return IsValid(StoryActor) ? StoryActor : nullptr;
@@ -162,7 +162,8 @@ APhotoWorldStoryActor* APhotoWorldStoryActor::SpawnAndStart(
 void APhotoWorldStoryActor::StartStory(
 	const TArray<FPhotoStoryCue>& InCues,
 	const TArray<FText>& LegacyLines,
-	const TSoftObjectPtr<USoundBase>& InVoice)
+	const TSoftObjectPtr<USoundBase>& InCueSound,
+	const float InLastCueDurationSeconds)
 {
 	StoryCues = InCues;
 	StoryCues.StableSort([](const FPhotoStoryCue& A, const FPhotoStoryCue& B)
@@ -183,7 +184,10 @@ void APhotoWorldStoryActor::StartStory(
 		}
 	}
 
-	StoryVoice = InVoice;
+	StoryCueSound = InCueSound;
+	LastCueDurationSeconds = InLastCueDurationSeconds >= 0.1f
+		? InLastCueDurationSeconds
+		: FMath::Max(DefaultLastCueDuration, 0.1f);
 	if (StoryCues.IsEmpty())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("%s cannot start: story cues are missing."), *GetName());
@@ -196,63 +200,63 @@ void APhotoWorldStoryActor::StartStory(
 	{
 		TransitionToThirdPersonScale();
 	}
-	if (StoryVoice.IsNull())
-	{
-		bPlayingWithoutVoice = true;
-		CurrentCueIndex = 0;
-		ApplyCue(CurrentCueIndex);
-		SetStoryWidgetsVisible(true);
-		StoryStartTimeSeconds = GetWorld()->GetTimeSeconds();
-		ScheduleNextCue();
-		return;
-	}
 
-	if (StoryVoice.Get())
-	{
-		PlayLoadedVoice();
-		return;
-	}
-
-	VoiceLoadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
-		StoryVoice.ToSoftObjectPath(),
-		FStreamableDelegate::CreateUObject(this, &APhotoWorldStoryActor::HandleVoiceLoaded));
-	if (!VoiceLoadHandle.IsValid())
-	{
-		HandleVoiceLoaded();
-	}
-}
-
-void APhotoWorldStoryActor::HandleVoiceLoaded()
-{
-	VoiceLoadHandle.Reset();
-	if (!IsActorBeingDestroyed() && StoryVoice.Get())
-	{
-		PlayLoadedVoice();
-	}
-	else if (!IsActorBeingDestroyed())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("%s failed to load StoryVoice."), *GetName());
-		Destroy();
-	}
-}
-
-void APhotoWorldStoryActor::PlayLoadedVoice()
-{
-	USoundBase* Voice = StoryVoice.Get();
-	if (!Voice || !StoryAudioComponent || StoryCues.IsEmpty())
-	{
-		Destroy();
-		return;
-	}
-
+	// Text owns the presentation clock. It starts immediately and never waits for audio.
 	CurrentCueIndex = 0;
-	bPlayingWithoutVoice = false;
 	ApplyCue(CurrentCueIndex);
 	SetStoryWidgetsVisible(true);
 	StoryStartTimeSeconds = GetWorld()->GetTimeSeconds();
-	StoryAudioComponent->SetSound(Voice);
-	StoryAudioComponent->Play();
 	ScheduleNextCue();
+
+	if (!StoryCueSound.IsNull() && !StoryCueSound.Get())
+	{
+		CueSoundLoadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
+			StoryCueSound.ToSoftObjectPath(),
+			FStreamableDelegate::CreateUObject(this, &APhotoWorldStoryActor::HandleCueSoundLoaded));
+		if (!CueSoundLoadHandle.IsValid())
+		{
+			HandleCueSoundLoaded();
+		}
+	}
+}
+
+void APhotoWorldStoryActor::HandleCueSoundLoaded()
+{
+	CueSoundLoadHandle.Reset();
+	if (IsActorBeingDestroyed() || bFinishing)
+	{
+		return;
+	}
+	if (StoryCueSound.Get())
+	{
+		// If the first caption appeared before its async sound was ready, play it now.
+		PlayCueSound(CurrentCueIndex);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("%s failed to load its Story Cue Sound; timed captions will continue."),
+			*GetName());
+	}
+}
+
+void APhotoWorldStoryActor::PlayCueSound(const int32 CueIndex)
+{
+	if (!StoryCues.IsValidIndex(CueIndex) ||
+		StoryCues[CueIndex].Text.IsEmptyOrWhitespace() ||
+		!StoryAudioComponent)
+	{
+		return;
+	}
+
+	USoundBase* Sound = StoryCueSound.Get();
+	if (!Sound)
+	{
+		return;
+	}
+	StoryAudioComponent->SetSound(Sound);
+	// Play restarts the one-shot when a new sentence replaces the previous one.
+	StoryAudioComponent->Play();
 }
 
 void APhotoWorldStoryActor::ApplyCue(int32 CueIndex)
@@ -263,6 +267,7 @@ void APhotoWorldStoryActor::ApplyCue(int32 CueIndex)
 	}
 
 	SetStoryWidgetsText(StoryCues[CueIndex].Text);
+	PlayCueSound(CueIndex);
 }
 
 void APhotoWorldStoryActor::ScheduleNextCue()
@@ -271,12 +276,9 @@ void APhotoWorldStoryActor::ScheduleNextCue()
 	const int32 NextCueIndex = CurrentCueIndex + 1;
 	if (!StoryCues.IsValidIndex(NextCueIndex))
 	{
-		if (bPlayingWithoutVoice)
-		{
-			GetWorldTimerManager().SetTimer(
-				CueTimer, this, &APhotoWorldStoryActor::FinishStory,
-				FMath::Max(NoVoiceLastCueDuration, 0.1f), false);
-		}
+		GetWorldTimerManager().SetTimer(
+			CueTimer, this, &APhotoWorldStoryActor::FinishStory,
+			FMath::Max(LastCueDurationSeconds, 0.1f), false);
 		return;
 	}
 
@@ -295,11 +297,6 @@ void APhotoWorldStoryActor::HandleCueTimer()
 		ApplyCue(CurrentCueIndex);
 	}
 	ScheduleNextCue();
-}
-
-void APhotoWorldStoryActor::HandleAudioFinished()
-{
-	FinishStory();
 }
 
 void APhotoWorldStoryActor::StopStory()
@@ -405,10 +402,10 @@ void APhotoWorldStoryActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	GetWorldTimerManager().ClearTimer(CueTimer);
 	GetWorldTimerManager().ClearTimer(FadeTimer);
 	GetWorldTimerManager().ClearTimer(ScaleTimer);
-	if (VoiceLoadHandle.IsValid())
+	if (CueSoundLoadHandle.IsValid())
 	{
-		VoiceLoadHandle->CancelHandle();
-		VoiceLoadHandle.Reset();
+		CueSoundLoadHandle->CancelHandle();
+		CueSoundLoadHandle.Reset();
 	}
 	if (StoryAudioComponent)
 	{

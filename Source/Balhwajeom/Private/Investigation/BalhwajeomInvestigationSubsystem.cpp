@@ -574,6 +574,15 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 
 		if (!Photo->WorldStoryCues.IsEmpty())
 		{
+			if (Photo->LastCueDurationSeconds < 0.1f)
+			{
+				UE_LOG(
+					LogBalhwajeomInvestigation,
+					Error,
+					TEXT("PhotoDefinition '%s' must set LastCueDurationSeconds to at least 0.1 seconds."),
+					*Photo->PhotoID.ToString());
+				bIsValid = false;
+			}
 			float PreviousStartTime = -1.0f;
 			for (int32 CueIndex = 0; CueIndex < Photo->WorldStoryCues.Num(); ++CueIndex)
 			{

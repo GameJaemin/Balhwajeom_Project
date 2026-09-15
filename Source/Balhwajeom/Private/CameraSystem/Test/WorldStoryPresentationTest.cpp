@@ -4,6 +4,7 @@
 
 #include "CameraSystem/BalhwajeomEvidenceActor.h"
 #include "CameraSystem/PhotoWorldStoryActor.h"
+#include "Components/AudioComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Components/WidgetComponent.h"
@@ -44,6 +45,10 @@ bool FWorldStoryAnchorPresentationTest::RunTest(const FString& Parameters)
 	}
 
 	const APhotoWorldStoryActor* StoryActor = GetDefault<APhotoWorldStoryActor>();
+	const FPhotoDefinition PhotoDefaults;
+	TestTrue(TEXT("Photos default the final cue duration to 2.5 seconds"),
+		FMath::IsNearlyEqual(PhotoDefaults.LastCueDurationSeconds, 2.5f));
+
 	TInlineComponentArray<UWidgetComponent*> StoryPanels(StoryActor);
 	const UWidgetComponent* FrontPanel = nullptr;
 	const UWidgetComponent* BackPanel = nullptr;
@@ -61,6 +66,13 @@ bool FWorldStoryAnchorPresentationTest::RunTest(const FString& Parameters)
 
 	TestNotNull(TEXT("World story has a front text panel"), FrontPanel);
 	TestNotNull(TEXT("World story has an opposite-facing text panel"), BackPanel);
+	const UAudioComponent* StoryAudio = StoryActor->FindComponentByClass<UAudioComponent>();
+	TestNotNull(TEXT("World story has a cue sound component"), StoryAudio);
+	if (StoryAudio)
+	{
+		TestFalse(TEXT("Cue sound completion does not control caption completion"),
+			StoryAudio->OnAudioFinished.IsBound());
+	}
 	if (FrontPanel && BackPanel)
 	{
 		TestFalse(TEXT("Front text panel uses its bright front face only"), FrontPanel->GetTwoSided());
