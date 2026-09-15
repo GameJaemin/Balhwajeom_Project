@@ -14,6 +14,9 @@ class UUserWidget;
 class UWidgetComponent;
 
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnGateDoorOpened);
+
+
 /**
  * A placeable door whose opening is gated on story progress.
  *
@@ -46,6 +49,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Gate Door")
 	FText ResolveCurrentLabel() const;
 
+	/** Fired exactly once, the moment this door finishes its open animation
+	 * (DoorInteraction::IsOpen() first becomes true). Lets unrelated systems (e.g. BGM) react to
+	 * the door opening without the door needing to know about them. */
+	UPROPERTY(BlueprintAssignable, Category = "Gate Door")
+	FOnGateDoorOpened OnDoorFullyOpened;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -64,6 +73,7 @@ protected:
 	void ApplyInspectionDistanceState(EPlayerInspectionDistanceState DistanceState);
 	void SetInspectionLabel(const FText& LabelText, bool bVisible);
 	void RefreshLabelForLockState();
+	void CheckDoorFullyOpenedBroadcast();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gate Door|Components")
 	TObjectPtr<UStaticMeshComponent> DoorMesh;
@@ -113,6 +123,9 @@ private:
 	bool bLastKnownUnlocked = false;
 	bool bLastKnownOpen = false;
 	bool bHasLabelState = false;
+
+	/** Guards OnDoorFullyOpened so it only ever fires once per door. */
+	bool bHasBroadcastDoorOpened = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UUserWidget> LockedFeedbackWidget;
