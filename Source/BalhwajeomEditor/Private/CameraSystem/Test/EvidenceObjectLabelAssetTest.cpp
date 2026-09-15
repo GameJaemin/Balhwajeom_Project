@@ -27,6 +27,40 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	EAutomationTestFlags::EngineFilter
 )
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInspectionMessageSupportsLegacyFocusRequestTest,
+	"Balhwajeom.UI.InspectionMessage.SupportsLegacyFocusRequest",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FInspectionMessageSupportsLegacyFocusRequestTest::RunTest(
+	const FString& Parameters)
+{
+	const UWidgetBlueprint* MessageBlueprint = LoadObject<UWidgetBlueprint>(
+		nullptr,
+		TEXT("/Game/Balhwajeom/UI/Inspection/WBP_InspectionMessage.WBP_InspectionMessage"));
+	TestNotNull(TEXT("WBP_InspectionMessage should load"), MessageBlueprint);
+	if (!MessageBlueprint || !MessageBlueprint->GeneratedClass)
+	{
+		return false;
+	}
+
+	const UUserWidget* DefaultMessage = Cast<UUserWidget>(
+		MessageBlueprint->GeneratedClass->GetDefaultObject());
+	TestNotNull(TEXT("WBP_InspectionMessage should have a widget CDO"), DefaultMessage);
+	if (!DefaultMessage)
+	{
+		return false;
+	}
+
+	TestTrue(
+		TEXT("The legacy interaction component must be able to focus its message without warnings"),
+		DefaultMessage->IsFocusable());
+	return true;
+}
+
 
 bool FMultiShadowTextRuntimeSetTextTest::RunTest(const FString& Parameters)
 {

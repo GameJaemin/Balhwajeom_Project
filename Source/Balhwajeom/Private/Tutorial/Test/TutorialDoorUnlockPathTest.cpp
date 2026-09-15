@@ -213,6 +213,8 @@ bool FTutorialDoorUnlockPathTest::RunTest(const FString& Parameters)
 
 	TestTrue(TEXT("Hearing all three conversations unlocks the door"), Door->IsUnlocked());
 	TestTrue(TEXT("An unlocked door offers its interaction"), Door->CanInteract());
+	TestTrue(TEXT("The first unlocked-door interaction is accepted"), Door->RequestInteraction());
+	TestTrue(TEXT("The first interaction starts opening the door"), Door->IsOpening());
 
 	return true;
 }
