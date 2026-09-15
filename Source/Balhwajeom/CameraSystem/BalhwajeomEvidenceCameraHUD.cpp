@@ -464,14 +464,12 @@ void ABalhwajeomEvidenceCameraHUD::UpdateCapturePhotoPresentation()
 		return;
 	}
 
-	// Do not start the hold/flight clock until fresh Slate geometry is ready.
-	if (!CapturePhotoWidget->IsFlightReady())
+	if (!CapturePhotoWidget->IsPresentationReady())
 	{
-		// A missing/collapsed marker must never send the photo elsewhere or
-		// leave movement locked indefinitely. Cancel instead of guessing a target.
+		// A malformed presentation hierarchy must not leave movement locked indefinitely.
 		if (GetWorld()->GetTimeSeconds() - CapturePhotoLayoutWaitStartTime > 2.0f)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Capture photo cancelled: check WBP_CapturePhoto TabFlyTarget and photo/keyword layout."));
+			UE_LOG(LogTemp, Warning, TEXT("Capture photo cancelled: check the WBP_CapturePhoto card, dimmer, and keyword hierarchy."));
 			FinishCapturePhotoPresentation();
 			return;
 		}
@@ -479,15 +477,11 @@ void ABalhwajeomEvidenceCameraHUD::UpdateCapturePhotoPresentation()
 		return;
 	}
 	const float Elapsed = GetWorld()->GetTimeSeconds() - EvidenceSavedAnimationStartTime;
-	const float HoldDuration = CapturePhotoWidget->GetHoldDuration();
-	if (Elapsed < HoldDuration)
-	{
-		return;
-	}
-	const float FlyDuration = FMath::Max(CapturePhotoWidget->GetFlyDuration(), KINDA_SMALL_NUMBER);
-	const float FlyAlpha = FMath::Clamp((Elapsed - HoldDuration) / FlyDuration, 0.0f, 1.0f);
-	CapturePhotoWidget->ApplyFlyToTab(FlyAlpha);
-	if (FlyAlpha >= 1.0f)
+	const float AnimationDuration = FMath::Max(
+		CapturePhotoWidget->GetAnimationDuration(), KINDA_SMALL_NUMBER);
+	const float TimelineAlpha = FMath::Clamp(Elapsed / AnimationDuration, 0.0f, 1.0f);
+	CapturePhotoWidget->ApplyPresentationTimeline(TimelineAlpha);
+	if (TimelineAlpha >= 1.0f)
 	{
 		FinishCapturePhotoPresentation();
 	}

@@ -8,7 +8,7 @@
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/Image.h"
-#include "Components/SizeBox.h"
+#include "Components/RetainerBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/WrapBox.h"
@@ -38,6 +38,12 @@ bool FCapturePhotoWidgetAssetTest::RunTest(const FString& Parameters)
 		Cast<UBorder>(Blueprint->WidgetTree->FindWidget(TEXT("ScreenDimmer"))));
 	TestNotNull(TEXT("editable card root exists"),
 		Cast<UCanvasPanel>(Blueprint->WidgetTree->FindWidget(TEXT("CardRoot"))));
+	URetainerBox* CardComposite = Cast<URetainerBox>(
+		Blueprint->WidgetTree->FindWidget(TEXT("CardComposite")));
+	UCanvasPanel* CardVisualRoot = Cast<UCanvasPanel>(
+		Blueprint->WidgetTree->FindWidget(TEXT("CardVisualRoot")));
+	TestNotNull(TEXT("card composite retainer exists"), CardComposite);
+	TestNotNull(TEXT("card visual root exists"), CardVisualRoot);
 	TestNotNull(TEXT("captured photo image exists"),
 		Cast<UImage>(Blueprint->WidgetTree->FindWidget(TEXT("CapturedPhotoImage"))));
 	TestNotNull(TEXT("sentence text exists"),
@@ -46,13 +52,25 @@ bool FCapturePhotoWidgetAssetTest::RunTest(const FString& Parameters)
 		Cast<UWrapBox>(Blueprint->WidgetTree->FindWidget(TEXT("SentenceBuilder"))));
 	TestNotNull(TEXT("keyword list exists"),
 		Cast<UVerticalBox>(Blueprint->WidgetTree->FindWidget(TEXT("KeywordList"))));
-	TestNotNull(TEXT("designer-authored TabFlyTarget exists"),
-		Cast<USizeBox>(Blueprint->WidgetTree->FindWidget(TEXT("TabFlyTarget"))));
-
 	const UCanvasPanel* Card = Cast<UCanvasPanel>(
 		Blueprint->WidgetTree->FindWidget(TEXT("CardRoot")));
 	const UCanvasPanelSlot* CardSlot = Card ? Cast<UCanvasPanelSlot>(Card->Slot) : nullptr;
 	TestTrue(TEXT("card geometry is designer-editable on the root canvas"), CardSlot != nullptr);
+
+	TestTrue(TEXT("retainer owns the complete card visual subtree"),
+		CardComposite && CardComposite->GetContent() == CardVisualRoot);
+	const UWidget* CardBackground = Blueprint->WidgetTree->FindWidget(TEXT("CardBackground"));
+	const UWidget* CapturedPhoto = Blueprint->WidgetTree->FindWidget(TEXT("CapturedPhotoImage"));
+	const UWidget* SentenceBackground = Blueprint->WidgetTree->FindWidget(TEXT("SentenceBackground"));
+	const UWidget* KeywordList = Blueprint->WidgetTree->FindWidget(TEXT("KeywordList"));
+	TestTrue(TEXT("card background is rendered inside the composite"),
+		CardVisualRoot && CardBackground && CardBackground->GetParent() == CardVisualRoot);
+	TestTrue(TEXT("captured photo is rendered inside the composite"),
+		CardVisualRoot && CapturedPhoto && CapturedPhoto->GetParent() == CardVisualRoot);
+	TestTrue(TEXT("sentence is rendered inside the composite"),
+		CardVisualRoot && SentenceBackground && SentenceBackground->GetParent() == CardVisualRoot);
+	TestTrue(TEXT("keywords remain outside the card composite"),
+		Card && KeywordList && KeywordList->GetParent() == Card);
 
 	return !HasAnyErrors();
 }
