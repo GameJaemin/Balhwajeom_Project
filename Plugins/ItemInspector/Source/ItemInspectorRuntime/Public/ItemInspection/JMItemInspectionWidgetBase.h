@@ -113,7 +113,9 @@ protected:
 	void BuildDefaultWidgetTreeIfNeeded();
 	void ApplyInspectionDataToWidgets();
 	void SetTextBlockOrHide(UTextBlock* TextBlock, const FText& Text);
-	bool IsPointerOverPreviewArea(const FPointerEvent& InMouseEvent) const;
+	bool IsPointerOverInteractionArea(
+		const FGeometry& InGeometry,
+		const FPointerEvent& InMouseEvent) const;
 	void ReleasePreviewMouseCapture();
 	void ResolveSimpleTransitionLayers();
 	void ApplySimpleUITransitionVisual(float Alpha);
