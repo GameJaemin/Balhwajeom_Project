@@ -3,6 +3,7 @@
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/ButtonSlot.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
@@ -695,13 +696,14 @@ void UBalhwajeomTabletWidget::OpenPhoto(const FName PhotoID)
 	}
 
 	FText Body = Photo.CustomDescription;
+	bool bIsSolvedAnalysisResult = false;
 	if (!Photo.PhotoSentenceID.IsNone())
 	{
 		FSentenceDefinition Analysis;
 		if (Investigation->GetSentenceDefinition(Photo.PhotoSentenceID, Analysis))
 		{
-			Body = Investigation->IsSentenceSolved(Photo.PhotoSentenceID)
-				? Analysis.ResultText : Analysis.SentenceTemplate;
+			bIsSolvedAnalysisResult = Investigation->IsSentenceSolved(Photo.PhotoSentenceID);
+			Body = bIsSolvedAnalysisResult ? Analysis.ResultText : Analysis.SentenceTemplate;
 		}
 	}
 	// WorldStoryCues/WorldStoryLines are the timed captions shown during the in-world capture
@@ -722,12 +724,13 @@ void UBalhwajeomTabletWidget::OpenPhoto(const FName PhotoID)
 		return;
 	}
 	ActivePhotoID = PhotoID;
+	ApplyPopupBodyResultStyle(bIsSolvedAnalysisResult);
 	if (BTN_PlayStoryVoice)
 	{
 		BTN_PlayStoryVoice->SetVisibility(
 			Photo.StoryVoice.IsNull() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	}
-	if (!Photo.PhotoSentenceID.IsNone() && !Investigation->IsSentenceSolved(Photo.PhotoSentenceID))
+	if (!Photo.PhotoSentenceID.IsNone() && !bIsSolvedAnalysisResult)
 	{
 		PreparePuzzle(Photo.PhotoSentenceID);
 	}
@@ -923,26 +926,60 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 	const int32 StatementFontSize = bStatementStyle && ActiveDetailWidget
 		? ActiveDetailWidget->GetStatementTextFontSize()
 		: 16;
-	const int32 SegmentFontSize = bStatementStyle ? StatementFontSize : 27;
+	// 24 matches WBP_CapturePhoto's AnalysisSentenceFontSize so the puzzle text in the tablet
+	// looks the same size as the sentence shown on the captured photo card.
+	const int32 SegmentFontSize = bStatementStyle ? StatementFontSize : 20;
 	int32 BlankSlotIndex = 0;
-	bool bForceNextChildToNewLine = false;
-	auto AddSentenceChild = [this, &bForceNextChildToNewLine](UWidget* Child)
+
+	// WB_SentenceBuilder itself stays the Designer-authored UWrapBox (so no WBP regen is needed);
+	// it hosts a single full-width child, this UVerticalBox, with one UHorizontalBox row per
+	// authored line (SentenceTemplate's "\n" boundaries -- no "\n" at all means the whole template
+	// is one line). Each line's VerticalBoxSlot is HAlign_Center, so every line centers
+	// independently within the full sentence area, matching how a single centered UTextBlock
+	// (e.g. TXT_PopupBody) looks -- a plain UWrapBox has no such per-line alignment concept, which
+	// is why the sentence used to always hug the left edge.
+	//
+	// Every SentenceTemplate (Photo and Statement alike) is expected to have "\n" placed by hand at
+	// every intended line break; a line never auto-wraps on its own, so a UHorizontalBox (which
+	// just lays its children out in one row, however wide that ends up being) is enough -- no need
+	// for a UWrapBox's width tracking/auto-wrap machinery here.
+	//
+	// Read the real authored width off WB_SentenceBuilder's own Canvas slot instead of hardcoding
+	// it: the Designer copy of this box has already drifted from what TabletWidgetBlueprintLibrary.cpp
+	// generates (e.g. the photo variant is 896px wide there, not the 560px the generator script
+	// says), so a literal here would silently center against the wrong width again the next time
+	// someone resizes the box by hand.
+	float SentenceAreaWidth = bStatementStyle ? 350.0f : 560.0f;
+	if (const UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(WB_SentenceBuilder->Slot))
 	{
-		if (UWrapBoxSlot* Slot = Cast<UWrapBoxSlot>(WB_SentenceBuilder->AddChild(Child)))
+		SentenceAreaWidth = CanvasSlot->GetSize().X;
+	}
+	// Gaps between pieces within a line, and between separate lines.
+	const FMargin LineItemPadding(2.0f, 0.0f);
+	const float LineSpacing = bStatementStyle ? 3.0f : 8.0f;
+	UVerticalBox* SentenceLines = WidgetTree->ConstructWidget<UVerticalBox>();
+	UHorizontalBox* CurrentLine = nullptr;
+	auto StartNewLine = [this, SentenceLines, &CurrentLine, LineSpacing, bStatementStyle]()
+	{
+		CurrentLine = WidgetTree->ConstructWidget<UHorizontalBox>();
+		if (UVerticalBoxSlot* Slot = SentenceLines->AddChildToVerticalBox(CurrentLine))
 		{
-			Slot->SetNewLine(bForceNextChildToNewLine);
-			Slot->SetVerticalAlignment(VAlign_Center);
+			// Statement lines read like a written declaration, so they stay left-aligned; photo
+			// analysis lines keep centering like a puzzle caption.
+			Slot->SetHorizontalAlignment(bStatementStyle ? HAlign_Left : HAlign_Center);
+			Slot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, LineSpacing));
 		}
-		bForceNextChildToNewLine = false;
 	};
-	auto AddEmptyLine = [this, SegmentFontSize, &AddSentenceChild]()
+	auto AddToCurrentLine = [&CurrentLine, &StartNewLine, LineItemPadding](UWidget* Child)
 	{
-		USpacer* Spacer = WidgetTree->ConstructWidget<USpacer>();
-		Spacer->SetSize(FVector2D(1.0f, static_cast<float>(SegmentFontSize)));
-		AddSentenceChild(Spacer);
-		if (UWrapBoxSlot* Slot = Cast<UWrapBoxSlot>(Spacer->Slot))
+		if (!CurrentLine)
 		{
-			Slot->SetFillEmptySpace(true);
+			StartNewLine();
+		}
+		if (UHorizontalBoxSlot* Slot = Cast<UHorizontalBoxSlot>(CurrentLine->AddChild(Child)))
+		{
+			Slot->SetVerticalAlignment(VAlign_Center);
+			Slot->SetPadding(LineItemPadding);
 		}
 	};
 
@@ -957,11 +994,7 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 		{
 			if (LineIndex > 0)
 			{
-				if (bForceNextChildToNewLine)
-				{
-					AddEmptyLine();
-				}
-				bForceNextChildToNewLine = true;
+				StartNewLine();
 			}
 			if (!Lines[LineIndex].IsEmpty())
 			{
@@ -977,7 +1010,7 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 				SegmentText->SetColorAndOpacity(FSlateColor(
 					bStatementStyle ? FLinearColor::Black : FLinearColor::White));
 				ActiveSentenceSegments.Add(SegmentText);
-				AddSentenceChild(SegmentText);
+				AddToCurrentLine(SegmentText);
 			}
 		}
 
@@ -996,16 +1029,55 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 				StatementFontSize);
 			Blank->OnBlankDropped.AddUniqueDynamic(this, &ThisClass::HandleSentenceBlankDropped);
 			ActiveBlanksBySlot.Add(BlankSlotIndex, Blank);
-			AddSentenceChild(Blank);
+			AddToCurrentLine(Blank);
 			++BlankSlotIndex;
 		}
 	}
+
+	// A UWrapBox only ever gives a child the space that child itself asks for -- HAlign_Fill on
+	// the slot does not stretch it out to the box's full width. Force that width with an explicit
+	// SizeBox instead, so each line's HAlign_Center below centers against the sentence area's
+	// actual width, not whatever width the VerticalBox happens to end up wanting.
+	USizeBox* SentenceLinesSizeBox = WidgetTree->ConstructWidget<USizeBox>();
+	SentenceLinesSizeBox->SetWidthOverride(SentenceAreaWidth);
+	SentenceLinesSizeBox->SetContent(SentenceLines);
+	WB_SentenceBuilder->AddChild(SentenceLinesSizeBox);
 
 	const bool bHasBlanks = !ActiveBlanksBySlot.IsEmpty();
 	WB_SentenceBuilder->SetVisibility(bHasBlanks ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	if (TXT_PopupBody && bHasBlanks)
 	{
 		TXT_PopupBody->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void UBalhwajeomTabletWidget::ApplyPopupBodyResultStyle(const bool bIsSolvedAnalysisResult)
+{
+	if (!TXT_PopupBody)
+	{
+		return;
+	}
+	// A solved analysis sentence's ResultText reads left-aligned in its own font; every other case
+	// (plain natural-language photos, an unsolved template shown briefly before PreparePuzzle
+	// hides this in favor of the interactive blanks) keeps the Designer default cached in
+	// BindActiveDetailWidgets. Called both when a photo popup opens (OpenPhoto) and the instant an
+	// analysis puzzle is solved without closing the popup (ValidateActivePuzzle), so the style
+	// doesn't wait for the next time the photo is reopened.
+	if (bIsSolvedAnalysisResult && ActiveDetailWidget)
+	{
+		TXT_PopupBody->SetJustification(ETextJustify::Left);
+		FSlateFontInfo Font = TXT_PopupBody->GetFont();
+		if (UFont* ConfiguredFont = ActiveDetailWidget->GetAnalysisResultFont())
+		{
+			Font.FontObject = ConfiguredFont;
+		}
+		Font.Size = ActiveDetailWidget->GetAnalysisResultFontSize();
+		TXT_PopupBody->SetFont(Font);
+	}
+	else
+	{
+		TXT_PopupBody->SetJustification(ETextJustify::Center);
+		TXT_PopupBody->SetFont(DefaultPopupBodyFont);
 	}
 }
 
@@ -1026,6 +1098,9 @@ void UBalhwajeomTabletWidget::SetPhotoPuzzleErrorStyle(const bool bError)
 			Segment->SetColorAndOpacity(FSlateColor(TextColor));
 		}
 	}
+	// Blanks are always empty by the time this fires on a wrong guess (see ValidateActivePuzzle),
+	// so SetErrorStyle now paints the box itself red instead of hiding it -- a clearly-marked
+	// empty slot the player can still see and drop a new keyword into.
 	for (const TPair<int32, TObjectPtr<UBalhwajeomTabletSentenceBlank>>& Pair : ActiveBlanksBySlot)
 	{
 		if (UBalhwajeomTabletSentenceBlank* Blank = Pair.Value)
@@ -1443,6 +1518,10 @@ void UBalhwajeomTabletWidget::ValidateActivePuzzle(const bool bExplicitStatement
 	{
 		if (TXT_PopupBody) TXT_PopupBody->SetText(Result);
 		HidePuzzleControls();
+		if (Sentence.SentenceType == ESentenceType::PhotoAnalysis)
+		{
+			ApplyPopupBodyResultStyle(true);
+		}
 		RefreshAcquiredWordsDisplay();
 		RefreshFolderContents();
 	}
@@ -1455,6 +1534,12 @@ void UBalhwajeomTabletWidget::ValidateActivePuzzle(const bool bExplicitStatement
 		TXT_PuzzleFeedback->SetVisibility(ESlateVisibility::Visible);
 		if (Sentence.SentenceType == ESentenceType::PhotoAnalysis)
 		{
+			// Wrong guess: clear the submission and rebuild the blanks from scratch so every
+			// slot's box goes back to its authored default rectangle (just clearing the text
+			// left a blank stretched to fit whatever long keyword had been dropped into it),
+			// then re-apply the red tint to the freshly rebuilt widgets.
+			ActiveSubmission.SubmittedWords.Reset();
+			BuildSentenceBuilder(Sentence);
 			SetPhotoPuzzleErrorStyle(true);
 		}
 	}
@@ -1514,6 +1599,12 @@ void UBalhwajeomTabletWidget::BindActiveDetailWidgets()
 
 	TXT_PopupTitle = ActiveDetailWidget->GetTitleText();
 	TXT_PopupBody = ActiveDetailWidget->GetBodyText();
+	if (TXT_PopupBody)
+	{
+		// Cache this fresh instance's Designer-authored font before OpenPhoto (or anything else)
+		// can override it for a solved analysis result, so every other case can be restored to it.
+		DefaultPopupBodyFont = TXT_PopupBody->GetFont();
+	}
 	IMG_PopupPhoto = ActiveDetailWidget->GetPhotoImage();
 	IMG_StatementIllustration = ActiveDetailWidget->GetStatementIllustration();
 	BTN_PopupClose = ActiveDetailWidget->GetCloseButton();
@@ -2271,7 +2362,9 @@ void UBalhwajeomTabletSentenceBlank::Configure(
 	DisplayText = WidgetTree->ConstructWidget<UTextBlock>();
 	DisplayText->SetJustification(ETextJustify::Center);
 	FSlateFontInfo Font = DisplayText->GetFont();
-	Font.Size = bStatementStyle ? InStatementFontSize : 27;
+	// 24 matches WBP_CapturePhoto's AnalysisSentenceFontSize (see BuildSentenceBuilder's
+	// SegmentFontSize) so a blank's filled keyword reads at the same size as its surrounding text.
+	Font.Size = bStatementStyle ? InStatementFontSize : 24;
 	if (bStatementStyle)
 	{
 		Font.FontObject = InStatementFont;
@@ -2287,9 +2380,10 @@ void UBalhwajeomTabletSentenceBlank::Configure(
 	{
 		USizeBox* BlankSize = WidgetTree->ConstructWidget<USizeBox>();
 		// Keep the authored empty-blank footprint, but allow a filled keyword to grow
-		// horizontally at the same 27px size as the surrounding photo sentence.
-		BlankSize->SetMinDesiredWidth(83.0f);
-		BlankSize->SetMinDesiredHeight(36.0f);
+		// horizontally at the same size as the surrounding photo sentence. Narrowed from 83 so
+		// short (e.g. particle-only) blanks don't look oversized next to their filled neighbors.
+		BlankSize->SetMinDesiredWidth(60.0f);
+		BlankSize->SetMinDesiredHeight(30.0f);
 		BlankSize->SetContent(Background);
 		WidgetTree->RootWidget = BlankSize;
 	}
@@ -2319,16 +2413,17 @@ void UBalhwajeomTabletSentenceBlank::SetErrorStyle(const bool bInError)
 		return;
 	}
 
+	// An error blank now always sits empty (see ValidateActivePuzzle), so the box itself is
+	// tinted red to mark it as a wrong-then-cleared slot -- a transparent background would just
+	// make the empty drop target disappear.
 	Background->SetBrushColor(
 		bErrorStyle
-			? FLinearColor::Transparent
+			? FLinearColor(0.761f, 0.471f, 0.471f, 1.0f)
 			: FLinearColor::White);
 	if (DisplayText)
 	{
 		DisplayText->SetColorAndOpacity(FSlateColor(
-			bErrorStyle
-				? FLinearColor(0.761f, 0.471f, 0.471f, 1.0f)
-				: (FilledWordID.IsNone() ? FLinearColor::White : FLinearColor::Black)));
+			bErrorStyle || FilledWordID.IsNone() ? FLinearColor::White : FLinearColor::Black));
 	}
 }
 
