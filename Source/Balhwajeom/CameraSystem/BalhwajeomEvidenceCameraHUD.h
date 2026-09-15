@@ -7,8 +7,8 @@
 #include "BalhwajeomEvidenceCameraHUD.generated.h"
 
 class UImage;
+class UMultiShadowTextWidget;
 class UTexture2D;
-class UTextBlock;
 class UUserWidget;
 class UBalhwajeomCapturePhotoWidget;
 
@@ -80,7 +80,7 @@ private:
 		const FVector2D& GuidePosition,
 		float GuideOpacity,
 		bool bShowStatusIcon,
-		bool bAlreadyCaptured,
+		bool bUsePhotoRequiredIcon,
 		const FText& LabelText);
 
 	UPROPERTY(EditDefaultsOnly, Category = "Camera|Guide")
@@ -90,7 +90,7 @@ private:
 	TObjectPtr<UTexture2D> PhotoRequiredIcon;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Camera|Guide")
-	TObjectPtr<UTexture2D> PhotoCapturedIcon;
+	TObjectPtr<UTexture2D> PhotoUnavailableIcon;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UUserWidget> ViewfinderWidget;
@@ -102,7 +102,7 @@ private:
 	TObjectPtr<UImage> FocusGuideStatusImage;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> FocusGuideLabelText;
+	TObjectPtr<UMultiShadowTextWidget> FocusGuideLabelText;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Camera|Evidence")
 	TSubclassOf<UBalhwajeomCapturePhotoWidget> CapturePhotoWidgetClass;

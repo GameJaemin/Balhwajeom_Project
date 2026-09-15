@@ -5,7 +5,9 @@
 #include "Components/ArrowComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/SceneComponent.h"
+#include "Components/SizeBox.h"
 #include "Components/TextRenderComponent.h"
 #include "Components/Image.h"
 #include "Components/WidgetComponent.h"
@@ -14,6 +16,7 @@
 #include "ItemInspection/JMItemInspectionData.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
+#include "CameraSystem/BalhwajeomEvidenceFocusGuideLayout.h"
 #include "CameraSystem/PhotoWorldStoryActor.h"
 #include "Engine/StaticMesh.h"
 #include "NiagaraComponent.h"
@@ -68,13 +71,6 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 	if (PhotoRequiredIconAsset.Succeeded())
 	{
 		PhotoRequiredIcon = PhotoRequiredIconAsset.Object;
-	}
-
-	static ConstructorHelpers::FObjectFinder<UTexture2D> PhotoCapturedIconAsset(
-		TEXT("/Game/Balhwajeom/UI/Icons/T_EvidencePhotoCaptured.T_EvidencePhotoCaptured"));
-	if (PhotoCapturedIconAsset.Succeeded())
-	{
-		PhotoCapturedIcon = PhotoCapturedIconAsset.Object;
 	}
 
 	static ConstructorHelpers::FObjectFinder<UTexture2D> PhotoUnavailableIconAsset(
@@ -368,12 +364,13 @@ void ABalhwajeomEvidenceActor::ConfigureItemInspection()
 		bEnable3DInspection || bAuthoredItemInspectionEnabled;
 	const bool bProgressionAllowsInspection =
 		bProgressionAvailable && !bProgressionCleared && !bProgressionRemovalPending;
-
-	ItemInspectionComponent->bInspectionEnabled =
-		bInspectionRequested && bProgressionAllowsInspection;
+	ItemInspectionComponent->bInspectionEnabled = ShouldEnable3DInspectionForState(
+		bInspectionRequested,
+		bProgressionAllowsInspection,
+		bCurrentStateDisables3DInspection);
 	ItemInspectionComponent->InspectionData = nullptr;
 	RuntimeItemInspectionData = nullptr;
-	if (!bInspectionRequested || !bProgressionAllowsInspection)
+	if (!ItemInspectionComponent->bInspectionEnabled)
 	{
 		return;
 	}
@@ -719,6 +716,7 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID, bool bInit
 	}
 	const FName PreviousStateID = CurrentStateID;
 	CurrentStateID = State.StateID;
+	bCurrentStateDisables3DInspection = State.bDisable3DInspection;
 	bCanBeCaptured = State.bCanCapture;
 	EvidenceData.bAlreadyCollected = !State.PhotoID.IsNone() &&
 		Investigation->HasCapturedPhoto(State.PhotoID);
@@ -987,6 +985,16 @@ bool ABalhwajeomEvidenceActor::ShouldDisplayInspectionLabel(
 		!LabelText.IsEmptyOrWhitespace();
 }
 
+bool ABalhwajeomEvidenceActor::ShouldEnable3DInspectionForState(
+	const bool bInspectionRequested,
+	const bool bProgressionAllowsInspection,
+	const bool bStateDisablesInspection)
+{
+	return bInspectionRequested
+		&& bProgressionAllowsInspection
+		&& !bStateDisablesInspection;
+}
+
 void ABalhwajeomEvidenceActor::SetInspectionLabel(
 	const FText& LabelText,
 	bool bVisible)
@@ -1016,20 +1024,29 @@ void ABalhwajeomEvidenceActor::SetInspectionLabel(
 
 	if (UImage* StatusImage = Cast<UImage>(LabelWidget->GetWidgetFromName(TEXT("UseCamera"))))
 	{
-		UTexture2D* StatusTexture = nullptr;
-		if (!bCanBeCaptured)
-		{
-			StatusTexture = PhotoUnavailableIcon;
-		}
-		else
-		{
-			StatusTexture = EvidenceData.bAlreadyCollected
-				? PhotoCapturedIcon
-				: PhotoRequiredIcon;
-		}
+		const bool bUsePhotoRequiredIcon =
+			BalhwajeomEvidenceFocusGuideLayout::ShouldUsePhotoRequiredIcon(
+				bCanBeCaptured,
+				EvidenceData.bAlreadyCollected);
+		UTexture2D* StatusTexture = bUsePhotoRequiredIcon
+			? PhotoRequiredIcon.Get()
+			: PhotoUnavailableIcon.Get();
+		const double LabelPositionX = bUsePhotoRequiredIcon ? 40.0 : 22.0;
 		if (StatusTexture)
 		{
 			StatusImage->SetBrushFromTexture(StatusTexture, false);
+		}
+
+		if (USizeBox* LabelContainer = Cast<USizeBox>(
+			LabelWidget->GetWidgetFromName(TEXT("LabelContainer"))))
+		{
+			if (UCanvasPanelSlot* LabelContainerSlot =
+				Cast<UCanvasPanelSlot>(LabelContainer->Slot))
+			{
+				FVector2D Position = LabelContainerSlot->GetPosition();
+				Position.X = LabelPositionX;
+				LabelContainerSlot->SetPosition(Position);
+			}
 		}
 	}
 

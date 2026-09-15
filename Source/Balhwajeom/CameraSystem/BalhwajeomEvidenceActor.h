@@ -103,6 +103,12 @@ public:
 		EPlayerInspectionDistanceState DistanceState,
 		const FText& LabelText);
 
+	/** Combines the actor opt-in, progression availability, and active-state override. */
+	static bool ShouldEnable3DInspectionForState(
+		bool bInspectionRequested,
+		bool bProgressionAllowsInspection,
+		bool bStateDisablesInspection);
+
 	/** Per-object distance thresholds and text used by the normal inspection system. */
 	UFUNCTION(BlueprintPure, Category = "Inspection")
 	UInspectionComponent* GetInspectionComponent() const { return InspectionComponent; }
@@ -216,6 +222,9 @@ protected:
 	 */
 	bool bAuthoredItemInspectionEnabled = false;
 
+	/** Derived from the active FEvidenceStateDefinition. */
+	bool bCurrentStateDisables3DInspection = false;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UJMItemInspectionData> RuntimeItemInspectionData;
 
@@ -227,11 +236,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inspection|UI")
 	TObjectPtr<UTexture2D> PhotoRequiredIcon;
 
-	/** Status icon used after this evidence has been photographed. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inspection|UI")
-	TObjectPtr<UTexture2D> PhotoCapturedIcon;
-
-	/** Status icon used when the current evidence state cannot be photographed. */
+	/** Default status icon used when this evidence cannot or no longer needs to be photographed. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inspection|UI")
 	TObjectPtr<UTexture2D> PhotoUnavailableIcon;
 

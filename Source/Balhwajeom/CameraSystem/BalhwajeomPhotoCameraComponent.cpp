@@ -507,43 +507,6 @@ void UBalhwajeomPhotoCameraComponent::LookPitch(float Value)
 	}
 }
 
-void UBalhwajeomPhotoCameraComponent::PanHorizontal(float Value)
-{
-	if (PhotoCamera)
-	{
-		PanCamera(CameraPanRightDirection, Value);
-	}
-}
-
-void UBalhwajeomPhotoCameraComponent::PanVertical(float Value)
-{
-	if (PhotoCamera)
-	{
-		const float AbsolutePitch = FMath::Abs(
-			FRotator::NormalizeAxis(PhotoCamera->GetComponentRotation().Pitch));
-		const float SlowdownStart = FMath::Min(
-			VerticalPanSlowdownStartPitch, VerticalPanDisablePitch);
-		const float DisablePitch = FMath::Max(
-			VerticalPanSlowdownStartPitch, VerticalPanDisablePitch);
-
-		float SpeedScale = 1.0f;
-		if (FMath::IsNearlyEqual(SlowdownStart, DisablePitch))
-		{
-			SpeedScale = AbsolutePitch < SlowdownStart ? 1.0f : 0.0f;
-		}
-		else
-		{
-			const float SlowdownAlpha = FMath::Clamp(
-				(AbsolutePitch - SlowdownStart) / (DisablePitch - SlowdownStart),
-				0.0f,
-				1.0f);
-			SpeedScale = 1.0f - FMath::SmoothStep(0.0f, 1.0f, SlowdownAlpha);
-		}
-
-		PanCamera(FVector::UpVector, Value * SpeedScale);
-	}
-}
-
 void UBalhwajeomPhotoCameraComponent::ZoomCamera(float Value)
 {
 	if (!bIsInCameraMode || bIsCameraTransitioning || !PhotoCamera || FMath::IsNearlyZero(Value))
@@ -726,14 +689,6 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 	SavedFirstPersonFieldOfView = PhotoCamera->FieldOfView;
 	SavedPhotoPostProcessSettings = PhotoCamera->PostProcessSettings;
 	SavedPostProcessBlendWeight = PhotoCamera->PostProcessBlendWeight;
-	CameraModeEntryWorldLocation = PhotoCamera->GetComponentLocation();
-	CameraPanWorldOffset = FVector::ZeroVector;
-	CameraPanRightDirection = PhotoCamera->GetRightVector();
-	CameraPanRightDirection.Z = 0.0f;
-	if (!CameraPanRightDirection.Normalize())
-	{
-		CameraPanRightDirection = FVector::RightVector;
-	}
 	NormalCamera->SetActive(false);
 	PhotoCamera->SetActive(true);
 
@@ -801,7 +756,6 @@ void UBalhwajeomPhotoCameraComponent::ExitCameraMode()
 			bFocusBlurInitializationFailed = false;
 		}
 	}
-	CameraPanWorldOffset = FVector::ZeroVector;
 	FocusGuideTraceElapsed = 0.0f;
 	EarlyGuideRescanElapsed = 0.0f;
 	SetComponentTickEnabled(false);
@@ -897,32 +851,6 @@ void UBalhwajeomPhotoCameraComponent::FinishCameraTransition()
 {
 	bIsCameraTransitioning = false;
 	OnCameraTransitionFinished.Broadcast();
-}
-
-void UBalhwajeomPhotoCameraComponent::PanCamera(const FVector& ScreenDirection, float Value)
-{
-	if (!bIsInCameraMode || bIsCameraTransitioning || !PhotoCamera || !GetWorld() || FMath::IsNearlyZero(Value))
-	{
-		return;
-	}
-
-	const FVector Delta = ScreenDirection.GetSafeNormal() * Value * CameraPanSpeed * GetWorld()->GetDeltaSeconds();
-	CameraPanWorldOffset += Delta;
-
-	// Clamp each axis independently. A vector-length clamp creates a circular
-	// boundary; independent horizontal/vertical limits create a square pan area.
-	const float PanLimit = FMath::Max(CameraPanMaxDistance, 0.0f);
-	const float HorizontalOffset = FMath::Clamp(
-		FVector::DotProduct(CameraPanWorldOffset, CameraPanRightDirection),
-		-PanLimit,
-		PanLimit);
-	const float VerticalOffset = FMath::Clamp(
-		FVector::DotProduct(CameraPanWorldOffset, FVector::UpVector),
-		-PanLimit,
-		PanLimit);
-	CameraPanWorldOffset =
-		CameraPanRightDirection * HorizontalOffset + FVector::UpVector * VerticalOffset;
-	PhotoCamera->SetWorldLocation(CameraModeEntryWorldLocation + CameraPanWorldOffset);
 }
 
 void UBalhwajeomPhotoCameraComponent::ShowPhotoFeedback(const FString& Message, const FColor& Color) const

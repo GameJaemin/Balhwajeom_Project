@@ -314,7 +314,10 @@ void AJMItemInspectionPreviewActor::BeginEnterTransition(const FJMItemInspection
 	}
 
 	const FJMItemInspectionViewSettings& ViewSettings = CurrentInspectionData->ViewSettings;
-	TransitionTargetRotation = ViewSettings.InitialRotation.Quaternion();
+	// Keep the same cursor-aligned angle sampled from the third-person camera.
+	// Rotating toward the authored inspection angle during the fly-in is what made
+	// the object visibly skew across the screen transition.
+	TransitionTargetRotation = Source.PreviewRelativeRotation.GetNormalized();
 	TransitionTargetOffset = ViewSettings.PreviewOffset;
 	TransitionTargetScale = FMath::Max(ViewSettings.PreviewScale, 0.01f);
 	TransitionTargetZoom = FMath::Clamp(
@@ -360,8 +363,8 @@ void AJMItemInspectionPreviewActor::CompleteEnterTransition()
 		return;
 	}
 
+	UpdateEnterTransition(1.0f);
 	bEnterTransitionActive = false;
-	ApplyViewSettings();
 	CapturePreview();
 }
 

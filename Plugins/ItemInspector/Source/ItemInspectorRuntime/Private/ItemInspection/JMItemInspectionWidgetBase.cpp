@@ -2,6 +2,8 @@
 
 #include "Blueprint/WidgetTree.h"
 #include "Blueprint/SlateBlueprintLibrary.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/HorizontalBox.h"
@@ -366,24 +368,25 @@ void UJMItemInspectionWidgetBase::BuildDefaultWidgetTreeIfNeeded()
 		return;
 	}
 
-	UOverlay* RootOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("InspectorRoot"));
-	WidgetTree->RootWidget = RootOverlay;
+	UCanvasPanel* RootCanvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("InspectorRoot"));
+	WidgetTree->RootWidget = RootCanvas;
 
 	UBorder* Backdrop = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Backdrop"));
 	Backdrop->SetBrushColor(FLinearColor(0.02f, 0.02f, 0.025f, 0.92f));
-	if (UOverlaySlot* BackdropSlot = RootOverlay->AddChildToOverlay(Backdrop))
+	if (UCanvasPanelSlot* BackdropSlot = RootCanvas->AddChildToCanvas(Backdrop))
 	{
-		BackdropSlot->SetHorizontalAlignment(HAlign_Fill);
-		BackdropSlot->SetVerticalAlignment(VAlign_Fill);
+		BackdropSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+		BackdropSlot->SetOffsets(FMargin(0.0f));
+		BackdropSlot->SetZOrder(-100);
 	}
 
 	UScaleBox* Content = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass(), TEXT("ContentRow"));
 	Content->SetStretch(EStretch::ScaleToFit);
 	Content->SetStretchDirection(EStretchDirection::DownOnly);
-	UOverlaySlot* ContentSlot = RootOverlay->AddChildToOverlay(Content);
-	ContentSlot->SetHorizontalAlignment(HAlign_Fill);
-	ContentSlot->SetVerticalAlignment(VAlign_Fill);
-	ContentSlot->SetPadding(FMargin(48.0f));
+	UCanvasPanelSlot* ContentSlot = RootCanvas->AddChildToCanvas(Content);
+	ContentSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+	ContentSlot->SetOffsets(FMargin(48.0f));
+	ContentSlot->SetZOrder(0);
 
 	USizeBox* PreviewSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("PreviewSizeBox"));
 	PreviewSizeBox->SetWidthOverride(720.0f);

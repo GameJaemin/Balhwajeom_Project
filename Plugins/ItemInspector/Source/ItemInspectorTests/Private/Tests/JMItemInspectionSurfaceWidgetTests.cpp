@@ -124,8 +124,8 @@ bool FJMItemInspectionPaperSurfaceWidgetTest::RunTest(const FString& Parameters)
 		PreviewActor->UpdateEnterTransition(0.5f);
 		PreviewActor->CompleteEnterTransition();
 		TestTrue(
-			TEXT("Entrance transition commits the Data Asset initial rotation"),
-			PreviewPivot->GetRelativeRotation().Quaternion().Equals(PaperData->ViewSettings.InitialRotation.Quaternion(), KINDA_SMALL_NUMBER));
+			TEXT("Entrance transition preserves the sampled third-person source rotation"),
+			PreviewPivot->GetRelativeRotation().Quaternion().Equals(TransitionSource.PreviewRelativeRotation, KINDA_SMALL_NUMBER));
 		if (PreviewMeshComponent)
 		{
 			TestTrue(

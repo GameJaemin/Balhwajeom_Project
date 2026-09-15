@@ -288,4 +288,27 @@ bool FBalhwajeomCameraFocusBlurComponentDefaultsTest::RunTest(const FString& Par
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FBalhwajeomFirstPersonMovementInputPolicyTest,
+	"Balhwajeom.Camera.FirstPersonMovementInputPolicy",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FBalhwajeomFirstPersonMovementInputPolicyTest::RunTest(const FString& Parameters)
+{
+	UClass* PhotoCameraClass = UBalhwajeomPhotoCameraComponent::StaticClass();
+	TestNotNull(TEXT("Mouse yaw remains available in first person"),
+		PhotoCameraClass->FindFunctionByName(TEXT("LookYaw")));
+	TestNotNull(TEXT("Mouse pitch remains available in first person"),
+		PhotoCameraClass->FindFunctionByName(TEXT("LookPitch")));
+	TestNull(TEXT("Horizontal camera pan input was removed"),
+		PhotoCameraClass->FindFunctionByName(TEXT("PanHorizontal")));
+	TestNull(TEXT("Vertical camera pan input was removed"),
+		PhotoCameraClass->FindFunctionByName(TEXT("PanVertical")));
+	TestNull(TEXT("Camera pan speed setting was removed"),
+		PhotoCameraClass->FindPropertyByName(TEXT("CameraPanSpeed")));
+	TestNull(TEXT("Camera pan distance setting was removed"),
+		PhotoCameraClass->FindPropertyByName(TEXT("CameraPanMaxDistance")));
+	return true;
+}
+
 #endif

@@ -5,7 +5,9 @@
 #include "Blueprint/UserWidget.h"
 #include "CameraSystem/BalhwajeomEvidenceActor.h"
 #include "Components/BoxComponent.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/Image.h"
+#include "Components/SizeBox.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/Engine.h"
@@ -13,6 +15,7 @@
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
+#include "Investigation/EvidenceDefinitions.h"
 #include "ItemInspection/JMInspectableComponent.h"
 #include "ItemInspection/JMItemInspectionData.h"
 #include "Kismet/GameplayStatics.h"
@@ -26,6 +29,13 @@ struct FEvidenceActorTestAccessor
 	static void Enable3DInspection(ABalhwajeomEvidenceActor* Evidence)
 	{
 		Evidence->bEnable3DInspection = true;
+	}
+	static void SetCurrentStateDisables3DInspection(
+		ABalhwajeomEvidenceActor* Evidence,
+		const bool bDisabled)
+	{
+		Evidence->bCurrentStateDisables3DInspection = bDisabled;
+		Evidence->ConfigureItemInspection();
 	}
 	static void SetEvidenceInstanceID(
 		ABalhwajeomEvidenceActor* Evidence,
@@ -61,6 +71,27 @@ struct FEvidenceActorTestAccessor
 			? Cast<UImage>(LabelWidget->GetWidgetFromName(TEXT("UseCamera")))
 			: nullptr;
 		return StatusImage ? StatusImage->GetBrush().GetResourceObject() : nullptr;
+	}
+
+	static TOptional<double> GetLabelContainerPositionX(
+		ABalhwajeomEvidenceActor* Evidence)
+	{
+		if (!Evidence->ObjectLabelWidget)
+		{
+			return {};
+		}
+
+		Evidence->ObjectLabelWidget->InitWidget();
+		UUserWidget* LabelWidget = Evidence->ObjectLabelWidget->GetUserWidgetObject();
+		const USizeBox* LabelContainer = LabelWidget
+			? Cast<USizeBox>(LabelWidget->GetWidgetFromName(TEXT("LabelContainer")))
+			: nullptr;
+		const UCanvasPanelSlot* LabelContainerSlot = LabelContainer
+			? Cast<UCanvasPanelSlot>(LabelContainer->Slot)
+			: nullptr;
+		return LabelContainerSlot
+			? TOptional<double>(LabelContainerSlot->GetPosition().X)
+			: TOptional<double>();
 	}
 
 	static UBalhwajeomInvestigationSubsystem* GetInvestigationSubsystem(
@@ -121,6 +152,34 @@ struct FEvidenceActorTestAccessor
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FEvidenceState3DInspectionPolicyTest,
+	"Balhwajeom.Camera.Evidence.State3DInspectionPolicy",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter)
+
+bool FEvidenceState3DInspectionPolicyTest::RunTest(const FString& Parameters)
+{
+	const FEvidenceStateDefinition DefaultState;
+	TestFalse(
+		TEXT("Existing states keep 3D inspection allowed by default"),
+		DefaultState.bDisable3DInspection);
+	TestTrue(
+		TEXT("Actor opt-in enables 3D inspection in an allowed state"),
+		ABalhwajeomEvidenceActor::ShouldEnable3DInspectionForState(true, true, false));
+	TestFalse(
+		TEXT("The active state can disable actor-authored 3D inspection"),
+		ABalhwajeomEvidenceActor::ShouldEnable3DInspectionForState(true, true, true));
+	TestFalse(
+		TEXT("State allowance cannot bypass the actor opt-in"),
+		ABalhwajeomEvidenceActor::ShouldEnable3DInspectionForState(false, true, false));
+	TestFalse(
+		TEXT("State allowance cannot bypass progression locks"),
+		ABalhwajeomEvidenceActor::ShouldEnable3DInspectionForState(true, false, false));
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FEvidenceNonCapturableUsesDotIconTest,
 	"Balhwajeom.Camera.Evidence.ObjectLabel.NonCapturableUsesDotIcon",
 	EAutomationTestFlags::EditorContext |
@@ -159,6 +218,18 @@ bool FEvidenceNonCapturableUsesDotIconTest::RunTest(const FString& Parameters)
 		TEXT("Non-capturable evidence should use the dot icon"),
 		FEvidenceActorTestAccessor::GetStatusIconResource(Evidence),
 		static_cast<UObject*>(DotIcon));
+	const TOptional<double> NonCapturableLabelX =
+		FEvidenceActorTestAccessor::GetLabelContainerPositionX(Evidence);
+	TestTrue(
+		TEXT("Non-capturable evidence should expose its label container position"),
+		NonCapturableLabelX.IsSet());
+	if (NonCapturableLabelX.IsSet())
+	{
+		TestEqual(
+			TEXT("Non-capturable evidence should position its label at X=22"),
+			NonCapturableLabelX.GetValue(),
+			22.0);
+	}
 
 	GameInstance->Shutdown();
 	GEngine->DestroyWorldContext(World);
@@ -290,14 +361,14 @@ bool FEvidenceInspectionNonFarLabelTest::RunTest(const FString& Parameters)
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FEvidencePhotoCaptureRefreshesIconTest,
-	"Balhwajeom.Camera.Evidence.ObjectLabel.PhotoCaptureRefreshesIcon",
+	FEvidencePhotoCaptureReturnsToDefaultIconTest,
+	"Balhwajeom.Camera.Evidence.ObjectLabel.PhotoCaptureReturnsToDefaultIcon",
 	EAutomationTestFlags::EditorContext |
 	EAutomationTestFlags::EngineFilter
 )
 
 
-bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
+bool FEvidencePhotoCaptureReturnsToDefaultIconTest::RunTest(const FString& Parameters)
 {
 	UGameInstance* GameInstance = NewObject<UGameInstance>(GEngine);
 	GameInstance->InitializeStandalone();
@@ -330,7 +401,7 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 	{
 		Evidence->DispatchBeginPlay();
 	}
-	// This test exercises the camera-to-check transition independently of the
+	// This test exercises the camera-to-default-dot transition independently of the
 	// configured object's current data-authored capture availability.
 	FEvidenceActorTestAccessor::SetCanBeCaptured(Evidence, true);
 	UJMInspectableComponent* ItemInspection = Evidence->GetItemInspectionComponent();
@@ -346,6 +417,18 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 			TestTrue(TEXT("Evidence mesh should become the fallback preview mesh"),
 				ItemInspection->InspectionData->PreviewMesh.Get() == (EvidenceMesh ? EvidenceMesh->GetStaticMesh().Get() : nullptr));
 		}
+
+		FEvidenceActorTestAccessor::SetCurrentStateDisables3DInspection(Evidence, true);
+		TestFalse(
+			TEXT("A state can disable an actor-authored 3D inspection"),
+			ItemInspection->bInspectionEnabled);
+		TestNull(
+			TEXT("A state-disabled inspector releases its runtime inspection data"),
+			ItemInspection->InspectionData.Get());
+		FEvidenceActorTestAccessor::SetCurrentStateDisables3DInspection(Evidence, false);
+		TestTrue(
+			TEXT("Leaving the disabled state restores actor-authored 3D inspection"),
+			ItemInspection->bInspectionEnabled);
 	}
 
 	FEvidenceActorTestAccessor::SetDistanceState(
@@ -355,13 +438,25 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 	UTexture2D* RequiredIcon = LoadObject<UTexture2D>(
 		nullptr,
 		TEXT("/Game/Balhwajeom/UI/Icons/T_EvidencePhotoRequired.T_EvidencePhotoRequired"));
-	UTexture2D* CapturedIcon = LoadObject<UTexture2D>(
+	UTexture2D* DefaultIcon = LoadObject<UTexture2D>(
 		nullptr,
-		TEXT("/Game/Balhwajeom/UI/Icons/T_EvidencePhotoCaptured.T_EvidencePhotoCaptured"));
+		TEXT("/Game/Balhwajeom/UI/Icons/DotIcon.DotIcon"));
 	TestEqual(
 		TEXT("Uncaptured evidence should use the camera icon"),
 		FEvidenceActorTestAccessor::GetStatusIconResource(Evidence),
 		static_cast<UObject*>(RequiredIcon));
+	const TOptional<double> UncapturedLabelX =
+		FEvidenceActorTestAccessor::GetLabelContainerPositionX(Evidence);
+	TestTrue(
+		TEXT("Uncaptured evidence should expose its label container position"),
+		UncapturedLabelX.IsSet());
+	if (UncapturedLabelX.IsSet())
+	{
+		TestEqual(
+			TEXT("Uncaptured evidence should position its label at X=40"),
+			UncapturedLabelX.GetValue(),
+			40.0);
+	}
 
 	UBalhwajeomInvestigationSubsystem* Investigation =
 		GameInstance->GetSubsystem<UBalhwajeomInvestigationSubsystem>();
@@ -398,9 +493,21 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 			TEXT("A matching photo event should mark this actor collected"),
 			Evidence->GetEvidenceData().bAlreadyCollected);
 		TestEqual(
-			TEXT("A matching photo event should immediately swap to the check icon"),
+			TEXT("A matching photo event should return to the default dot icon"),
 			FEvidenceActorTestAccessor::GetStatusIconResource(Evidence),
-			static_cast<UObject*>(CapturedIcon));
+			static_cast<UObject*>(DefaultIcon));
+		const TOptional<double> CapturedLabelX =
+			FEvidenceActorTestAccessor::GetLabelContainerPositionX(Evidence);
+		TestTrue(
+			TEXT("Captured evidence should expose its label container position"),
+			CapturedLabelX.IsSet());
+		if (CapturedLabelX.IsSet())
+		{
+			TestEqual(
+				TEXT("Captured evidence should use the default label position X=22"),
+				CapturedLabelX.GetValue(),
+				22.0);
+		}
 	}
 
 	GameInstance->Shutdown();

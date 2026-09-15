@@ -20,6 +20,7 @@
 #include "ItemInspection/JMItemInspectionWidgetBase.h"
 #include "JMGameplayUIEventTags.h"
 #include "Kismet/GameplayStatics.h"
+#include "Math/RotationMatrix.h"
 #include "Subsystems/JMGameplayEventSubsystem.h"
 
 void UJMItemInspectionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -612,10 +613,48 @@ bool UJMItemInspectionSubsystem::BuildTransitionSource(
 	const FQuat SourceRotation = PreferredComponent
 		? PreferredComponent->GetComponentQuat()
 		: Request.SourceActor->GetActorQuat();
-	const FQuat CameraRotation = PlayerController->PlayerCameraManager
-		? PlayerController->PlayerCameraManager->GetCameraRotation().Quaternion()
-		: PlayerController->GetControlRotation().Quaternion();
-	OutSource.PreviewRelativeRotation = (CameraRotation.Inverse() * SourceRotation).GetNormalized();
+
+	FVector CameraLocation = FVector::ZeroVector;
+	FRotator CameraRotator = FRotator::ZeroRotator;
+	PlayerController->GetPlayerViewPoint(CameraLocation, CameraRotator);
+	const FQuat CameraRotation = CameraRotator.Quaternion();
+	const FVector SourceViewCenter = PreferredComponent
+		? PreferredComponent->Bounds.Origin
+		: OutSource.WorldBounds.Origin;
+	const float SourceRadius = PreferredComponent
+		? PreferredComponent->Bounds.SphereRadius
+		: OutSource.WorldBounds.SphereRadius;
+
+	// A third-person target is normally off the camera's forward axis. Reusing only
+	// the camera rotation makes the centered preview appear to twist diagonally.
+	// Prefer the live cursor ray when it still points at this source; otherwise use
+	// the camera-to-source direction (also correct for a captured center crosshair).
+	FVector ViewDirection = (SourceViewCenter - CameraLocation).GetSafeNormal();
+	FVector CursorWorldOrigin = FVector::ZeroVector;
+	FVector CursorWorldDirection = FVector::ZeroVector;
+	if (PlayerController->DeprojectMousePositionToWorld(CursorWorldOrigin, CursorWorldDirection))
+	{
+		CursorWorldDirection = CursorWorldDirection.GetSafeNormal();
+		const float DistanceAlongRay = FVector::DotProduct(SourceViewCenter - CursorWorldOrigin, CursorWorldDirection);
+		const FVector ClosestPoint = CursorWorldOrigin + (CursorWorldDirection * FMath::Max(DistanceAlongRay, 0.0f));
+		const float CursorTolerance = FMath::Max(SourceRadius * 1.5f, 24.0f);
+		if (DistanceAlongRay > 0.0f
+			&& FVector::DistSquared(ClosestPoint, SourceViewCenter) <= FMath::Square(CursorTolerance))
+		{
+			ViewDirection = CursorWorldDirection;
+		}
+	}
+	if (ViewDirection.IsNearlyZero())
+	{
+		ViewDirection = CameraRotation.GetForwardVector();
+	}
+
+	// Preserve the camera's screen-up direction so correcting toward the cursor
+	// cannot introduce roll of its own.
+	const FQuat CursorAlignedViewRotation = FRotationMatrix::MakeFromXZ(
+		ViewDirection,
+		CameraRotation.GetUpVector()).ToQuat();
+	OutSource.PreviewRelativeRotation = (CursorAlignedViewRotation.Inverse() * SourceRotation).GetNormalized();
 	OutSource.bIsOnScreen = true;
 	OutSource.bIsValid = true;
 	return true;
