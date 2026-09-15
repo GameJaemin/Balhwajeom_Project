@@ -7,8 +7,8 @@
 #include "BalhwajeomEvidenceCameraHUD.generated.h"
 
 class UImage;
+class UMultiShadowTextWidget;
 class UTexture2D;
-class UTextBlock;
 class UUserWidget;
 class UBalhwajeomCapturePhotoWidget;
 
@@ -102,7 +102,7 @@ private:
 	TObjectPtr<UImage> FocusGuideStatusImage;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> FocusGuideLabelText;
+	TObjectPtr<UMultiShadowTextWidget> FocusGuideLabelText;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Camera|Evidence")
 	TSubclassOf<UBalhwajeomCapturePhotoWidget> CapturePhotoWidgetClass;

@@ -25,6 +25,7 @@ public class BalhwajeomEditor : ModuleRules
 			"BlueprintGraph",
 			"ImageCore",
 			"MediaAssets",
+			"MultiShadowText",
 			"SlateCore",
 			"Slate",
 			"RenderCore",
