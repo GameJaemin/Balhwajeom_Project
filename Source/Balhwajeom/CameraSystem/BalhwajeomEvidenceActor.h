@@ -319,6 +319,16 @@ protected:
 	/** Weak because a finished one-shot system destroys its own component. */
 	TWeakObjectPtr<UNiagaraComponent> ActiveStateEffect;
 
+	/** Move this component on a placed actor to preview and author its state-effect origin. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Evidence|Effect")
+	TObjectPtr<USceneComponent> StateEffectAnchor;
+
+#if WITH_EDITORONLY_DATA
+	/** Editor-only marker showing the StateEffectAnchor position and orientation. */
+	UPROPERTY()
+	TObjectPtr<UArrowComponent> StateEffectAnchorArrow;
+#endif
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Evidence")
 	FBalhwajeomEvidenceData EvidenceData;
 
