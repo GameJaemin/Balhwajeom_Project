@@ -83,6 +83,9 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 	CameraFocusPoint = CreateDefaultSubobject<USceneComponent>(TEXT("CameraFocusPoint"));
 	CameraFocusPoint->SetupAttachment(EvidenceMesh);
 
+	StateEffectAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("StateEffectAnchor"));
+	StateEffectAnchor->SetupAttachment(EvidenceMesh);
+
 	// Sits slightly above the object so a freshly placed actor shows readable text before the
 	// designer positions it; +X points at the reader because the story widget faces its own +X.
 	StoryAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("StoryAnchor"));
@@ -93,6 +96,16 @@ ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 	StoryAnchor->SetRelativeLocation(FVector(0.0f, 0.0f, 60.0f));
 
 #if WITH_EDITORONLY_DATA
+	StateEffectAnchorArrow = CreateEditorOnlyDefaultSubobject<UArrowComponent>(
+		TEXT("StateEffectAnchorArrow"));
+	if (StateEffectAnchorArrow)
+	{
+		StateEffectAnchorArrow->SetupAttachment(StateEffectAnchor);
+		StateEffectAnchorArrow->ArrowColor = FColor(255, 180, 60);
+		StateEffectAnchorArrow->bIsScreenSizeScaled = true;
+		StateEffectAnchorArrow->SetHiddenInGame(true);
+	}
+
 	StoryAnchorArrow = CreateEditorOnlyDefaultSubobject<UArrowComponent>(TEXT("StoryAnchorArrow"));
 	if (StoryAnchorArrow)
 	{
@@ -236,12 +249,13 @@ void ABalhwajeomEvidenceActor::ApplyStateVisuals(
 
 	ActiveStateEffect = UNiagaraFunctionLibrary::SpawnSystemAttached(
 		Effect,
-		EvidenceMesh,
+		StateEffectAnchor,
 		NAME_None,
 		FVector::ZeroVector,
 		FRotator::ZeroRotator,
 		EAttachLocation::SnapToTarget,
 		/*bAutoDestroy*/ true);
+
 }
 
 void ABalhwajeomEvidenceActor::ReportStateMeshPivotShift(

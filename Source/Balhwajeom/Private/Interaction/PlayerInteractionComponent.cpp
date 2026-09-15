@@ -22,6 +22,31 @@
 #include "Story/StoryStateTags.h"
 
 
+namespace
+{
+	void RestoreGameInputAfterInspectionMessage(const UActorComponent* InteractionComponent)
+	{
+		const APawn* OwnerPawn = InteractionComponent
+			? Cast<APawn>(InteractionComponent->GetOwner())
+			: nullptr;
+		APlayerController* PlayerController = OwnerPawn
+			? Cast<APlayerController>(OwnerPawn->GetController())
+			: nullptr;
+		if (!IsValid(PlayerController) || !PlayerController->IsLocalController())
+		{
+			return;
+		}
+
+		// The legacy BPC_PlayerInteraction focuses WBP_InspectionMessage when the
+		// delegate fires. Keep that request valid, then return input to gameplay. The
+		// message stays visible, but its OnKeyDown cannot consume the next F.
+		FInputModeGameOnly InputMode;
+		InputMode.SetConsumeCaptureMouseDown(false);
+		PlayerController->SetInputMode(InputMode);
+	}
+}
+
+
 UPlayerInteractionComponent::UPlayerInteractionComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -444,7 +469,13 @@ bool UPlayerInteractionComponent::RequestInspect()
 			if (TryInspect(InspectionText))
 			{
 				OnInspectionSucceeded.Broadcast(InspectionText);
-				BalhwajeomItemInspection::TryInspect(FocusedItemActor.Get(), Cast<APawn>(GetOwner()));
+				RestoreGameInputAfterInspectionMessage(this);
+
+				// A successful investigation interaction consumes this input completely.
+				// Do not chain the separate item-inspection modal after it: that modal needs
+				// another F to close and turns every evidence -> next target transition into
+				// an unintended two-step interaction. The item inspector remains the fallback
+				// below when the evidence has no investigation interaction to execute.
 				return true;
 			}
 		}
@@ -485,6 +516,7 @@ bool UPlayerInteractionComponent::RequestInspect()
 	}
 
 	OnInspectionSucceeded.Broadcast(InspectionText);
+	RestoreGameInputAfterInspectionMessage(this);
 
 	return true;
 }
