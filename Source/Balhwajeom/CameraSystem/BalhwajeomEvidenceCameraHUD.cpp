@@ -10,12 +10,13 @@
 #include "BalhwajeomPhotoCameraComponent.h"
 #include "BalhwajeomCameraPlayerController.h"
 #include "BalhwajeomEvidenceActor.h"
+#include "BalhwajeomEvidenceFocusGuideLayout.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Image.h"
-#include "Components/TextBlock.h"
 #include "Interaction/InspectionComponent.h"
 #include "GameFramework/Pawn.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
+#include "MultiShadowText.h"
 #include "UObject/ConstructorHelpers.h"
 
 ABalhwajeomEvidenceCameraHUD::ABalhwajeomEvidenceCameraHUD()
@@ -262,7 +263,7 @@ bool ABalhwajeomEvidenceCameraHUD::EnsureFocusGuideWidget()
 
 	FocusGuideStatusImage = Cast<UImage>(
 		FocusGuideWidget->GetWidgetFromName(TEXT("UseCamera")));
-	FocusGuideLabelText = Cast<UTextBlock>(
+	FocusGuideLabelText = Cast<UMultiShadowTextWidget>(
 		FocusGuideWidget->GetWidgetFromName(TEXT("LabelText")));
 	FocusGuideWidget->AddToViewport(100);
 	FocusGuideWidget->SetVisibility(ESlateVisibility::Collapsed);
@@ -296,7 +297,9 @@ void ABalhwajeomEvidenceCameraHUD::UpdateFocusGuideWidget(
 		UTexture2D* StatusTexture = bAlreadyCaptured
 			? PhotoCapturedIcon.Get()
 			: PhotoRequiredIcon.Get();
-		FocusGuideStatusImage->SetBrushFromTexture(StatusTexture, true);
+		BalhwajeomEvidenceFocusGuideLayout::ApplyStatusTexture(
+			FocusGuideStatusImage,
+			StatusTexture);
 		FocusGuideStatusImage->SetVisibility(
 			bShowStatusIcon && StatusTexture
 				? ESlateVisibility::HitTestInvisible
@@ -311,10 +314,10 @@ void ABalhwajeomEvidenceCameraHUD::UpdateFocusGuideWidget(
 				: ESlateVisibility::Collapsed);
 	}
 
-	// UseCamera is a 50x50 image at the left edge of the widget. Offset it so
+	// UseCamera is a 67x50 image at the left edge of the widget. Offset it so
 	// the icon remains centered on the guide point while LabelText extends right.
 	FocusGuideWidget->SetPositionInViewport(
-		GuidePosition + FVector2D(-25.0f, -25.0f),
+		BalhwajeomEvidenceFocusGuideLayout::CalculateWidgetPosition(GuidePosition),
 		true);
 	FocusGuideWidget->SetRenderOpacity(FMath::Clamp(GuideOpacity, 0.0f, 1.0f));
 	FocusGuideWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
