@@ -13,6 +13,7 @@
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
+#include "Investigation/EvidenceDefinitions.h"
 #include "ItemInspection/JMInspectableComponent.h"
 #include "ItemInspection/JMItemInspectionData.h"
 #include "Kismet/GameplayStatics.h"
@@ -26,6 +27,13 @@ struct FEvidenceActorTestAccessor
 	static void Enable3DInspection(ABalhwajeomEvidenceActor* Evidence)
 	{
 		Evidence->bEnable3DInspection = true;
+	}
+	static void SetCurrentStateDisables3DInspection(
+		ABalhwajeomEvidenceActor* Evidence,
+		const bool bDisabled)
+	{
+		Evidence->bCurrentStateDisables3DInspection = bDisabled;
+		Evidence->ConfigureItemInspection();
 	}
 	static void SetEvidenceInstanceID(
 		ABalhwajeomEvidenceActor* Evidence,
@@ -118,6 +126,34 @@ struct FEvidenceActorTestAccessor
 	}
 
 };
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FEvidenceState3DInspectionPolicyTest,
+	"Balhwajeom.Camera.Evidence.State3DInspectionPolicy",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter)
+
+bool FEvidenceState3DInspectionPolicyTest::RunTest(const FString& Parameters)
+{
+	const FEvidenceStateDefinition DefaultState;
+	TestFalse(
+		TEXT("Existing states keep 3D inspection allowed by default"),
+		DefaultState.bDisable3DInspection);
+	TestTrue(
+		TEXT("Actor opt-in enables 3D inspection in an allowed state"),
+		ABalhwajeomEvidenceActor::ShouldEnable3DInspectionForState(true, true, false));
+	TestFalse(
+		TEXT("The active state can disable actor-authored 3D inspection"),
+		ABalhwajeomEvidenceActor::ShouldEnable3DInspectionForState(true, true, true));
+	TestFalse(
+		TEXT("State allowance cannot bypass the actor opt-in"),
+		ABalhwajeomEvidenceActor::ShouldEnable3DInspectionForState(false, true, false));
+	TestFalse(
+		TEXT("State allowance cannot bypass progression locks"),
+		ABalhwajeomEvidenceActor::ShouldEnable3DInspectionForState(true, false, false));
+	return true;
+}
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -346,6 +382,18 @@ bool FEvidencePhotoCaptureRefreshesIconTest::RunTest(const FString& Parameters)
 			TestTrue(TEXT("Evidence mesh should become the fallback preview mesh"),
 				ItemInspection->InspectionData->PreviewMesh.Get() == (EvidenceMesh ? EvidenceMesh->GetStaticMesh().Get() : nullptr));
 		}
+
+		FEvidenceActorTestAccessor::SetCurrentStateDisables3DInspection(Evidence, true);
+		TestFalse(
+			TEXT("A state can disable an actor-authored 3D inspection"),
+			ItemInspection->bInspectionEnabled);
+		TestNull(
+			TEXT("A state-disabled inspector releases its runtime inspection data"),
+			ItemInspection->InspectionData.Get());
+		FEvidenceActorTestAccessor::SetCurrentStateDisables3DInspection(Evidence, false);
+		TestTrue(
+			TEXT("Leaving the disabled state restores actor-authored 3D inspection"),
+			ItemInspection->bInspectionEnabled);
 	}
 
 	FEvidenceActorTestAccessor::SetDistanceState(
