@@ -808,17 +808,22 @@ namespace TabletDesigner
 			PhotoScale->SetContent(PreviewImage);
 			Place(Canvas, PhotoScale, 73.0f, 127.0f, 896.0f, 509.0f, 3);
 
+			// Height raised 145->190 and row gap 5->8: longer analysis sentences (4-6 word
+			// blanks, some with an authored line break) wrap to 2-3 rows whose actual height
+			// exceeded the old 145px box, so the later rows spilled past it and overlapped
+			// whatever sat below. TXT_PuzzleFeedback is pushed down by the same 45px so it
+			// still clears the taller box.
 			UWrapBox* SentenceBuilder = Make<UWrapBox>(TEXT("WB_SentenceBuilder"), true);
-			SentenceBuilder->SetInnerSlotPadding(FVector2D(2.0f, 5.0f));
+			SentenceBuilder->SetInnerSlotPadding(FVector2D(2.0f, 8.0f));
 			SentenceBuilder->SetVisibility(ESlateVisibility::Collapsed);
-			Place(Canvas, SentenceBuilder, 258.0f, 665.0f, 560.0f, 145.0f, 6);
+			Place(Canvas, SentenceBuilder, 258.0f, 665.0f, 560.0f, 190.0f, 6);
 
 			UTextBlock* Body = MakeText(
 				TEXT("TXT_PopupBody"), TEXT("분석 문장"), 27, FLinearColor::White, true);
 			Body->SetJustification(ETextJustify::Center);
 			Body->SetAutoWrapText(true);
 			Body->SetShadowOffset(FVector2D::ZeroVector);
-			Place(Canvas, Body, 258.0f, 665.0f, 560.0f, 145.0f, 5);
+			Place(Canvas, Body, 258.0f, 665.0f, 560.0f, 190.0f, 5);
 
 			UTextBlock* Feedback = MakeText(
 				TEXT("TXT_PuzzleFeedback"), TEXT("잘못된 증거인 것 같다."), 17,
@@ -826,7 +831,7 @@ namespace TabletDesigner
 			Feedback->SetJustification(ETextJustify::Center);
 			Feedback->SetVisibility(ESlateVisibility::Collapsed);
 			Feedback->SetShadowOffset(FVector2D::ZeroVector);
-			Place(Canvas, Feedback, 250.0f, 818.0f, 580.0f, 30.0f, 7);
+			Place(Canvas, Feedback, 250.0f, 863.0f, 580.0f, 30.0f, 7);
 
 			// Keep the same two-column DT_Words layout and hover/drag treatment as the statement.
 			UScrollBox* WordScroll = Make<UScrollBox>(TEXT("SB_PuzzleWords"));

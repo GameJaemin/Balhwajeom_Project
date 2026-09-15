@@ -156,7 +156,14 @@ void UBalhwajeomCapturePhotoWidget::PresentCapture(
 		for (const FText& Keyword : GrantedKeywords)
 		{
 			UBorder* Pill = NewObject<UBorder>(KeywordList);
-			Pill->SetBrushColor(KeywordBackgroundColor);
+			if (KeywordBackgroundTexture)
+			{
+				Pill->SetBrushFromTexture(KeywordBackgroundTexture);
+			}
+			else
+			{
+				Pill->SetBrushColor(KeywordBackgroundColor);
+			}
 			Pill->SetPadding(FMargin(20.0f, 10.0f));
 
 			UTextBlock* Label = NewObject<UTextBlock>(Pill);
