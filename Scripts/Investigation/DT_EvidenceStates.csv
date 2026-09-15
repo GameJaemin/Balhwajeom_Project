@@ -1,4 +1,4 @@
-Name,StateID,ObjectID,StateName,InteractionBehavior,InteractionPresentation,NextStateID,InteractionText,KeywordDocumentID,StateMesh,StateEffect,FarLabel,MidLabel,NearLabel,bCanCapture,PhotoID,PostCaptureStateID,MinimumFocusDistanceOffset,MaximumFocusDistanceOffset
+Name,StateID,ObjectID,StateName,InteractionBehavior,InteractionPresentation,NextStateID,InteractionText,KeywordDocumentID,StateMesh,StateEffect,FarLabel,MidLabel,NearLabel,bCanCapture,PhotoID,PostCaptureStateID ,MinimumFocusDistanceOffset,MaximumFocusDistanceOffset
 STATE_01_001_DUST,STATE_01_001_DUST,OBJ_01_001,먼지 쌓인 형의 돌 사진,ChangeState,SimpleText,STATE_01_001_CLEAR,사진의 먼지를 닦았다.,,,,,사진,먼지 덮인 사진,FALSE,,,0,0
 STATE_01_001_CLEAR,STATE_01_001_CLEAR,OBJ_01_001,형의 돌 사진,None,SimpleText,,,,,,,사진,첫째 형의 돌 사진,TRUE,PHOTO_01_001,STATE_01_001_MEMORY,0,0
 STATE_01_001_MEMORY,STATE_01_001_MEMORY,OBJ_01_001,첫째인 형의 돌 사진,PlayPhotoStory,None,,,,,,,사진,첫째 형의 돌 사진,FALSE,,,0,0
@@ -24,7 +24,7 @@ STATE_01_011_NORMAL,STATE_01_011_NORMAL,OBJ_01_011,화장품,None,None,,,,,,,화
 STATE_01_011_MEMORY,STATE_01_011_MEMORY,OBJ_01_011,여동생이 몰래 산 화장품,PlayPhotoStory,None,,,,,,,화장품,녹아내린 화장품,FALSE,,,0,0
 STATE_01_012_NORMAL,STATE_01_012_NORMAL,OBJ_01_012,책,None,None,,,,,,,책,소설책,TRUE,PHOTO_01_012,,0,0
 STATE_01_013_NORMAL,STATE_01_013_NORMAL,OBJ_01_013,베개,None,None,,,,,,,베개,검게 타버린 배개,TRUE,PHOTO_01_013,STATE_01_013_MEMORY,0,0
-STATE_01_013_MEMORY,STATE_01_013_MEMORY,OBJ_01_013,검게 타버린 베개,Repeatable,WorldStory,,,,,,,베개,검게 타버린 배개,FALSE,PHOTO_01_013,,0,0
+STATE_01_013_MEMORY,STATE_01_013_MEMORY,OBJ_01_013,검게 타버린 베개,PlayPhotoStory,None,,,,,,,베개,검게 타버린 배개,FALSE,,,0,0
 STATE_01_014_CLOSED,STATE_01_014_CLOSED,OBJ_01_014,닫혀 있는 방문,ChangeState,SimpleText,STATE_01_014_OPEN,방문을 열었다.,,,,,방문,여동생의 방문,TRUE,PHOTO_01_014,,0,0
 STATE_01_014_OPEN,STATE_01_014_OPEN,OBJ_01_014,열려 있는 방문,None,None,,,,,,,방문,여동생의 방문,TRUE,PHOTO_01_014,,0,0
 STATE_01_015_NORMAL,STATE_01_015_NORMAL,OBJ_01_015,보조배터리,None,None,,,,,,,보조 배터리,그을린 보조배터리,TRUE,PHOTO_01_015,STATE_01_015_MEMORY,0,0
@@ -51,5 +51,3 @@ STATE_01_025_NORMAL,STATE_01_025_NORMAL,OBJ_01_025,책장 쪽지,Repeatable,Keyw
 STATE_01_025_MEMORY,STATE_01_025_MEMORY,OBJ_01_025,어머니가 남겨놓은 쪽지,PlayPhotoStory,None,,,,,,,쪽지,책장에 붙어 있는 쪽지,FALSE,,,0,0
 STATE_01_026_NORMAL,STATE_01_026_NORMAL,OBJ_01_026,침대,Repeatable,None,,,,,,,침대,타버린 침대,FALSE,,,0,0
 STATE_01_027_NORMAL,STATE_01_027_NORMAL,OBJ_01_027,책장,None,None,,,,,,,책장,그을린 책장,TRUE,PHOTO_01_027,,0,0
-STATE_Obstacle_Phase01_NORMAL,STATE_Obstacle_Phase01_NORMAL,Obstacle_Phase01,Obstacle,Repeatable,SimpleText,,아직 모든 의문이 해결되지 않았다.,,,,,잔해,잔해,FALSE,,,0,0
-STATE_Obstacle_Phase02_NORMAL,STATE_Obstacle_Phase02_NORMAL,Obstacle_Phase02,Obstacle,Repeatable,SimpleText,,아직 모든 의문이 해결되지 않았다.,,,,,잔해,잔해,FALSE,,,0,0
