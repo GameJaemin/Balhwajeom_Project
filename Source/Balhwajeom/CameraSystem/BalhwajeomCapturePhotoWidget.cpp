@@ -73,9 +73,9 @@ namespace
 
 	float EvaluateAeExitPositionEase(const float LinearAlpha)
 	{
-		// Requested AE exit position: outgoing speed 0/influence 90%,
-		// incoming speed 0/influence 0%.
-		return EvaluateAeZeroSpeedTemporalEase(LinearAlpha, 90.0f, 0.0f);
+		// Requested AE exit position: outgoing speed 0/influence 88%,
+		// incoming speed 0/influence 10%.
+		return EvaluateAeZeroSpeedTemporalEase(LinearAlpha, 88.0f, 10.0f);
 	}
 }
 
@@ -284,6 +284,10 @@ void UBalhwajeomCapturePhotoWidget::ApplyPresentationTimeline(const float Linear
 	const float CardEntryAlpha = FMath::Clamp(
 		Elapsed / FMath::Max(CardEntryDuration, KINDA_SMALL_NUMBER), 0.0f, 1.0f);
 	ApplyEntryTransform(CardComposite, CardEntryAlpha);
+	if (Elapsed < ExitStartTime)
+	{
+		UpdateResolvedExitDistance();
+	}
 
 	const float ExitAlpha = FMath::Clamp(
 		(Elapsed - ExitStartTime) /
@@ -294,7 +298,8 @@ void UBalhwajeomCapturePhotoWidget::ApplyPresentationTimeline(const float Linear
 	{
 		const float EasedExitAlpha = EvaluateAeExitPositionEase(ExitAlpha);
 		FWidgetTransform RootTransform;
-		RootTransform.Translation = ExitOffset * EasedExitAlpha;
+		RootTransform.Translation =
+			FVector2D(ExitOffset.X, ResolvedExitDistanceY) * EasedExitAlpha;
 		RootTransform.Scale = FVector2D(1.0f, 1.0f);
 		CardRoot->SetRenderTransform(RootTransform);
 	}
@@ -304,15 +309,15 @@ void UBalhwajeomCapturePhotoWidget::ApplyPresentationTimeline(const float Linear
 		FMath::Max(Duration - FadeOutStartTime, KINDA_SMALL_NUMBER),
 		0.0f,
 		1.0f);
-	const float SharedOpacity = 1.0f - FadeOutAlpha;
+	const float DimmerOpacity = 1.0f - FadeOutAlpha;
 	if (CardComposite)
 	{
-		CardComposite->SetRenderOpacity(SharedOpacity);
+		CardComposite->SetRenderOpacity(1.0f);
 	}
 	if (ScreenDimmer)
 	{
-		// The dimmer keeps its authored position; only its opacity follows the final fade.
-		ScreenDimmer->SetRenderOpacity(SharedOpacity);
+		// The dimmer keeps its authored position and retains the final fade independently.
+		ScreenDimmer->SetRenderOpacity(DimmerOpacity);
 	}
 
 	if (KeywordList && bHasGrantedKeywords)
@@ -333,8 +338,65 @@ void UBalhwajeomCapturePhotoWidget::ApplyPresentationTimeline(const float Linear
 				FMath::Max(KeywordFadeInDuration, KINDA_SMALL_NUMBER),
 				0.0f,
 				1.0f);
-			Keyword->SetRenderOpacity(FadeInAlpha * SharedOpacity);
+			Keyword->SetRenderOpacity(FadeInAlpha);
 		}
+	}
+}
+
+float UBalhwajeomCapturePhotoWidget::CalculateExitDistance(
+	const float ViewportHeight,
+	const float ContentTop,
+	const float MinimumDistance,
+	const float SafetyMargin)
+{
+	const float DistancePastBottom =
+		ViewportHeight - ContentTop + FMath::Max(SafetyMargin, 0.0f);
+	return FMath::Max(FMath::Max(MinimumDistance, 0.0f), DistancePastBottom);
+}
+
+void UBalhwajeomCapturePhotoWidget::UpdateResolvedExitDistance()
+{
+	const FGeometry& ViewportGeometry = GetCachedGeometry();
+	const float ViewportHeight = ViewportGeometry.GetLocalSize().Y;
+	if (ViewportHeight <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	float ContentTop = TNumericLimits<float>::Max();
+	auto AccumulateContentTop = [&ViewportGeometry, &ContentTop](const UWidget* Content)
+	{
+		if (!Content || !Content->IsVisible())
+		{
+			return;
+		}
+
+		const FGeometry& ContentGeometry = Content->GetCachedGeometry();
+		if (ContentGeometry.GetLocalSize().IsNearlyZero())
+		{
+			return;
+		}
+
+		const float LocalTop = ViewportGeometry.AbsoluteToLocal(
+			ContentGeometry.GetAbsolutePosition()).Y;
+		if (FMath::IsFinite(LocalTop))
+		{
+			ContentTop = FMath::Min(ContentTop, LocalTop);
+		}
+	};
+
+	AccumulateContentTop(CardComposite);
+	if (bHasGrantedKeywords)
+	{
+		AccumulateContentTop(KeywordList);
+	}
+	if (ContentTop < TNumericLimits<float>::Max())
+	{
+		ResolvedExitDistanceY = CalculateExitDistance(
+			ViewportHeight,
+			ContentTop,
+			ExitOffset.Y,
+			ExitSafetyMargin);
 	}
 }
 
@@ -356,6 +418,7 @@ void UBalhwajeomCapturePhotoWidget::ApplyEntryTransform(UWidget* Widget, const f
 
 void UBalhwajeomCapturePhotoWidget::ResetPresentation()
 {
+	ResolvedExitDistanceY = FMath::Max(ExitOffset.Y, 0.0f);
 	if (CardRoot)
 	{
 		CardRoot->SetRenderTransform(FWidgetTransform());
