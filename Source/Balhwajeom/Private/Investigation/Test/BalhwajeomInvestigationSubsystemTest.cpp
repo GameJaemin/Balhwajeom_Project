@@ -108,6 +108,8 @@ struct FFixture
 		State.ObjectID = ObjectID;
 		State.InteractionBehavior = EEvidenceInteractionBehavior::Once;
 		State.InteractionPresentation = EEvidenceInteractionPresentation::SimpleText;
+		State.GrantedWordIDs.Add(WordID);
+		State.GrantedWordIDs.Add(AlternateWordID);
 		State.bCanCapture = true;
 		State.PhotoID = PhotoID;
 		EvidenceStates->AddRow(StateID, State);
@@ -693,8 +695,50 @@ bool FInvestigationOnceInteractionTest::RunTest(const FString& Parameters)
 
 	TestTrue(TEXT("Once interaction should begin the first time"), Fixture.Subsystem->BeginEvidenceInteraction(InstanceID, ViewData));
 	TestTrue(TEXT("Once interaction should complete the first time"), Fixture.Subsystem->CompleteEvidenceInteraction(InstanceID, ViewData.StateID));
+	TestTrue(TEXT("Completing an interaction should grant its configured word"),
+		Fixture.Subsystem->HasAcquiredWord(InvestigationSubsystemTests::WordID));
 	TestFalse(TEXT("Completed Once interaction should not begin again"), Fixture.Subsystem->BeginEvidenceInteraction(InstanceID, ViewData));
 	TestFalse(TEXT("Completed Once interaction should not complete again"), Fixture.Subsystem->CompleteEvidenceInteraction(InstanceID, InvestigationSubsystemTests::StateID));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInvestigationInteractionGrantedWordsTest,
+	"Balhwajeom.Investigation.InteractionGrantedWords",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FInvestigationInteractionGrantedWordsTest::RunTest(const FString& Parameters)
+{
+	const InvestigationSubsystemTests::FFixture Fixture;
+	const FGuid InstanceID = Fixture.RegisterTestEvidence();
+	FEvidenceInteractionViewData ViewData;
+	TArray<FName> NewlyGrantedWordIDs;
+	TestTrue(TEXT("Configured interaction should begin"),
+		Fixture.Subsystem->BeginEvidenceInteraction(InstanceID, ViewData));
+	TestTrue(TEXT("Configured interaction should complete"),
+		Fixture.Subsystem->CompleteEvidenceInteractionWithGrantedWords(
+			InstanceID, ViewData.StateID, NewlyGrantedWordIDs));
+	TestEqual(TEXT("Both configured keywords should be reported"),
+		NewlyGrantedWordIDs.Num(), 2);
+	TestTrue(TEXT("Primary keyword should be reported"),
+		NewlyGrantedWordIDs.Contains(InvestigationSubsystemTests::WordID));
+	TestTrue(TEXT("Alternate keyword should be reported"),
+		NewlyGrantedWordIDs.Contains(InvestigationSubsystemTests::AlternateWordID));
+
+	TArray<FAcquiredWordRecord> AcquiredWords;
+	Fixture.Subsystem->GetAcquiredWords(AcquiredWords);
+	const FAcquiredWordRecord* FoundWord = AcquiredWords.FindByPredicate(
+		[](const FAcquiredWordRecord& Candidate)
+		{
+			return Candidate.WordID == InvestigationSubsystemTests::WordID;
+		});
+	if (TestNotNull(TEXT("Granted word record should exist"), FoundWord))
+	{
+		TestEqual(TEXT("Interaction keyword should preserve its source type"),
+			FoundWord->SourceType, EWordAcquisitionSource::EvidenceInteraction);
+		TestEqual(TEXT("Interaction keyword should preserve its source state"),
+			FoundWord->SourceID, InvestigationSubsystemTests::StateID);
+	}
 	return true;
 }
 

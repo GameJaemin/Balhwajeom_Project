@@ -468,8 +468,11 @@ bool UPlayerInteractionComponent::RequestInspect()
 			FText InspectionText;
 			if (TryInspect(InspectionText))
 			{
-				OnInspectionSucceeded.Broadcast(InspectionText);
-				RestoreGameInputAfterInspectionMessage(this);
+				if (!InspectionText.IsEmpty())
+				{
+					OnInspectionSucceeded.Broadcast(InspectionText);
+					RestoreGameInputAfterInspectionMessage(this);
+				}
 
 				// Reaching this branch already means the actor explicitly opted into item
 				// inspection (HasFocusedItemInspection). Complete its investigation-side
@@ -517,8 +520,11 @@ bool UPlayerInteractionComponent::RequestInspect()
 		return false;
 	}
 
-	OnInspectionSucceeded.Broadcast(InspectionText);
-	RestoreGameInputAfterInspectionMessage(this);
+	if (!InspectionText.IsEmpty())
+	{
+		OnInspectionSucceeded.Broadcast(InspectionText);
+		RestoreGameInputAfterInspectionMessage(this);
+	}
 
 	return true;
 }
