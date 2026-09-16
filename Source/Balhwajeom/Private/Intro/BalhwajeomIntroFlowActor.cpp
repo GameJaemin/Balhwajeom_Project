@@ -2,6 +2,7 @@
 
 #include "CameraSystem/BalhwajeomCameraPlayerController.h"
 #include "Components/AudioComponent.h"
+#include "Interaction/BalhwajeomGateDoorActor.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Investigation/EvidenceDefinitions.h"
 #include "GameFramework/Pawn.h"
@@ -11,6 +12,7 @@
 #include "LevelSequenceActor.h"
 #include "LevelSequencePlayer.h"
 #include "MediaPlayer.h"
+#include "MediaSoundComponent.h"
 #include "MediaSource.h"
 #include "MediaTexture.h"
 #include "MovieSceneSequencePlaybackSettings.h"
@@ -72,15 +74,20 @@ void ABalhwajeomIntroFlowActor::BeginPlay()
 	MainMenuWidget->OnStartRequested.AddDynamic(this, &ThisClass::HandleStartRequested);
 	ScreenFadeWidget->OnFadeToBlackFinished.AddDynamic(this, &ThisClass::HandleFadeToBlackFinished);
 	ScreenFadeWidget->OnFadeFromBlackFinished.AddDynamic(this, &ThisClass::HandleFadeFromBlackFinished);
+	ScreenFadeWidget->OnFadeProgress.AddDynamic(this, &ThisClass::HandleFadeProgress);
 	MainMenuWidget->AddToPlayerScreen(1000);
 	ScreenFadeWidget->SetBlackImmediately();
 	ScreenFadeWidget->AddToPlayerScreen(9999);
 
 	SetGameplayEnabled(false);
-	if (BGM)
+	if (USoundBase* const TitleTrack = Title_BGM ? Title_BGM.Get() : BGM.Get())
 	{
-		BGMAudioComponent->SetSound(BGM);
+		BGMAudioComponent->SetSound(TitleTrack);
 		BGMAudioComponent->FadeIn(BGMFadeDuration, BGMVolume);
+	}
+	if (BGMTriggerDoor)
+	{
+		BGMTriggerDoor->OnDoorFullyOpened.AddUniqueDynamic(this, &ThisClass::HandleBGMTriggerDoorOpened);
 	}
 	State = EBalhwajeomIntroState::Title;
 	ScreenFadeWidget->FadeFromBlack(InitialFadeDuration);
@@ -88,6 +95,7 @@ void ABalhwajeomIntroFlowActor::BeginPlay()
 
 void ABalhwajeomIntroFlowActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (BGMTriggerDoor) BGMTriggerDoor->OnDoorFullyOpened.RemoveAll(this);
 	if (SequencePlayer) SequencePlayer->OnFinished.RemoveAll(this);
 	if (IntroMediaPlayer)
 	{
@@ -127,6 +135,17 @@ void ABalhwajeomIntroFlowActor::HandleStartRequested()
 	State = EBalhwajeomIntroState::TransitionToCinematic;
 	if (BGMAudioComponent->IsPlaying()) BGMAudioComponent->FadeOut(BGMFadeDuration, 0.0f);
 	ScreenFadeWidget->FadeToBlack(TransitionFadeDuration);
+}
+
+void ABalhwajeomIntroFlowActor::HandleBGMTriggerDoorOpened()
+{
+	if (!BGM_Sound)
+	{
+		return;
+	}
+	BGMAudioComponent->Stop();
+	BGMAudioComponent->SetSound(BGM_Sound);
+	BGMAudioComponent->FadeIn(BGMFadeDuration, BGMVolume);
 }
 
 void ABalhwajeomIntroFlowActor::ResetInvestigationPhotosIfRequested()
@@ -192,6 +211,17 @@ void ABalhwajeomIntroFlowActor::HandleFadeFromBlackFinished()
 	}
 }
 
+void ABalhwajeomIntroFlowActor::HandleFadeProgress(float Opacity)
+{
+	if (!bFadeCinematicAudioWithScreen)
+	{
+		return;
+	}
+
+	// Track the overlay exactly: fully clear keeps full volume, fully black is silent.
+	SetCinematicAudioVolume(FMath::Clamp(1.0f - Opacity, 0.0f, 1.0f));
+}
+
 void ABalhwajeomIntroFlowActor::StartCinematic()
 {
 	if (MainMenuWidget)
@@ -239,6 +269,8 @@ bool ABalhwajeomIntroFlowActor::StartMediaCinematic()
 	IntroMediaPlayer->OnMediaOpenFailed.AddDynamic(this, &ThisClass::HandleMediaOpenFailed);
 	IntroMediaPlayer->OnEndReached.AddDynamic(this, &ThisClass::HandleMediaEndReached);
 	IntroMediaPlayer->SetLooping(false);
+	bFadeCinematicAudioWithScreen = false;
+	SetCinematicAudioVolume(1.0f);
 	State = EBalhwajeomIntroState::Cinematic;
 	if (!IntroMediaPlayer->OpenSource(IntroMediaSource))
 	{
@@ -300,6 +332,24 @@ void ABalhwajeomIntroFlowActor::HandleMediaEndReached()
 	}
 }
 
+void ABalhwajeomIntroFlowActor::SetCinematicAudioVolume(float Volume)
+{
+	// BP_IntroFlowController routes movie audio through a Blueprint-added MediaSoundComponent.
+	if (UMediaSoundComponent* MediaSound = FindComponentByClass<UMediaSoundComponent>())
+	{
+		MediaSound->SetVolumeMultiplier(Volume);
+	}
+	// Covers setups that output through the OS mixer instead of a sound component.
+	if (IntroMediaPlayer)
+	{
+		IntroMediaPlayer->SetNativeVolume(Volume);
+	}
+	if (EndingMediaPlayer)
+	{
+		EndingMediaPlayer->SetNativeVolume(Volume);
+	}
+}
+
 void ABalhwajeomIntroFlowActor::HandleSkipRequested()
 {
 	if (State != EBalhwajeomIntroState::Cinematic && State != EBalhwajeomIntroState::Ending)
@@ -307,19 +357,26 @@ void ABalhwajeomIntroFlowActor::HandleSkipRequested()
 		return;
 	}
 
+	// The fade widget is added at ZOrder 9999 and the cinematic widget at 2000, so the movie stays
+	// on screen while the fade covers it. Closing the player or removing the widget here would show
+	// the level for a frame before the fade even starts; both happen once the screen is fully black
+	// (EnterGameplayAtBlack for the intro, the level reload for the ending).
 	UMediaPlayer* ActiveMediaPlayer = State == EBalhwajeomIntroState::Ending
 		? EndingMediaPlayer.Get() : IntroMediaPlayer.Get();
 	if (ActiveMediaPlayer)
 	{
+		// Detach the playback notifications so a natural end during the fade cannot start a second
+		// transition. The player itself keeps rendering into the widget.
 		ActiveMediaPlayer->OnMediaOpened.RemoveAll(this);
 		ActiveMediaPlayer->OnMediaOpenFailed.RemoveAll(this);
 		ActiveMediaPlayer->OnEndReached.RemoveAll(this);
-		ActiveMediaPlayer->Close();
 	}
+	// Duck the movie audio in step with the fade rather than cutting it, so picture and sound
+	// disappear together. HandleFadeProgress drives the volume from here on.
+	bFadeCinematicAudioWithScreen = true;
 	if (CinematicVideoWidget)
 	{
-		CinematicVideoWidget->RemoveFromParent();
-		CinematicVideoWidget = nullptr;
+		CinematicVideoWidget->SetSkipEnabled(false);
 	}
 
 	if (State == EBalhwajeomIntroState::Ending)
@@ -379,6 +436,8 @@ void ABalhwajeomIntroFlowActor::BeginGameplayTransition()
 
 void ABalhwajeomIntroFlowActor::EnterGameplayAtBlack()
 {
+	// Release the ducking before the fade back in, or it would ramp the closed movie's audio up.
+	bFadeCinematicAudioWithScreen = false;
 	if (IntroMediaPlayer)
 	{
 		IntroMediaPlayer->OnMediaOpened.RemoveAll(this);
@@ -498,6 +557,8 @@ bool ABalhwajeomIntroFlowActor::StartEndingMediaCinematic()
 	EndingMediaPlayer->OnMediaOpenFailed.AddDynamic(this, &ThisClass::HandleMediaOpenFailed);
 	EndingMediaPlayer->OnEndReached.AddDynamic(this, &ThisClass::HandleMediaEndReached);
 	EndingMediaPlayer->SetLooping(false);
+	bFadeCinematicAudioWithScreen = false;
+	SetCinematicAudioVolume(1.0f);
 	State = EBalhwajeomIntroState::Ending;
 	if (!EndingMediaPlayer->OpenSource(EndingMediaSource))
 	{

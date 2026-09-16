@@ -450,8 +450,19 @@ public:
 	void SetFilled(FName InWordID, const FText& WordText);
 	void SetEmpty();
 	void SetErrorStyle(bool bInError);
+	/** Tints a filled blank's word gold as a brief "correct" flash, played right before the whole
+	 * sentence fades away in place in ValidateActivePuzzle's success transition. */
+	void SetSuccessStyle(bool bInSuccess);
 	int32 GetSlotIndex() const { return SlotIndex; }
 	bool IsFilled() const { return !FilledWordID.IsNone(); }
+
+	/** Read back what's currently rendered, so the success transition's random-fade character grid
+	 * (see UBalhwajeomTabletWidget::BuildRandomFadeCharacters) can reproduce this blank's filled
+	 * word without a second word-definition lookup. Defined in the .cpp -- UTextBlock is only
+	 * forward-declared here. */
+	FText GetDisplayText() const;
+	FSlateFontInfo GetDisplayFont() const;
+	FSlateColor GetDisplayColor() const;
 
 	UPROPERTY()
 	FOnTabletBlankDropped OnBlankDropped;
@@ -619,6 +630,8 @@ public:
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void OnAnimationFinished_Implementation(const UWidgetAnimation* Animation) override;
+	/** Advances the flash/hold/converge/reveal puzzle-success transition; no-ops while inactive. */
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tablet|Messenger", meta = (ClampMin = "0"))
 	int32 UnreadMessageCount = 0;
@@ -671,12 +684,62 @@ private:
 	void SetPhotoPuzzleErrorStyle(bool bError);
 	void ApplyPopupBodyResultStyle(bool bIsSolvedAnalysisResult);
 	void BuildPhotoSlots(const FSentenceDefinition& Sentence);
+	/** Everything HidePuzzleControls used to do except clearing WB_SentenceBuilder itself -- split out
+	 * so a solved puzzle's success transition can hide the candidate list immediately while keeping
+	 * the filled sentence on screen for the flash/hold/converge stages. */
+	void HidePuzzleWordAndPhotoControls();
+	/** The WB_SentenceBuilder-clearing half of the old HidePuzzleControls; also used once the success
+	 * transition's converge stage finishes with the sentence widgets. */
+	void ClearSentenceBuilder();
 	void HidePuzzleControls();
 	void ValidateActivePuzzle(bool bExplicitStatementSubmit);
 	/** Runs ValidateActivePuzzle once every word blank and photo slot has something in it, so
 	 * failure feedback ("잘못된 증거인 것 같다") only appears after the puzzle is fully filled in,
 	 * not after every single drop. */
 	void EvaluatePuzzleIfComplete();
+	/** Plays the gold flash -> hold -> random-per-character fade-out -> random-per-character fade-in
+	 * reveal transition for a solved puzzle, instead of swapping straight to ResultText.
+	 * TXT_PopupBody ends up showing ResultText (styled per bApplyAnalysisResultStyle) once the
+	 * sequence finishes. SentenceTemplate is the solved sentence's own template (Sentence.
+	 * SentenceTemplate), used to rebuild what's currently filled in for the Converge stage. */
+	void PlayPuzzleSuccessTransition(
+		const FText& ResultText, const FText& SentenceTemplate, bool bApplyAnalysisResultStyle);
+	void BeginPuzzleConvergeStage();
+	void TickPuzzleConvergeStage();
+	void BeginResultRevealStage();
+	void TickResultRevealStage();
+	/** Brief crossfade hand-off once every character has finished fading in: WB_SentenceBuilder's
+	 * character grid fades out while TXT_PopupBody (already showing PendingResultText) fades in, so
+	 * the swap isn't an instant hard cut -- masks the two widgets not necessarily sharing the exact
+	 * same on-screen position. */
+	void BeginHandoffStage();
+	void TickHandoffStage();
+	/** Reconstructs the flat (line-breaks collapsed to spaces) text currently filled into
+	 * WB_SentenceBuilder -- SentenceTemplate's segments with each [] replaced by that slot's
+	 * blank's current word (ActiveBlanksBySlot/GetDisplayText) -- for the Converge stage's
+	 * random-fade character grid. */
+	FString BuildFlatSolvedSentenceText(const FText& SentenceTemplate) const;
+	/** Replaces WB_SentenceBuilder's children with Text laid out one line per authored "\n" (each a
+	 * UHorizontalBox of one-grapheme UTextBlocks, so a line never wraps mid-word), pinned to the same
+	 * fixed width BuildSentenceBuilder uses so this doesn't shift the block sideways when it swaps
+	 * in. Each character starts at bStartVisible's opacity with a random fade start time within
+	 * TotalWindow (recorded into RandomFadeChars for TickRandomFadeChars to animate), and each line
+	 * is aligned per bLeftAligned to match whatever text it's standing in for. LinePadding is extra
+	 * bottom padding per line (BuildSentenceBuilder's own LineSpacing for Converge, so the swap from
+	 * the puzzle text doesn't tighten line gaps; 0 for Reveal, which instead matches however
+	 * TXT_PopupBody naturally spaces its lines). Used by both Converge (fading the existing solved
+	 * puzzle text out) and Reveal (fading ResultText in). */
+	void BuildRandomFadeCharacters(
+		const FString& Text,
+		const FSlateFontInfo& Font,
+		const FSlateColor& Color,
+		bool bStartVisible,
+		float TotalWindow,
+		bool bLeftAligned,
+		float LinePadding);
+	/** Advances every RandomFadeChars entry toward 1 (bFadeIn) or 0 opacity over its own
+	 * PuzzleSuccessCharFadeDuration window starting at its random delay. */
+	void TickRandomFadeChars(bool bFadeIn);
 	bool ShowPopup(
 		const FText& Title,
 		const FText& Body,
@@ -965,4 +1028,36 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UBalhwajeomTabletDetailWidget> ActiveDetailWidget;
+
+	enum class EPuzzleSuccessStage : uint8
+	{
+		Inactive,
+		Flash,
+		Hold,
+		Converge,
+		Reveal,
+		/** Brief crossfade from the random-fade character grid to the real TXT_PopupBody, so the
+		 * handoff isn't an instant hard cut (see BeginHandoffStage). */
+		Handoff
+	};
+
+	/** Drives ValidateActivePuzzle's success transition; advanced in NativeTick while not Inactive. */
+	EPuzzleSuccessStage PuzzleSuccessStage = EPuzzleSuccessStage::Inactive;
+	float PuzzleSuccessStageElapsed = 0.0f;
+	FText PendingResultText;
+	/** The solved sentence's own SentenceTemplate, kept only to rebuild BeginPuzzleConvergeStage's
+	 * flat filled-in text (see BuildFlatSolvedSentenceText) once ActiveBlanksBySlot/
+	 * ActiveSentenceSegments are still populated at that point. */
+	FText PendingSentenceTemplate;
+	bool bPendingApplyAnalysisResultStyle = false;
+
+	/** One character mid-Converge/Reveal, and the random delay (within that stage's total duration)
+	 * before it starts its own PuzzleSuccessCharFadeDuration fade. Built by BuildRandomFadeCharacters,
+	 * advanced by TickRandomFadeChars. */
+	struct FRandomFadeChar
+	{
+		TWeakObjectPtr<UTextBlock> TextBlock;
+		float StartDelay = 0.0f;
+	};
+	TArray<FRandomFadeChar> RandomFadeChars;
 };

@@ -121,6 +121,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Camera")
 	static bool CreateCapturePhotoWidgetBlueprint();
 
+	/** Normalizes the designer-authored photo confirmation prompt for the capture-result hold state. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Camera")
+	static bool ConfigureCapturePhotoPromptWidgetBlueprint();
+
 	/** Creates WBP_MainMenu, WBP_ScreenFade, and BP_IntroFlowController. */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Intro")
 	static bool CreateIntroFlowAssets();

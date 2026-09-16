@@ -7,9 +7,12 @@
 #include "HAL/FileManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/ConfigCacheIni.h"
+#include "Misc/DataValidation.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Story/StoryStateTags.h"
+#include "UObject/UnrealType.h"
 
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -105,6 +108,8 @@ struct FFixture
 		State.ObjectID = ObjectID;
 		State.InteractionBehavior = EEvidenceInteractionBehavior::Once;
 		State.InteractionPresentation = EEvidenceInteractionPresentation::SimpleText;
+		State.GrantedWordIDs.Add(WordID);
+		State.GrantedWordIDs.Add(AlternateWordID);
 		State.bCanCapture = true;
 		State.PhotoID = PhotoID;
 		EvidenceStates->AddRow(StateID, State);
@@ -416,6 +421,83 @@ bool FInvestigationChapter01PhaseActivationDataTest::RunTest(
 {
 	const UBalhwajeomInvestigationSettings* Settings =
 		GetDefault<UBalhwajeomInvestigationSettings>();
+	if (!TestNotNull(TEXT("Investigation settings should exist"), Settings))
+	{
+		return false;
+	}
+
+	const UClass* SettingsClass = Settings->GetClass();
+	if (!TestNotNull(
+		TEXT("Phase system toggle should be editable in Investigation settings"),
+		SettingsClass->FindPropertyByName(TEXT("bEnableChapter01PhaseSystem"))) ||
+		!TestNotNull(
+			TEXT("Phase 01 ObjectID list should be editable in Investigation settings"),
+			SettingsClass->FindPropertyByName(TEXT("Phase01ObjectIDs"))) ||
+		!TestNotNull(
+			TEXT("Phase 02 ObjectID list should be editable in Investigation settings"),
+			SettingsClass->FindPropertyByName(TEXT("Phase02ObjectIDs"))) ||
+		!TestNotNull(
+			TEXT("Phase 03 ObjectID list should be editable in Investigation settings"),
+			SettingsClass->FindPropertyByName(TEXT("Phase03ObjectIDs"))))
+	{
+		return false;
+	}
+
+	const TCHAR* SettingsSection =
+		TEXT("/Script/Balhwajeom.BalhwajeomInvestigationSettings");
+	bool bPhaseSystemEnabled = false;
+	TestTrue(
+		TEXT("Chapter 01 phase system toggle should be configured"),
+		GConfig->GetBool(
+			SettingsSection,
+			TEXT("bEnableChapter01PhaseSystem"),
+			bPhaseSystemEnabled,
+			GGameIni));
+	TestTrue(
+		TEXT("Chapter 01 phase system should be enabled by default"),
+		bPhaseSystemEnabled);
+
+	auto ReadConfiguredObjectIDs = [SettingsSection](const TCHAR* PropertyName)
+	{
+		TArray<FString> Values;
+		GConfig->GetArray(SettingsSection, PropertyName, Values, GGameIni);
+
+		TArray<FName> ObjectIDs;
+		ObjectIDs.Reserve(Values.Num());
+		for (const FString& Value : Values)
+		{
+			ObjectIDs.Add(FName(Value));
+		}
+		return ObjectIDs;
+	};
+
+	const TArray<FName> Phase01Objects = ReadConfiguredObjectIDs(
+		TEXT("Phase01ObjectIDs"));
+	const TArray<FName> Phase02Objects = ReadConfiguredObjectIDs(
+		TEXT("Phase02ObjectIDs"));
+	const TArray<FName> Phase03Objects = ReadConfiguredObjectIDs(
+		TEXT("Phase03ObjectIDs"));
+
+	const TArray<FName> ExpectedPhase01Objects = {
+		TEXT("OBJ_01_018"), TEXT("OBJ_01_020"),
+		TEXT("OBJ_01_005"), TEXT("OBJ_01_019")
+	};
+	const TArray<FName> ExpectedPhase02Objects = {
+		TEXT("OBJ_01_004"), TEXT("OBJ_01_022"), TEXT("OBJ_01_021"),
+		TEXT("OBJ_01_025"), TEXT("OBJ_01_024"), TEXT("OBJ_01_023"),
+		TEXT("OBJ_01_015")
+	};
+	const TArray<FName> ExpectedPhase03Objects = {
+		TEXT("OBJ_01_016"), TEXT("OBJ_01_017"), TEXT("OBJ_01_010")
+	};
+
+	TestTrue(TEXT("Phase 01 ObjectIDs should match the authored list"),
+		Phase01Objects == ExpectedPhase01Objects);
+	TestTrue(TEXT("Phase 02 ObjectIDs should match the authored list"),
+		Phase02Objects == ExpectedPhase02Objects);
+	TestTrue(TEXT("Phase 03 ObjectIDs should match the authored list"),
+		Phase03Objects == ExpectedPhase03Objects);
+
 	UDataTable* Definitions = Settings
 		? Settings->EvidenceDefinitionsTable.LoadSynchronous()
 		: nullptr;
@@ -424,58 +506,20 @@ bool FInvestigationChapter01PhaseActivationDataTest::RunTest(
 		return false;
 	}
 
-	const TArray<FName> Phase01Objects = {
-		TEXT("OBJ_01_019"), TEXT("OBJ_01_005"), TEXT("OBJ_01_020")
-	};
-	const TArray<FName> Phase02Objects = {
-		TEXT("OBJ_01_004"), TEXT("OBJ_01_022"), TEXT("OBJ_01_021"),
-		TEXT("OBJ_01_025"), TEXT("OBJ_01_015"), TEXT("OBJ_01_023")
-	};
-	const TArray<FName> Phase03Objects = {
-		TEXT("OBJ_01_017"), TEXT("OBJ_01_016")
-	};
-
-	for (const FName ObjectID : Phase01Objects)
+	TSet<FName> UniqueConfiguredObjectIDs;
+	for (const TArray<FName>* PhaseObjects : {
+		&Phase01Objects, &Phase02Objects, &Phase03Objects })
 	{
-		const FEvidenceDefinition* Definition =
-			Definitions->FindRow<FEvidenceDefinition>(ObjectID, TEXT("PhaseActivationTest"));
-		if (TestNotNull(
-			FString::Printf(TEXT("%s definition should exist"), *ObjectID.ToString()),
-			Definition))
+		for (const FName ObjectID : *PhaseObjects)
 		{
+			TestNotNull(
+				FString::Printf(TEXT("%s definition should exist"), *ObjectID.ToString()),
+				Definitions->FindRow<FEvidenceDefinition>(
+					ObjectID, TEXT("PhaseActivationTest")));
 			TestFalse(
-				FString::Printf(TEXT("%s should be active from phase 01 start"), *ObjectID.ToString()),
-				Definition->RequiredActivationTag.IsValid());
-		}
-	}
-
-	for (const FName ObjectID : Phase02Objects)
-	{
-		const FEvidenceDefinition* Definition =
-			Definitions->FindRow<FEvidenceDefinition>(ObjectID, TEXT("PhaseActivationTest"));
-		if (TestNotNull(
-			FString::Printf(TEXT("%s definition should exist"), *ObjectID.ToString()),
-			Definition))
-		{
-			TestTrue(
-				FString::Printf(TEXT("%s should require phase 02 unlock"), *ObjectID.ToString()),
-				Definition->RequiredActivationTag ==
-					BalhwajeomGameplayTags::Story_Chapter_01_Phase_02_Unlocked);
-		}
-	}
-
-	for (const FName ObjectID : Phase03Objects)
-	{
-		const FEvidenceDefinition* Definition =
-			Definitions->FindRow<FEvidenceDefinition>(ObjectID, TEXT("PhaseActivationTest"));
-		if (TestNotNull(
-			FString::Printf(TEXT("%s definition should exist"), *ObjectID.ToString()),
-			Definition))
-		{
-			TestTrue(
-				FString::Printf(TEXT("%s should require phase 03 unlock"), *ObjectID.ToString()),
-				Definition->RequiredActivationTag ==
-					BalhwajeomGameplayTags::Story_Chapter_01_Phase_03_Unlocked);
+				FString::Printf(TEXT("%s should appear in only one phase"), *ObjectID.ToString()),
+				UniqueConfiguredObjectIDs.Contains(ObjectID));
+			UniqueConfiguredObjectIDs.Add(ObjectID);
 		}
 	}
 
@@ -513,6 +557,132 @@ bool FInvestigationChapter01PhaseActivationDataTest::RunTest(
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInvestigationChapter01PhaseActivationResolutionTest,
+	"Balhwajeom.Investigation.Progression.Chapter01ActivationResolution",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FInvestigationChapter01PhaseActivationResolutionTest::RunTest(
+	const FString& Parameters)
+{
+	const UBalhwajeomInvestigationSettings* Settings =
+		GetDefault<UBalhwajeomInvestigationSettings>();
+	if (!TestNotNull(TEXT("Investigation settings should exist"), Settings))
+	{
+		return false;
+	}
+
+	UFunction* ResolveFunction = Settings->FindFunction(
+		TEXT("ResolveChapter01RequiredActivationTag"));
+	if (!TestNotNull(
+		TEXT("Investigation settings should expose the phase activation resolver"),
+		ResolveFunction))
+	{
+		return false;
+	}
+
+	struct FResolveActivationTagParameters
+	{
+		FName ObjectID;
+		FGameplayTag AuthoredActivationTag;
+		FGameplayTag ReturnValue;
+	};
+
+	auto Resolve = [ResolveFunction](
+		UBalhwajeomInvestigationSettings* TargetSettings,
+		const FName ObjectID,
+		const FGameplayTag AuthoredActivationTag)
+	{
+		FResolveActivationTagParameters Parameters{
+			ObjectID,
+			AuthoredActivationTag,
+			FGameplayTag()
+		};
+		TargetSettings->ProcessEvent(ResolveFunction, &Parameters);
+		return Parameters.ReturnValue;
+	};
+
+	const FGameplayTag TutorialDoneTag = FGameplayTag::RequestGameplayTag(
+		TEXT("Tutorial.Stage.Done"), false);
+	const FGameplayTag AuthoredFallbackTag = FGameplayTag::RequestGameplayTag(
+		TEXT("Runtime.Lock.PhotoCamera"), false);
+	if (!TestTrue(TEXT("Tutorial completion tag should be registered"),
+		TutorialDoneTag.IsValid()) ||
+		!TestTrue(TEXT("Fallback test tag should be registered"),
+			AuthoredFallbackTag.IsValid()))
+	{
+		return false;
+	}
+
+	UBalhwajeomInvestigationSettings* MutableSettings =
+		DuplicateObject<UBalhwajeomInvestigationSettings>(
+			Settings, GetTransientPackage());
+	if (!TestNotNull(TEXT("Mutable test settings should be created"), MutableSettings))
+	{
+		return false;
+	}
+
+	TestTrue(TEXT("Phase 01 objects should require tutorial completion"),
+		Resolve(MutableSettings, TEXT("OBJ_01_018"), FGameplayTag()) ==
+			TutorialDoneTag);
+	TestTrue(TEXT("Phase 02 objects should require phase 02 unlock"),
+		Resolve(MutableSettings, TEXT("OBJ_01_024"), FGameplayTag()) ==
+			BalhwajeomGameplayTags::Story_Chapter_01_Phase_02_Unlocked);
+	TestTrue(TEXT("Phase 03 objects should require phase 03 unlock"),
+		Resolve(MutableSettings, TEXT("OBJ_01_010"), FGameplayTag()) ==
+			BalhwajeomGameplayTags::Story_Chapter_01_Phase_03_Unlocked);
+	TestTrue(TEXT("Unlisted objects should preserve their authored activation tag"),
+		Resolve(MutableSettings, TEXT("OBJ_01_006"), AuthoredFallbackTag) ==
+			AuthoredFallbackTag);
+
+	FBoolProperty* EnabledProperty = FindFProperty<FBoolProperty>(
+		MutableSettings->GetClass(), TEXT("bEnableChapter01PhaseSystem"));
+	if (!TestNotNull(TEXT("Phase system toggle property should exist"), EnabledProperty))
+	{
+		return false;
+	}
+	EnabledProperty->SetPropertyValue_InContainer(MutableSettings, false);
+
+	TestFalse(TEXT("Disabling the phase system should remove configured phase gates"),
+		Resolve(MutableSettings, TEXT("OBJ_01_024"), FGameplayTag()).IsValid());
+	TestTrue(TEXT("Disabling phase gates should preserve unrelated authored gates"),
+		Resolve(MutableSettings, TEXT("OBJ_01_006"), AuthoredFallbackTag) ==
+			AuthoredFallbackTag);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInvestigationChapter01PhaseSettingsValidationTest,
+	"Balhwajeom.Investigation.Progression.Chapter01SettingsValidation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FInvestigationChapter01PhaseSettingsValidationTest::RunTest(
+	const FString& Parameters)
+{
+	const UBalhwajeomInvestigationSettings* DefaultSettings =
+		GetDefault<UBalhwajeomInvestigationSettings>();
+	UBalhwajeomInvestigationSettings* InvalidSettings =
+		DuplicateObject<UBalhwajeomInvestigationSettings>(
+			DefaultSettings, GetTransientPackage());
+	if (!TestNotNull(TEXT("Invalid test settings should be created"), InvalidSettings))
+	{
+		return false;
+	}
+
+	InvalidSettings->Phase02ObjectIDs.Add(TEXT("OBJ_01_018"));
+	InvalidSettings->Phase03ObjectIDs.Add(TEXT("OBJ_DOES_NOT_EXIST"));
+
+	FDataValidationContext ValidationContext;
+	const UBalhwajeomInvestigationSettings* ConstInvalidSettings = InvalidSettings;
+	TestTrue(
+		TEXT("Duplicate and unknown phase ObjectIDs should invalidate settings"),
+		ConstInvalidSettings->IsDataValid(ValidationContext) ==
+			EDataValidationResult::Invalid);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FInvestigationOnceInteractionTest,
 	"Balhwajeom.Investigation.OnceInteraction",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -525,8 +695,50 @@ bool FInvestigationOnceInteractionTest::RunTest(const FString& Parameters)
 
 	TestTrue(TEXT("Once interaction should begin the first time"), Fixture.Subsystem->BeginEvidenceInteraction(InstanceID, ViewData));
 	TestTrue(TEXT("Once interaction should complete the first time"), Fixture.Subsystem->CompleteEvidenceInteraction(InstanceID, ViewData.StateID));
+	TestTrue(TEXT("Completing an interaction should grant its configured word"),
+		Fixture.Subsystem->HasAcquiredWord(InvestigationSubsystemTests::WordID));
 	TestFalse(TEXT("Completed Once interaction should not begin again"), Fixture.Subsystem->BeginEvidenceInteraction(InstanceID, ViewData));
 	TestFalse(TEXT("Completed Once interaction should not complete again"), Fixture.Subsystem->CompleteEvidenceInteraction(InstanceID, InvestigationSubsystemTests::StateID));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInvestigationInteractionGrantedWordsTest,
+	"Balhwajeom.Investigation.InteractionGrantedWords",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FInvestigationInteractionGrantedWordsTest::RunTest(const FString& Parameters)
+{
+	const InvestigationSubsystemTests::FFixture Fixture;
+	const FGuid InstanceID = Fixture.RegisterTestEvidence();
+	FEvidenceInteractionViewData ViewData;
+	TArray<FName> NewlyGrantedWordIDs;
+	TestTrue(TEXT("Configured interaction should begin"),
+		Fixture.Subsystem->BeginEvidenceInteraction(InstanceID, ViewData));
+	TestTrue(TEXT("Configured interaction should complete"),
+		Fixture.Subsystem->CompleteEvidenceInteractionWithGrantedWords(
+			InstanceID, ViewData.StateID, NewlyGrantedWordIDs));
+	TestEqual(TEXT("Both configured keywords should be reported"),
+		NewlyGrantedWordIDs.Num(), 2);
+	TestTrue(TEXT("Primary keyword should be reported"),
+		NewlyGrantedWordIDs.Contains(InvestigationSubsystemTests::WordID));
+	TestTrue(TEXT("Alternate keyword should be reported"),
+		NewlyGrantedWordIDs.Contains(InvestigationSubsystemTests::AlternateWordID));
+
+	TArray<FAcquiredWordRecord> AcquiredWords;
+	Fixture.Subsystem->GetAcquiredWords(AcquiredWords);
+	const FAcquiredWordRecord* FoundWord = AcquiredWords.FindByPredicate(
+		[](const FAcquiredWordRecord& Candidate)
+		{
+			return Candidate.WordID == InvestigationSubsystemTests::WordID;
+		});
+	if (TestNotNull(TEXT("Granted word record should exist"), FoundWord))
+	{
+		TestEqual(TEXT("Interaction keyword should preserve its source type"),
+			FoundWord->SourceType, EWordAcquisitionSource::EvidenceInteraction);
+		TestEqual(TEXT("Interaction keyword should preserve its source state"),
+			FoundWord->SourceID, InvestigationSubsystemTests::StateID);
+	}
 	return true;
 }
 

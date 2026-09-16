@@ -338,6 +338,12 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.1"))
     float CameraTransitionDuration = 0.5f;
 
+    /** Retained so existing assets deserialize cleanly; the first-person camera is no longer translated on entry. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Legacy",
+        meta = (ClampMin = "0.0", Units = "cm", DeprecatedProperty,
+            DeprecationMessage = "The first-person camera now remains at its authored eye position."))
+    float MaximumEntryViewAlignmentOffset = 150.0f;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Audio")
     TSoftObjectPtr<USoundBase> CameraEnterSound;
 
@@ -389,6 +395,10 @@ protected:
     FRotator SavedExplorationControlRotation = FRotator::ZeroRotator;
     float SavedFirstPersonFieldOfView = 90.0f;
     bool bHasSavedExplorationControlRotation = false;
+    bool bSavedUseControllerRotationYaw = false;
+    bool bSavedOrientRotationToMovement = true;
+    bool bSavedUseControllerDesiredRotation = false;
+    bool bHasSavedFirstPersonMovementMode = false;
 
     FPostProcessSettings SavedPhotoPostProcessSettings;
     float SavedPostProcessBlendWeight = 1.0f;

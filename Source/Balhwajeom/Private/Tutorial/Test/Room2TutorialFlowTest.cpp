@@ -210,6 +210,19 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 		{
 			return false;
 		}
+		TestEqual(
+			FString::Printf(TEXT("%s dust interaction should use the family modal"),
+				*ObjectIDs[Index].ToString()),
+			ViewData.Presentation,
+			EEvidenceInteractionPresentation::ModalWidget);
+		TestEqual(
+			FString::Printf(TEXT("%s dust interaction should open the matching family widget"),
+				*ObjectIDs[Index].ToString()),
+			ViewData.InteractionWidgetClass.ToSoftObjectPath().ToString(),
+			FString::Printf(
+				TEXT("/Game/Balhwajeom/UI/Family/WBP_Family%d.WBP_Family%d_C"),
+				Index + 1,
+				Index + 1));
 		TestTrue(
 			FString::Printf(TEXT("%s dust interaction should complete"),
 				*ObjectIDs[Index].ToString()),

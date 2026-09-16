@@ -26,7 +26,9 @@ public class Balhwajeom : ModuleRules
 			"ItemInspectorRuntime",
             "LevelSequence",
             "MovieScene",
-            "MediaAssets"
+            "MediaAssets",
+            // UMediaSoundComponent's volume control lives on its USynthComponent base.
+            "AudioMixer"
         });
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "JMInteraction", "MultiShadowText" });

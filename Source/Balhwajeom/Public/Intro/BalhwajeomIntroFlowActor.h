@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "BalhwajeomIntroFlowActor.generated.h"
 
+class ABalhwajeomGateDoorActor;
 class ALevelSequenceActor;
 class UAudioComponent;
 class UBalhwajeomMainMenuWidget;
@@ -57,9 +58,23 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Assets")
 	TSoftClassPtr<UBalhwajeomScreenFadeWidget> ScreenFadeWidgetClass;
 
-	/** Assign your imported Sound Wave, Sound Cue, or MetaSound here. */
+	/** Plays once gameplay actually starts (EnterGameplayAtBlack) and while no BGMTriggerDoor override
+	 * is active yet. Assign your imported Sound Wave, Sound Cue, or MetaSound here. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Assets")
 	TObjectPtr<USoundBase> BGM;
+
+	/** Plays only while the title screen (WBP_MainMenu) is shown. Falls back to BGM when unset, so
+	 * existing levels that only fill in BGM keep working unchanged. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Assets")
+	TObjectPtr<USoundBase> Title_BGM;
+
+	/** Replaces BGM the moment BGMTriggerDoor finishes opening. Leave BGMTriggerDoor unset to disable. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Assets")
+	TObjectPtr<USoundBase> BGM_Sound;
+
+	/** Level-placed door whose OnDoorFullyOpened switches the BGM track to BGM_Sound. Optional. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Assets")
+	TObjectPtr<ABalhwajeomGateDoorActor> BGMTriggerDoor;
 
 	/** Assign a Level Sequence containing a Camera Cuts track. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Assets")
@@ -128,6 +143,9 @@ private:
 	void HandleFadeFromBlackFinished();
 
 	UFUNCTION()
+	void HandleFadeProgress(float Opacity);
+
+	UFUNCTION()
 	void HandleSequenceFinished();
 
 	UFUNCTION()
@@ -141,6 +159,13 @@ private:
 
 	UFUNCTION()
 	void HandleSkipRequested();
+
+	/** Bound to BGMTriggerDoor's OnDoorFullyOpened; switches the currently playing track to BGM_Sound. */
+	UFUNCTION()
+	void HandleBGMTriggerDoorOpened();
+
+	/** Scales the movie audio without touching the picture, so a skip can mute while the fade runs. */
+	void SetCinematicAudioVolume(float Volume);
 
 	void SetGameplayEnabled(bool bEnabled);
 	void ResetInvestigationPhotosIfRequested();
@@ -176,4 +201,7 @@ private:
 
 	EBalhwajeomIntroState State = EBalhwajeomIntroState::Boot;
 	bool bEndingTriggered = false;
+
+	/** While set, movie audio is ducked in step with the fade overlay's opacity. */
+	bool bFadeCinematicAudioWithScreen = false;
 };

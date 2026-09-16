@@ -15,6 +15,7 @@
 #include "Engine/Texture2D.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
 #include "ImageUtils.h"
@@ -527,6 +528,17 @@ void UBalhwajeomPhotoCameraComponent::ZoomCamera(float Value)
 
 void UBalhwajeomPhotoCameraComponent::TakePhoto()
 {
+	if (APlayerController* PlayerController =
+		Cast<APlayerController>(GetOwningController(this)))
+	{
+		if (ABalhwajeomEvidenceCameraHUD* CameraHUD =
+			Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD());
+			CameraHUD && CameraHUD->TryConfirmCapturePhotoPresentation())
+		{
+			return;
+		}
+	}
+
 	if (!bIsInCameraMode || bIsCameraTransitioning || !PhotoCamera || !GetWorld())
 	{
 		return;
@@ -629,6 +641,30 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 		return;
 	}
 
+	// Entry alignment can move the attached camera in world space. Capture its authored
+	// transform first so leaving photo mode always puts it back at the character's eyes.
+	SavedFirstPersonRelativeTransform = PhotoCamera->GetRelativeTransform();
+	SavedFirstPersonFieldOfView = PhotoCamera->FieldOfView;
+	SavedPhotoPostProcessSettings = PhotoCamera->PostProcessSettings;
+	SavedPostProcessBlendWeight = PhotoCamera->PostProcessBlendWeight;
+
+	// A first-person view must rotate with control yaw. Leaving orient-to-movement
+	// enabled makes A/D rotate the capsule, which swings an attached eye camera
+	// sideways and feels like non-linear acceleration.
+	if (ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner()))
+	{
+		bSavedUseControllerRotationYaw = OwnerCharacter->bUseControllerRotationYaw;
+		if (UCharacterMovementComponent* Movement = OwnerCharacter->GetCharacterMovement())
+		{
+			bSavedOrientRotationToMovement = Movement->bOrientRotationToMovement;
+			bSavedUseControllerDesiredRotation = Movement->bUseControllerDesiredRotation;
+			Movement->bOrientRotationToMovement = false;
+			Movement->bUseControllerDesiredRotation = false;
+		}
+		OwnerCharacter->bUseControllerRotationYaw = true;
+		bHasSavedFirstPersonMovementMode = true;
+	}
+
 	APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
 	if (PlayerController)
 	{
@@ -639,9 +675,9 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 		FRotator OutgoingViewRotation;
 		PlayerController->GetPlayerViewPoint(OutgoingViewLocation, OutgoingViewRotation);
 
-		// Aim the first-person camera at the world point under the third-person screen center.
-		// The cameras have different origins, so copying only their rotation causes parallax and
-		// pushes the object sideways on entry.
+		// Aim the eye camera at the world point under the outgoing screen centre. Never move
+		// the attached camera in world space: a lateral attachment offset rotates around the
+		// capsule while walking/turning and makes ordinary WASD movement feel unstable.
 		const FVector OutgoingViewDirection = OutgoingViewRotation.Vector();
 		FVector CenterTarget = OutgoingViewLocation + OutgoingViewDirection * WORLD_MAX;
 		bool bFoundCenterTarget = false;
@@ -685,10 +721,6 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 		}
 	}
 	SetWorldInspectionLabelsSuppressed(true);
-	SavedFirstPersonRelativeTransform = PhotoCamera->GetRelativeTransform();
-	SavedFirstPersonFieldOfView = PhotoCamera->FieldOfView;
-	SavedPhotoPostProcessSettings = PhotoCamera->PostProcessSettings;
-	SavedPostProcessBlendWeight = PhotoCamera->PostProcessBlendWeight;
 	NormalCamera->SetActive(false);
 	PhotoCamera->SetActive(true);
 
@@ -739,6 +771,18 @@ void UBalhwajeomPhotoCameraComponent::ExitCameraMode()
 		PlayerController->SetControlRotation(SavedExplorationControlRotation);
 	}
 	bHasSavedExplorationControlRotation = false;
+
+	if (ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
+		OwnerCharacter && bHasSavedFirstPersonMovementMode)
+	{
+		OwnerCharacter->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+		if (UCharacterMovementComponent* Movement = OwnerCharacter->GetCharacterMovement())
+		{
+			Movement->bOrientRotationToMovement = bSavedOrientRotationToMovement;
+			Movement->bUseControllerDesiredRotation = bSavedUseControllerDesiredRotation;
+		}
+	}
+	bHasSavedFirstPersonMovementMode = false;
 
 	if (PhotoCamera)
 	{

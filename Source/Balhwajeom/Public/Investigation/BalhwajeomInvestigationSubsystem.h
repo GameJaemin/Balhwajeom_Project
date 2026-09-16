@@ -103,6 +103,13 @@ public:
 		FGuid EvidenceInstanceID,
 		FName ExpectedStateID);
 
+	/** Completes an interaction and reports only the keywords newly acquired by this call. */
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Interaction")
+	bool CompleteEvidenceInteractionWithGrantedWords(
+		FGuid EvidenceInstanceID,
+		FName ExpectedStateID,
+		TArray<FName>& OutNewlyGrantedWordIDs);
+
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Words")
 	bool AcquireWord(FName WordID, EWordAcquisitionSource SourceType, FName SourceID);
 
@@ -179,6 +186,10 @@ private:
 	bool SavePersistentPhotoGallery() const;
 	bool ShouldPersistPhotoGallery() const;
 	bool ValidateLoadedDataTables() const;
+	bool CompleteEvidenceInteractionInternal(
+		FGuid EvidenceInstanceID,
+		FName ExpectedStateID,
+		TArray<FName>* OutNewlyGrantedWordIDs);
 
 	const FEvidenceDefinition* FindEvidenceDefinition(FName ObjectID) const;
 	const FEvidenceStateDefinition* FindEvidenceStateDefinition(FName StateID) const;

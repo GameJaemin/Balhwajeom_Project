@@ -18,7 +18,7 @@ namespace BalhwajeomInspectionLabelPresentation
 		constexpr float ClosestScale = 1.0f;
 		constexpr float FarthestScale = 0.55f;
 		constexpr float ClosestOpacity = 1.0f;
-		constexpr float FarthestOpacity = 0.45f;
+		constexpr float FarthestOpacity = 0.7f;
 		constexpr float EaseExponent = 2.0f;
 
 		const float DistanceRatio = MinimumPresentationDistance > KINDA_SMALL_NUMBER

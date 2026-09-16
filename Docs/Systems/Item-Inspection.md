@@ -13,7 +13,7 @@ The project uses the reusable `ItemInspector`, `JMInteraction`, and `JMGameplayE
 
 `ABalhwajeomCameraCharacter` supplies the existing `/Game/Balhwajeom/Input/IMC_Interaction` and `/Game/Balhwajeom/Input/IA_Interact` assets to `UPlayerInteractionComponent`. The editor automation test asserts that this mapping binds `F` to `IA_Interact`. While the inspector has UI focus, its native widget handles `F` and `Escape` to close.
 
-`/ItemInspector/UI/WBP_JMItemInspection` displays only a centered square preview, with no item text or close button. The 720-unit preview scales down to fit smaller viewports. The native fallback uses the same layout. Rebuild the editable WBP with `unreal.TabletWidgetBlueprintLibrary.center_item_inspection_widget()`.
+`/ItemInspector/UI/WBP_JMItemInspection` displays only the item preview, with no item text or close button. The preview uses the full available viewport area, preserves the render target's viewport-matched aspect ratio with aspect-fit scaling, and accepts rotate/zoom input across the full screen. The default render-target quality envelope is 1600 pixels on its long side (1600x900 at 16:9). The native fallback uses the same layout.
 
 ## Authoring another inspectable
 

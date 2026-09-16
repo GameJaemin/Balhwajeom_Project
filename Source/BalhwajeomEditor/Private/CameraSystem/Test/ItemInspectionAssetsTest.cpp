@@ -5,7 +5,10 @@
 #include "Components/DirectionalLightComponent.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
+#include "Components/Image.h"
 #include "Components/PointLightComponent.h"
+#include "Components/ScaleBox.h"
+#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Blueprint/WidgetTree.h"
 #include "Engine/Blueprint.h"
@@ -91,6 +94,30 @@ bool FItemInspectionAssetsTest::RunTest(const FString& Parameters)
 		const TSharedRef<SWidget> InspectorSlateWidget = InspectorWidgetOwner->TakeWidget();
 		TestTrue(TEXT("Inspector receives pointer input across its full viewport slot"),
 			InspectorSlateWidget->GetVisibility().IsHitTestVisible());
+		InspectorWidgetOwner->SetInspectionData(nullptr);
+		const USizeBox* RuntimePreviewSizeBox = Cast<USizeBox>(
+			InspectorWidgetOwner->GetWidgetFromName(TEXT("PreviewSizeBox")));
+		TestNotNull(TEXT("Runtime inspector exposes its preview size box"), RuntimePreviewSizeBox);
+		if (RuntimePreviewSizeBox)
+		{
+			TestFalse(TEXT("Runtime inspector removes the legacy fixed preview width"),
+				RuntimePreviewSizeBox->IsWidthOverride());
+			TestFalse(TEXT("Runtime inspector removes the legacy fixed preview height"),
+				RuntimePreviewSizeBox->IsHeightOverride());
+		}
+		const UImage* RuntimePreviewImage = Cast<UImage>(
+			InspectorWidgetOwner->GetWidgetFromName(TEXT("PreviewImage")));
+		const UScaleBox* RuntimePreviewAspectBox = RuntimePreviewImage
+			? Cast<UScaleBox>(RuntimePreviewImage->GetParent())
+			: nullptr;
+		TestNotNull(TEXT("Runtime inspector preserves preview texture aspect ratio"), RuntimePreviewAspectBox);
+		if (RuntimePreviewAspectBox)
+		{
+			TestEqual(TEXT("Runtime preview texture uses aspect-fit scaling"),
+				RuntimePreviewAspectBox->GetStretch(), EStretch::ScaleToFit);
+			TestEqual(TEXT("Runtime preview texture scales in both directions"),
+				RuntimePreviewAspectBox->GetStretchDirection(), EStretchDirection::Both);
+		}
 	}
 	TestEqual(TEXT("UI material domain"), Material->MaterialDomain, MD_UI);
 	UInputAction* InteractAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Balhwajeom/Input/IA_Interact.IA_Interact"));

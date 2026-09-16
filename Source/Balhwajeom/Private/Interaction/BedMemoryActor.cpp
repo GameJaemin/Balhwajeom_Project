@@ -11,17 +11,18 @@
 #include "CameraSystem/BalhwajeomCameraPlayerController.h"
 #include "CameraSystem/BalhwajeomEvidenceActor.h"
 #include "CameraSystem/BalhwajeomPhotoCameraComponent.h"
+#include "CameraSystem/PhotoWorldStoryActor.h"
+#include "Components/ArrowComponent.h"
 #include "Components/AudioComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/Image.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "Components/WidgetComponent.h"
-#include "Engine/AssetManager.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/GameInstance.h"
-#include "Engine/StreamableManager.h"
 #include "EngineUtils.h"
 #include "EnhancedInputComponent.h"
 #include "GameFramework/Character.h"
@@ -114,6 +115,37 @@ ABedMemoryActor::ABedMemoryActor()
 	SeatedCamera->SetRelativeRotation(FRotator(-15.0f, 45.0f, 0.0f));
 	SeatedCamera->SetAutoActivate(true);
 
+	StoryAnchor = CreateDefaultSubobject<USceneComponent>(TEXT("StoryAnchor"));
+	StoryAnchor->SetupAttachment(SceneRoot);
+	StoryAnchor->SetRelativeLocation(FVector(150.0f, 0.0f, 150.0f));
+
+#if WITH_EDITORONLY_DATA
+	StoryAnchorArrow = CreateEditorOnlyDefaultSubobject<UArrowComponent>(TEXT("StoryAnchorArrow"));
+	if (StoryAnchorArrow)
+	{
+		StoryAnchorArrow->SetupAttachment(StoryAnchor);
+		StoryAnchorArrow->ArrowColor = FColor(140, 200, 255);
+		StoryAnchorArrow->bIsScreenSizeScaled = true;
+		StoryAnchorArrow->SetHiddenInGame(true);
+	}
+
+	StoryAnchorPreviewText = CreateEditorOnlyDefaultSubobject<UTextRenderComponent>(
+		TEXT("StoryAnchorPreviewText"));
+	if (StoryAnchorPreviewText)
+	{
+		StoryAnchorPreviewText->SetupAttachment(StoryAnchor);
+		StoryAnchorPreviewText->SetText(NSLOCTEXT(
+			"BedMemory", "StoryAnchorPreview", "침대 Story Anchor 예시 텍스트"));
+		StoryAnchorPreviewText->SetHorizontalAlignment(EHTA_Center);
+		StoryAnchorPreviewText->SetVerticalAlignment(EVRTA_TextCenter);
+		StoryAnchorPreviewText->SetWorldSize(18.0f);
+		StoryAnchorPreviewText->SetTextRenderColor(FColor(140, 220, 255));
+		StoryAnchorPreviewText->SetHiddenInGame(true);
+	}
+#endif
+
+	StoryActorClass = APhotoWorldStoryActor::StaticClass();
+
 	VoiceOrigin = CreateDefaultSubobject<USceneComponent>(TEXT("VoiceOrigin"));
 	VoiceOrigin->SetupAttachment(SceneRoot);
 	VoiceOrigin->ComponentTags.Add(TEXT("Origin"));
@@ -170,10 +202,6 @@ void ABedMemoryActor::BeginPlay()
 		InspectionComponent->OnPlayerDistanceStateChanged.AddDynamic(
 			this, &ABedMemoryActor::HandlePlayerDistanceStateChanged);
 	}
-	if (VoicePlayer)
-	{
-		VoicePlayer->OnAudioFinished.AddDynamic(this, &ABedMemoryActor::HandleVoiceFinished);
-	}
 	if (InteractionCollision)
 	{
 		InteractionCollision->OnComponentBeginOverlap.AddDynamic(
@@ -186,10 +214,10 @@ void ABedMemoryActor::BeginPlay()
 void ABedMemoryActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	GetWorldTimerManager().ClearAllTimersForObject(this);
-	if (VoiceLoadHandle.IsValid())
+	if (ActiveMemoryStory.IsValid())
 	{
-		VoiceLoadHandle->CancelHandle();
-		VoiceLoadHandle.Reset();
+		ActiveMemoryStory->StopStory();
+		ActiveMemoryStory.Reset();
 	}
 	if (VoicePlayer)
 	{
@@ -336,8 +364,8 @@ bool ABedMemoryActor::BeginRest(APawn* InteractingPawn)
 	SetInspectionLabelSuppressed(true);
 	SetWorldEvidenceLabelsSuppressed(true);
 
-	// Rotate during the camera transition. Sitting animation, BGM, and memory
-	// voices remain disconnected until their implementation step.
+	// Rotate during the camera transition. The seated animation, BGM, and collected-photo
+	// world stories begin after the player reaches the authored bed pose.
 	BeginPlayerTurn();
 	return State != EBedMemoryState::Idle;
 }
@@ -452,36 +480,13 @@ void ABedMemoryActor::FinishEntering()
 void ABedMemoryActor::BeginPreparingAudio()
 {
 	State = EBedMemoryState::PreparingAudio;
-	BuildVoiceCandidates();
-
-	TArray<FSoftObjectPath> Paths;
-	for (const FBedMemoryVoiceCandidate& Candidate : VoiceCandidates)
-	{
-		const FSoftObjectPath Path = Candidate.StoryVoice.ToSoftObjectPath();
-		if (Path.IsValid())
-		{
-			Paths.AddUnique(Path);
-		}
-	}
-
-	if (Paths.IsEmpty())
-	{
-		BeginListening();
-		return;
-	}
-
-	VoiceLoadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
-		Paths,
-		FStreamableDelegate::CreateUObject(this, &ABedMemoryActor::HandleVoiceAssetsLoaded));
-	if (!VoiceLoadHandle.IsValid())
-	{
-		HandleVoiceAssetsLoaded();
-	}
+	BuildStoryCandidates();
+	BeginListening();
 }
 
-void ABedMemoryActor::BuildVoiceCandidates()
+void ABedMemoryActor::BuildStoryCandidates()
 {
-	VoiceCandidates.Reset();
+	StoryCandidates.Reset();
 	ShuffleBag.Reset();
 
 	const UWorld* World = GetWorld();
@@ -505,39 +510,18 @@ void ABedMemoryActor::BuildVoiceCandidates()
 				*GetName(), *Record.PhotoID.ToString());
 			continue;
 		}
-		if (Definition.StoryVoice.IsNull())
+		if (Definition.WorldStoryCues.IsEmpty() && Definition.WorldStoryLines.IsEmpty())
 		{
-			UE_LOG(LogTemp, Warning, TEXT("%s: captured PhotoID '%s' has no StoryVoice."),
+			UE_LOG(LogTemp, Warning, TEXT("%s: captured PhotoID '%s' has no WorldStoryCues."),
 				*GetName(), *Record.PhotoID.ToString());
 			continue;
 		}
 
-		FBedMemoryVoiceCandidate Candidate;
+		FBedMemoryStoryCandidate Candidate;
 		Candidate.PhotoID = Record.PhotoID;
-		Candidate.StoryVoice = Definition.StoryVoice;
-		Candidate.EmitterID = ResolveEmitterID(Record.PhotoID);
-		VoiceCandidates.Add(MoveTemp(Candidate));
+		Candidate.PhotoDefinition = MoveTemp(Definition);
+		StoryCandidates.Add(MoveTemp(Candidate));
 	}
-}
-
-void ABedMemoryActor::HandleVoiceAssetsLoaded()
-{
-	if (State != EBedMemoryState::PreparingAudio)
-	{
-		return;
-	}
-
-	VoiceCandidates.RemoveAll([this](const FBedMemoryVoiceCandidate& Candidate)
-	{
-		if (Candidate.StoryVoice.Get())
-		{
-			return false;
-		}
-		UE_LOG(LogTemp, Warning, TEXT("%s failed to load StoryVoice for PhotoID '%s'."),
-			*GetName(), *Candidate.PhotoID.ToString());
-		return true;
-	});
-	BeginListening();
 }
 
 void ABedMemoryActor::BeginListening()
@@ -547,15 +531,15 @@ void ABedMemoryActor::BeginListening()
 		return;
 	}
 	State = EBedMemoryState::Listening;
-	if (!VoiceCandidates.IsEmpty())
+	if (!StoryCandidates.IsEmpty())
 	{
-		ScheduleNextVoice(true);
+		ScheduleNextStory(true);
 	}
 }
 
-void ABedMemoryActor::ScheduleNextVoice(bool bInitialDelay)
+void ABedMemoryActor::ScheduleNextStory(bool bInitialDelay)
 {
-	if (State != EBedMemoryState::Listening || VoiceCandidates.IsEmpty())
+	if (State != EBedMemoryState::Listening || StoryCandidates.IsEmpty())
 	{
 		return;
 	}
@@ -563,9 +547,9 @@ void ABedMemoryActor::ScheduleNextVoice(bool bInitialDelay)
 	float Delay = 0.0f;
 	if (bInitialDelay)
 	{
-		Delay = BedMemory::RandomInRange(InitialDelayRange);
+		Delay = BedMemory::RandomInRange(InitialStoryDelayRange);
 	}
-	else if (VoiceCandidates.Num() == 1 || FMath::FRand() < LongGapChance)
+	else if (StoryCandidates.Num() == 1 || FMath::FRand() < LongGapChance)
 	{
 		Delay = BedMemory::RandomInRange(LongGapRange);
 	}
@@ -577,19 +561,19 @@ void ABedMemoryActor::ScheduleNextVoice(bool bInitialDelay)
 	if (Delay <= UE_KINDA_SMALL_NUMBER)
 	{
 		GetWorldTimerManager().SetTimerForNextTick(
-			this, &ABedMemoryActor::PlayNextVoice);
+			this, &ABedMemoryActor::PlayNextStory);
 	}
 	else
 	{
 		GetWorldTimerManager().SetTimer(
-			VoiceTimer, this, &ABedMemoryActor::PlayNextVoice, Delay, false);
+			StoryTimer, this, &ABedMemoryActor::PlayNextStory, Delay, false);
 	}
 }
 
 void ABedMemoryActor::RefillShuffleBag()
 {
 	ShuffleBag.Reset();
-	for (int32 Index = 0; Index < VoiceCandidates.Num(); ++Index)
+	for (int32 Index = 0; Index < StoryCandidates.Num(); ++Index)
 	{
 		ShuffleBag.Add(Index);
 	}
@@ -599,15 +583,15 @@ void ABedMemoryActor::RefillShuffleBag()
 		ShuffleBag.Swap(Index, SwapIndex);
 	}
 	if (ShuffleBag.Num() > 1 &&
-		VoiceCandidates[ShuffleBag.Last()].PhotoID == LastPlayedPhotoID)
+		StoryCandidates[ShuffleBag.Last()].PhotoID == LastPlayedPhotoID)
 	{
 		ShuffleBag.Swap(0, ShuffleBag.Num() - 1);
 	}
 }
 
-void ABedMemoryActor::PlayNextVoice()
+void ABedMemoryActor::PlayNextStory()
 {
-	if (State != EBedMemoryState::Listening || !VoicePlayer || VoiceCandidates.IsEmpty())
+	if (State != EBedMemoryState::Listening || StoryCandidates.IsEmpty() || !StoryAnchor)
 	{
 		return;
 	}
@@ -621,32 +605,38 @@ void ABedMemoryActor::PlayNextVoice()
 	}
 
 	const int32 CandidateIndex = ShuffleBag.Pop(EAllowShrinking::No);
-	if (!VoiceCandidates.IsValidIndex(CandidateIndex))
+	if (!StoryCandidates.IsValidIndex(CandidateIndex))
 	{
-		ScheduleNextVoice(false);
+		ScheduleNextStory(false);
 		return;
 	}
 
-	const FBedMemoryVoiceCandidate& Candidate = VoiceCandidates[CandidateIndex];
-	USoundBase* Sound = Candidate.StoryVoice.Get();
-	if (!Sound)
+	const FBedMemoryStoryCandidate& Candidate = StoryCandidates[CandidateIndex];
+	FTransform StoryTransform = StoryAnchor->GetComponentTransform();
+	StoryTransform.SetScale3D(FVector::OneVector);
+	APhotoWorldStoryActor* Story = APhotoWorldStoryActor::SpawnAndStart(
+		GetWorld(), StoryActorClass, StoryTransform, Candidate.PhotoDefinition, this);
+	if (!Story)
 	{
-		ScheduleNextVoice(false);
+		ScheduleNextStory(false);
 		return;
 	}
 
-	USceneComponent* Emitter = ResolveEmitter(Candidate.EmitterID);
-	VoicePlayer->SetWorldLocation(Emitter ? Emitter->GetComponentLocation() : GetActorLocation());
-	VoicePlayer->SetSound(Sound);
 	LastPlayedPhotoID = Candidate.PhotoID;
-	VoicePlayer->Play();
+	ActiveMemoryStory = Story;
+	Story->OnDestroyed.AddDynamic(this, &ABedMemoryActor::HandleMemoryStoryDestroyed);
+	Story->TransitionToThirdPersonScale();
 }
 
-void ABedMemoryActor::HandleVoiceFinished()
+void ABedMemoryActor::HandleMemoryStoryDestroyed(AActor* DestroyedActor)
 {
+	if (DestroyedActor == ActiveMemoryStory.Get())
+	{
+		ActiveMemoryStory.Reset();
+	}
 	if (State == EBedMemoryState::Listening)
 	{
-		ScheduleNextVoice(false);
+		ScheduleNextStory(false);
 	}
 }
 
@@ -734,15 +724,11 @@ void ABedMemoryActor::EndRest()
 	State = EBedMemoryState::Exiting;
 	GetWorldTimerManager().ClearTimer(PlayerTurnTimer);
 	GetWorldTimerManager().ClearTimer(TransitionTimer);
-	GetWorldTimerManager().ClearTimer(VoiceTimer);
-	if (VoiceLoadHandle.IsValid())
+	GetWorldTimerManager().ClearTimer(StoryTimer);
+	if (ActiveMemoryStory.IsValid())
 	{
-		VoiceLoadHandle->CancelHandle();
-		VoiceLoadHandle.Reset();
-	}
-	if (VoicePlayer)
-	{
-		VoicePlayer->FadeOut(0.2f, 0.0f);
+		ActiveMemoryStory->StopStory();
+		ActiveMemoryStory.Reset();
 	}
 	if (BGMPlayer)
 	{
@@ -971,7 +957,7 @@ void ABedMemoryActor::RestorePlayerState()
 		OverlappingPawn = nullptr;
 		TeardownRestInput();
 	}
-	VoiceCandidates.Reset();
+	StoryCandidates.Reset();
 	ShuffleBag.Reset();
 	RestingCharacter = nullptr;
 	RestingPlayerController = nullptr;
@@ -1014,28 +1000,6 @@ void ABedMemoryActor::TeardownRestInput()
 	}
 	RestInputComponent->DestroyComponent();
 	RestInputComponent = nullptr;
-}
-
-FName ABedMemoryActor::ResolveEmitterID(FName PhotoID) const
-{
-	if (const FName* Found = PhotoEmitterMap.Find(PhotoID))
-	{
-		return *Found;
-	}
-	return TEXT("Origin");
-}
-
-USceneComponent* ABedMemoryActor::ResolveEmitter(FName EmitterID) const
-{
-	TInlineComponentArray<USceneComponent*> Components(this);
-	for (USceneComponent* Component : Components)
-	{
-		if (Component && Component->ComponentHasTag(EmitterID))
-		{
-			return Component;
-		}
-	}
-	return VoiceOrigin;
 }
 
 void ABedMemoryActor::HandlePlayerDistanceStateChanged(EPlayerInspectionDistanceState NewState)

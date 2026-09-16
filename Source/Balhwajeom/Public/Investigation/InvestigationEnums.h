@@ -18,6 +18,8 @@ enum class EEvidenceInteractionPresentation : uint8
 	None,
 	SimpleText,
 	KeywordSelectionWindow,
+	/** Opens the state-authored widget as a blocking screen modal. */
+	ModalWidget,
 	/** Spawns the photo's WorldStoryCues as world-locked 3D text at the actor's StoryAnchor. */
 	WorldStory
 };

@@ -58,6 +58,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Evidence|Investigation")
 	FName GetCurrentStateID() const { return CurrentStateID; }
 
+	/** Action text authored by the active DT_EvidenceStates row for WBP_Interact. */
+	UFUNCTION(BlueprintPure, Category = "Evidence|Investigation")
+	FText GetInteractionPromptText() const;
+
 	/** Executes the current F-interaction. Single-choice keyword documents award their word immediately. */
 	UFUNCTION(BlueprintCallable, Category = "Evidence|Investigation")
 	bool RequestInvestigationInteraction(FText& OutDisplayText);

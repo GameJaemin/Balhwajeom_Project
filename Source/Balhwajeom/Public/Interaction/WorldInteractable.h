@@ -23,4 +23,8 @@ public:
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
 	bool RequestInteraction(APawn* InteractingPawn);
+
+	/** Optional short action shown beside the interaction key. */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+	FText GetInteractionPromptText() const;
 };

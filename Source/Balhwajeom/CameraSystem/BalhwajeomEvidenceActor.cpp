@@ -17,12 +17,14 @@
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
 #include "CameraSystem/BalhwajeomEvidenceFocusGuideLayout.h"
+#include "CameraSystem/BalhwajeomCameraPlayerController.h"
 #include "CameraSystem/PhotoWorldStoryActor.h"
 #include "Engine/StaticMesh.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "GameFramework/PlayerController.h"
+#include "Investigation/BalhwajeomInvestigationSettings.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Story/StoryStateSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -498,6 +500,32 @@ bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplay
 	}
 
 	OutDisplayText = ViewData.InteractionText;
+	ABalhwajeomCameraPlayerController* ModalController = nullptr;
+	TSubclassOf<UUserWidget> ModalContentClass;
+	FText ModalDocumentText = ViewData.InteractionText;
+	if (ViewData.Presentation == EEvidenceInteractionPresentation::ModalWidget)
+	{
+		ModalController = Cast<ABalhwajeomCameraPlayerController>(
+			GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr);
+		ModalContentClass = ViewData.InteractionWidgetClass.LoadSynchronous();
+		if (!ModalController || ModalController->IsInteractionModalOpen() || !ModalContentClass)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("%s: state '%s' could not prepare its interaction modal '%s'."),
+				*GetName(),
+				*ViewData.StateID.ToString(),
+				*ViewData.InteractionWidgetClass.ToString());
+			return false;
+		}
+		FKeywordDocumentDefinition Document;
+		if (Investigation->GetKeywordDocumentDefinition(
+			ViewData.KeywordDocumentID, Document))
+		{
+			ModalDocumentText = Document.DocumentText;
+		}
+		// The dedicated modal owns the presentation; suppress the legacy inspection message.
+		OutDisplayText = FText::GetEmpty();
+	}
 	if (ViewData.Presentation == EEvidenceInteractionPresentation::KeywordSelectionWindow)
 	{
 		FKeywordDocumentDefinition Document;
@@ -521,10 +549,32 @@ bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplay
 		OutDisplayText = FText::GetEmpty();
 	}
 
-	if (!Investigation->CompleteEvidenceInteraction(EvidenceInstanceID, ViewData.StateID))
+	TArray<FName> NewlyGrantedWordIDs;
+	if (!Investigation->CompleteEvidenceInteractionWithGrantedWords(
+		EvidenceInstanceID, ViewData.StateID, NewlyGrantedWordIDs))
 	{
 		LogBlockedWorldStory(TEXT("its InteractionBehavior is ChangeState but NextStateID is empty or points at another object"));
 		return false;
+	}
+
+	if (ViewData.Presentation == EEvidenceInteractionPresentation::ModalWidget)
+	{
+		TArray<FText> NewlyGrantedKeywordTexts;
+		for (const FName WordID : NewlyGrantedWordIDs)
+		{
+			FWordDefinition Word;
+			if (Investigation->GetWordDefinition(WordID, Word))
+			{
+				NewlyGrantedKeywordTexts.Add(Word.DisplayWord);
+			}
+		}
+		if (!ModalController->ShowInteractionModal(
+			ModalContentClass, ModalDocumentText, NewlyGrantedKeywordTexts))
+		{
+			UE_LOG(LogTemp, Error,
+				TEXT("%s: interaction completed but state '%s' failed to open its modal."),
+				*GetName(), *ViewData.StateID.ToString());
+		}
 	}
 
 	if (ViewData.Presentation == EEvidenceInteractionPresentation::WorldStory)
@@ -677,6 +727,15 @@ bool ABalhwajeomEvidenceActor::CanRequestInvestigationInteraction() const
 		Investigation->BeginEvidenceInteraction(EvidenceInstanceID, ViewData);
 }
 
+FText ABalhwajeomEvidenceActor::GetInteractionPromptText() const
+{
+	const UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	FEvidenceStateDefinition State;
+	return Investigation && Investigation->GetEvidenceStateDefinition(CurrentStateID, State)
+		? State.InteractionPromptText
+		: FText::GetEmpty();
+}
+
 UBalhwajeomInvestigationSubsystem* ABalhwajeomEvidenceActor::GetInvestigationSubsystem() const
 {
 	const UWorld* World = GetWorld();
@@ -752,7 +811,12 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID, bool bInit
 	{
 		EvidenceData.EvidenceID = ObjectID;
 		EvidenceData.EvidenceName = ObjectDefinition.ObjectName;
-		RequiredActivationTag = ObjectDefinition.RequiredActivationTag;
+		const UBalhwajeomInvestigationSettings* Settings =
+			GetDefault<UBalhwajeomInvestigationSettings>();
+		RequiredActivationTag = Settings
+			? Settings->ResolveChapter01RequiredActivationTag(
+				ObjectID, ObjectDefinition.RequiredActivationTag)
+			: ObjectDefinition.RequiredActivationTag;
 		ClearRequiredTag = ObjectDefinition.ClearRequiredTag;
 		GrantedTagOnClear = ObjectDefinition.GrantedTagOnClear;
 	}
