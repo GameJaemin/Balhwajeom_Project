@@ -2252,6 +2252,10 @@ void UBalhwajeomTabletFolderButton::Configure(
 	if (TXT_FolderLabel)
 	{
 		TXT_FolderLabel->SetText(InLabel);
+		// Single line, truncated with "..." like a real folder's filename label, instead of
+		// wrapping or overflowing once a long CharacterID.FolderName is used.
+		TXT_FolderLabel->SetAutoWrapText(false);
+		TXT_FolderLabel->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
 		if (InLabelFont.FontObject || InLabelFont.Size > 0)
 		{
 			FSlateFontInfo Font = InLabelFont;
@@ -2619,7 +2623,7 @@ void UBalhwajeomTabletSentenceBlank::Configure(
 	FSlateFontInfo Font = DisplayText->GetFont();
 	// 24 matches WBP_CapturePhoto's AnalysisSentenceFontSize (see BuildSentenceBuilder's
 	// SegmentFontSize) so a blank's filled keyword reads at the same size as its surrounding text.
-	Font.Size = bStatementStyle ? InStatementFontSize : 24;
+	Font.Size = bStatementStyle ? InStatementFontSize : 20;
 	if (bStatementStyle)
 	{
 		Font.FontObject = InStatementFont;
