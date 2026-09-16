@@ -51,6 +51,11 @@ public:
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Data Tables")
 	TSoftObjectPtr<UDataTable> CharactersTable;
 
+	/** Global typewriter speed shared by every DT_Photos WorldStoryCue. */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Photo World Story",
+		meta = (ClampMin = "1.0", UIMin = "1.0"))
+	float WorldStoryCharactersPerSecond = 20.0f;
+
 	/** Enables chapter 01 phase completion, obstacle unlocks, and ObjectID activation gates. */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Chapter 01 Phase Progression")
 	bool bEnableChapter01PhaseSystem = true;
