@@ -4,15 +4,18 @@
 #include "GameFramework/Actor.h"
 #include "Interaction/PlayerInteractionTypes.h"
 #include "Interaction/WorldInteractable.h"
+#include "Investigation/PhotoDefinitions.h"
 #include "UObject/SoftObjectPtr.h"
 #include "BedMemoryActor.generated.h"
 
 class ACharacter;
 class APlayerController;
+class APhotoWorldStoryActor;
 class UAnimationAsset;
 class UAnimInstance;
 class UAnimMontage;
 class UAnimSequenceBase;
+class UArrowComponent;
 class UAudioComponent;
 class UBoxComponent;
 class UCameraComponent;
@@ -23,8 +26,8 @@ class USceneComponent;
 class USoundBase;
 class USoundMix;
 class UStaticMeshComponent;
+class UTextRenderComponent;
 class UWidgetComponent;
-struct FStreamableHandle;
 
 UENUM(BlueprintType)
 enum class EBedMemoryState : uint8
@@ -40,7 +43,7 @@ enum class EBedMemoryState : uint8
 };
 
 USTRUCT()
-struct FBedMemoryVoiceCandidate
+struct FBedMemoryStoryCandidate
 {
 	GENERATED_BODY()
 
@@ -48,14 +51,11 @@ struct FBedMemoryVoiceCandidate
 	FName PhotoID = NAME_None;
 
 	UPROPERTY()
-	TSoftObjectPtr<USoundBase> StoryVoice;
-
-	UPROPERTY()
-	FName EmitterID = NAME_None;
+	FPhotoDefinition PhotoDefinition;
 };
 
 /**
- * Blueprint-placeable bed interaction that replays StoryVoice assets belonging
+ * Blueprint-placeable bed interaction that presents WorldStoryCues belonging
  * to photos currently captured in UBalhwajeomInvestigationSubsystem.
  */
 UCLASS(Blueprintable)
@@ -86,7 +86,11 @@ public:
 	EBedMemoryState GetBedMemoryState() const { return State; }
 
 	UFUNCTION(BlueprintPure, Category = "Bed Memory")
-	int32 GetAvailableVoiceCount() const { return VoiceCandidates.Num(); }
+	int32 GetAvailableStoryCount() const { return StoryCandidates.Num(); }
+
+	UFUNCTION(BlueprintPure, Category = "Bed Memory",
+		meta = (DeprecatedFunction, DeprecationMessage = "Use GetAvailableStoryCount."))
+	int32 GetAvailableVoiceCount() const { return GetAvailableStoryCount(); }
 
 	UFUNCTION(BlueprintCallable, Category = "Bed Memory|UI")
 	void SetInspectionLabelSuppressed(bool bSuppressed);
@@ -127,18 +131,17 @@ protected:
 	void FinishExiting();
 
 	UFUNCTION()
-	void HandleVoiceFinished();
+	void HandleMemoryStoryDestroyed(AActor* DestroyedActor);
 
-	void BuildVoiceCandidates();
+	void BuildStoryCandidates();
 	void BeginPlayerTurn();
 	void FinishPlayerTurn();
 	void BeginEntering();
 	void BeginPreparingAudio();
-	void HandleVoiceAssetsLoaded();
 	void BeginListening();
-	void PlayNextVoice();
+	void PlayNextStory();
 	void RefillShuffleBag();
-	void ScheduleNextVoice(bool bInitialDelay);
+	void ScheduleNextStory(bool bInitialDelay);
 	void SavePlayerAnimationState();
 	float PlayBedAnimation(UAnimationAsset* Animation, bool bLooping, float PlayRate, float StartPosition);
 	void RestorePlayerAnimationState();
@@ -148,8 +151,6 @@ protected:
 	void ApplyInspectionDistanceState(EPlayerInspectionDistanceState DistanceState);
 	void SetInspectionLabel(const FText& LabelText, bool bVisible);
 	void SetWorldEvidenceLabelsSuppressed(bool bSuppressed) const;
-	USceneComponent* ResolveEmitter(FName EmitterID) const;
-	FName ResolveEmitterID(FName PhotoID) const;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bed Memory|Components")
 	TObjectPtr<USceneComponent> SceneRoot;
@@ -175,6 +176,20 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bed Memory|Components")
 	TObjectPtr<UCameraComponent> SeatedCamera;
+
+	/** Move and rotate this component to author where collected-photo memories appear. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bed Memory|Components")
+	TObjectPtr<USceneComponent> StoryAnchor;
+
+#if WITH_EDITORONLY_DATA
+	/** Editor-only +X reading-direction indicator for StoryAnchor. */
+	UPROPERTY()
+	TObjectPtr<UArrowComponent> StoryAnchorArrow;
+
+	/** Editor-only sample caption used to preview the anchor position and reading angle. */
+	UPROPERTY()
+	TObjectPtr<UTextRenderComponent> StoryAnchorPreviewText;
+#endif
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bed Memory|Components")
 	TObjectPtr<USceneComponent> VoiceOrigin;
@@ -224,25 +239,29 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Audio", meta = (ClampMin = "0.0"))
 	float BGMVolume = 0.7f;
 
-	/** Random delay before the first acquired-photo voice is played. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Voice Timing",
-		meta = (DisplayName = "Initial Voice Delay Range", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
-	FVector2D InitialDelayRange = FVector2D(1.0f, 2.0f);
+	/** Random delay after sitting before the first collected-photo story appears. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Story Timing",
+		meta = (DisplayName = "Initial Story Delay Range", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	FVector2D InitialStoryDelayRange = FVector2D::ZeroVector;
 
-	/** Random silence between ordinary voice clips. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Voice Timing",
-		meta = (DisplayName = "Voice Interval Range", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	/** Random delay between ordinary collected-photo stories. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Story Timing",
+		meta = (DisplayName = "Story Interval Range", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
 	FVector2D NormalGapRange = FVector2D(1.0f, 4.0f);
 
 	/** Random silence used when a long pause is selected. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Voice Timing",
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Story Timing",
 		meta = (DisplayName = "Long Silence Range", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
 	FVector2D LongGapRange = FVector2D(4.0f, 7.0f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Voice Timing",
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Story Timing",
 		meta = (DisplayName = "Long Silence Chance", ClampMin = "0.0", ClampMax = "1.0",
 			UIMin = "0.0", UIMax = "1.0"))
 	float LongGapChance = 0.2f;
+
+	/** Presentation actor spawned at StoryAnchor for each collected photo. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Bed Memory|Story")
+	TSubclassOf<APhotoWorldStoryActor> StoryActorClass;
 
 	/** Seconds used to blend from the exploration camera to SeatedCamera. Zero cuts immediately. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Camera",
@@ -253,10 +272,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Animation",
 		meta = (DisplayName = "Player Rotation Duration", ClampMin = "0.0", UIMin = "0.0", Units = "s"))
 	float PlayerRotationDuration = 0.6f;
-
-	/** Per-room spatial direction. Unmapped photos use VoiceOrigin. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Voice")
-	TMap<FName, FName> PhotoEmitterMap;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Bed Memory|Input")
 	TObjectPtr<UInputAction> ExitAction;
@@ -285,7 +300,7 @@ private:
 	TObjectPtr<UEnhancedInputComponent> RestInputComponent;
 
 	UPROPERTY(Transient)
-	TArray<FBedMemoryVoiceCandidate> VoiceCandidates;
+	TArray<FBedMemoryStoryCandidate> StoryCandidates;
 
 	UPROPERTY(Transient)
 	TArray<int32> ShuffleBag;
@@ -296,10 +311,12 @@ private:
 	UPROPERTY(Transient)
 	TSubclassOf<UAnimInstance> SavedAnimInstanceClass;
 
-	TSharedPtr<FStreamableHandle> VoiceLoadHandle;
 	FTimerHandle TransitionTimer;
 	FTimerHandle PlayerTurnTimer;
-	FTimerHandle VoiceTimer;
+	FTimerHandle StoryTimer;
+
+	UPROPERTY(Transient)
+	TWeakObjectPtr<APhotoWorldStoryActor> ActiveMemoryStory;
 	FTransform SavedPlayerTransform;
 	FRotator SavedControlRotation = FRotator::ZeroRotator;
 	FRotator PlayerTurnStartRotation = FRotator::ZeroRotator;

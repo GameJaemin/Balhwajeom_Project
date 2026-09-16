@@ -11,7 +11,6 @@ class USceneComponent;
 class USoundBase;
 class UUserWidget;
 class UWidgetComponent;
-struct FStreamableHandle;
 
 /** Self-contained world-locked caption and narration presentation spawned after a photo capture. */
 UCLASS(Blueprintable)
@@ -47,6 +46,11 @@ public:
 	/** Keeps the actor and widget scale fixed, then enlarges the actual font for the third-person view. */
 	UFUNCTION(BlueprintCallable, Category = "Photo Story")
 	void TransitionToThirdPersonScale();
+
+	/** Pure typewriter timing helper exposed for deterministic tests and UI previews. */
+	static float CalculateTypingDuration(
+		int32 TotalCharacterCount,
+		float CharactersPerSecond);
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -88,9 +92,9 @@ private:
 	void SetStoryWidgetsText(const FText& Text);
 	void SetStoryWidgetsOpacity(float Opacity);
 	void SetStoryWidgetsFontSize(int32 FontSize);
-	void HandleCueSoundLoaded();
-	void PlayCueSound(int32 CueIndex);
+	void PlayCharacterSound(TCHAR Character);
 	void ApplyCue(int32 CueIndex);
+	void RevealNextCharacter();
 	void ScheduleNextCue();
 	void HandleCueTimer();
 	void FinishStory();
@@ -99,8 +103,8 @@ private:
 
 	TArray<FPhotoStoryCue> StoryCues;
 	TSoftObjectPtr<USoundBase> StoryCueSound;
-	TSharedPtr<FStreamableHandle> CueSoundLoadHandle;
 	FTimerHandle CueTimer;
+	FTimerHandle TypewriterTimer;
 	FTimerHandle FadeTimer;
 	FTimerHandle ScaleTimer;
 	int32 CurrentCueIndex = INDEX_NONE;
@@ -111,6 +115,9 @@ private:
 	int32 FontSizeTransitionTarget = 32;
 	float ScaleTransitionDuration = 0.0f;
 	float LastCueDurationSeconds = 2.5f;
+	FString CurrentCueFullString;
+	float CurrentCharactersPerSecond = 0.0f;
+	int32 VisibleCharacterCount = 0;
 	bool bFinishing = false;
 	bool bThirdPersonScaleRequested = false;
 };
