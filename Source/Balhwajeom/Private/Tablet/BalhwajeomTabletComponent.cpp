@@ -322,6 +322,15 @@ void UBalhwajeomTabletComponent::RequestOpenTablet()
 	RefreshPhotoCameraBinding();
 	if (UBalhwajeomPhotoCameraComponent* PhotoCamera = BoundPhotoCamera.Get())
 	{
+		// Arming the pending open while the camera is refusing to leave would block gameplay
+		// input with nothing able to release it: the retry in ProcessPendingPhotoExit is
+		// refused for the same reason, and the blocked input keeps the card from ever being
+		// dismissed. Refuse the request instead of entering that state.
+		if (PhotoCamera->IsCaptureResultLockingCameraMode())
+		{
+			return;
+		}
+
 		if (PhotoCamera->IsInCameraMode() || PhotoCamera->IsCameraTransitioning())
 		{
 			bPendingOpenAfterPhotoMode = true;

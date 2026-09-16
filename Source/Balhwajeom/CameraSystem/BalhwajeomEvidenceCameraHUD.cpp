@@ -2,6 +2,9 @@
 
 #include "BalhwajeomEvidenceCameraHUD.h"
 
+#include "BalhwajeomCapturePhotoDismissInput.h"
+#include "Framework/Application/SlateApplication.h"
+
 #include "BalhwajeomCapturePhotoWidget.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
@@ -502,6 +505,7 @@ void ABalhwajeomEvidenceCameraHUD::TriggerCapturePhotoPresentation(
 		PlayerOwner->SetIgnoreMoveInput(true);
 		bCapturePhotoMovementLocked = true;
 	}
+	RegisterCapturePhotoDismissInput();
 }
 
 void ABalhwajeomEvidenceCameraHUD::UpdateCapturePhotoPresentation()
@@ -538,6 +542,12 @@ void ABalhwajeomEvidenceCameraHUD::UpdateCapturePhotoPresentation()
 		1.0f);
 	CapturePhotoWidget->ApplyPresentationTimeline(TimelineAlpha);
 	UpdateCapturePhotoPrompt(Now);
+	// Hand input back as soon as the card starts leaving, so a player who dismisses and
+	// immediately reaches for TAB is not swallowed for the length of the exit animation.
+	if (!IsCapturePhotoPresentationLockingCameraMode())
+	{
+		UnregisterCapturePhotoDismissInput();
+	}
 	if (CapturePhotoPresentationState.GetPhase() ==
 		ECapturePhotoPresentationPhase::Completed)
 	{
@@ -564,14 +574,63 @@ void ABalhwajeomEvidenceCameraHUD::UpdateCapturePhotoPrompt(const double Now)
 			: ESlateVisibility::Collapsed);
 }
 
+bool ABalhwajeomEvidenceCameraHUD::IsCapturePhotoPresentationLockingCameraMode() const
+{
+	const ECapturePhotoPresentationPhase Phase = CapturePhotoPresentationState.GetPhase();
+	return Phase == ECapturePhotoPresentationPhase::Entering ||
+		Phase == ECapturePhotoPresentationPhase::AwaitingConfirmation;
+}
+
+bool ABalhwajeomEvidenceCameraHUD::HandleCapturePhotoDismissInput()
+{
+	// Entering is swallowed but not confirmed: the card has to be readable before it can be
+	// acknowledged, yet letting presses through there would put TAB back on the path that
+	// arms the tablet while the camera is still refusing to leave.
+	if (!IsCapturePhotoPresentationLockingCameraMode())
+	{
+		return false;
+	}
+
+	TryConfirmCapturePhotoPresentation();
+	return true;
+}
+
 bool ABalhwajeomEvidenceCameraHUD::TryConfirmCapturePhotoPresentation()
 {
 	return GetWorld() &&
 		CapturePhotoPresentationState.TryConfirm(GetWorld()->GetTimeSeconds());
 }
 
+void ABalhwajeomEvidenceCameraHUD::RegisterCapturePhotoDismissInput()
+{
+	if (CapturePhotoDismissInputProcessor.IsValid() || !FSlateApplication::IsInitialized())
+	{
+		return;
+	}
+
+	CapturePhotoDismissInputProcessor =
+		MakeShared<FCapturePhotoDismissInputProcessor>(this);
+	FSlateApplication::Get().RegisterInputPreProcessor(CapturePhotoDismissInputProcessor);
+}
+
+void ABalhwajeomEvidenceCameraHUD::UnregisterCapturePhotoDismissInput()
+{
+	if (!CapturePhotoDismissInputProcessor.IsValid())
+	{
+		return;
+	}
+
+	if (FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().UnregisterInputPreProcessor(
+			CapturePhotoDismissInputProcessor);
+	}
+	CapturePhotoDismissInputProcessor.Reset();
+}
+
 void ABalhwajeomEvidenceCameraHUD::FinishCapturePhotoPresentation()
 {
+	UnregisterCapturePhotoDismissInput();
 	CapturePhotoPresentationState.Reset();
 	if (CapturePhotoWidget)
 	{

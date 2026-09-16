@@ -426,12 +426,33 @@ bool UBalhwajeomPhotoCameraComponent::IsCaptureResultBlockingInput() const
 	return false;
 }
 
+bool UBalhwajeomPhotoCameraComponent::IsCaptureResultLockingCameraMode() const
+{
+	if (PendingCapture.IsSet())
+	{
+		return true;
+	}
+
+	if (const APlayerController* PlayerController =
+		Cast<APlayerController>(GetOwningController(this)))
+	{
+		if (const ABalhwajeomEvidenceCameraHUD* CameraHUD =
+			Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD()))
+		{
+			return CameraHUD->IsCapturePhotoPresentationLockingCameraMode();
+		}
+	}
+
+	return false;
+}
+
 void UBalhwajeomPhotoCameraComponent::ToggleCameraMode()
 {
 	if (BalhwajeomItemInspection::IsOpen(GetOwner())) return;
 
-	// Raising or lowering the camera under the result card would strand it mid-flight.
-	if (IsCaptureResultBlockingInput())
+	// Raising or lowering the camera while the card still awaits acknowledgement would strand
+	// it mid-flight. Once it is leaving, the exit is free.
+	if (IsCaptureResultLockingCameraMode())
 	{
 		return;
 	}
@@ -528,17 +549,8 @@ void UBalhwajeomPhotoCameraComponent::ZoomCamera(float Value)
 
 void UBalhwajeomPhotoCameraComponent::TakePhoto()
 {
-	if (APlayerController* PlayerController =
-		Cast<APlayerController>(GetOwningController(this)))
-	{
-		if (ABalhwajeomEvidenceCameraHUD* CameraHUD =
-			Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD());
-			CameraHUD && CameraHUD->TryConfirmCapturePhotoPresentation())
-		{
-			return;
-		}
-	}
-
+	// Dismissing the result card is no longer the shutter's job: FCapturePhotoDismissInputProcessor
+	// intercepts every press while the card is up, so left click never reaches this function then.
 	if (!bIsInCameraMode || bIsCameraTransitioning || !PhotoCamera || !GetWorld())
 	{
 		return;

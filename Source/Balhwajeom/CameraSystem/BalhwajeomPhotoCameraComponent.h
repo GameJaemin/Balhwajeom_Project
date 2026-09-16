@@ -141,6 +141,15 @@ public:
     UFUNCTION(BlueprintPure, Category = "Photo Camera")
     bool IsCaptureResultBlockingInput() const;
 
+    /**
+     * Narrower than IsCaptureResultBlockingInput: the card's exit animation is excluded.
+     * Shutter and zoom stay refused for the whole span (a held click would otherwise stack
+     * flashes under the card), but leaving camera mode is harmless once the card is on its
+     * way out, and refusing it there left TAB dead for the length of that animation.
+     */
+    UFUNCTION(BlueprintPure, Category = "Photo Camera")
+    bool IsCaptureResultLockingCameraMode() const;
+
     /** Returns the currently focused target's screen guide and object-authored response. */
     UFUNCTION(BlueprintPure, Category = "Photo Camera|Focus")
     bool GetActiveFocusGuide(

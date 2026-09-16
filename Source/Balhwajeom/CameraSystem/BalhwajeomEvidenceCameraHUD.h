@@ -12,6 +12,7 @@ class UMultiShadowTextWidget;
 class UTexture2D;
 class UUserWidget;
 class UBalhwajeomCapturePhotoWidget;
+class FCapturePhotoDismissInputProcessor;
 
 /** Minimal functional camera overlay for the MVP. */
 UCLASS()
@@ -42,7 +43,19 @@ public:
 		return CapturePhotoPresentationState.IsActive();
 	}
 
-	/** Consumes left click only while the centered capture result is awaiting confirmation. */
+	/**
+	 * True only while the card still needs the player to acknowledge it. The exit animation is
+	 * deliberately excluded: once the card is committed to leaving there is no reason to keep
+	 * refusing a camera-mode exit, and refusing it there cost the player a dead ~0.4s in which
+	 * a TAB press did nothing.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Camera|Evidence")
+	bool IsCapturePhotoPresentationLockingCameraMode() const;
+
+	/** Consumes the press while the capture result owns the screen. Returns whether it did. */
+	bool HandleCapturePhotoDismissInput();
+
+	/** Confirms only while the centered capture result is awaiting confirmation. */
 	bool TryConfirmCapturePhotoPresentation();
 
 	/** Shows the captured image, its sentence, and newly granted keywords before flying to TAB. */
@@ -84,6 +97,10 @@ private:
 	bool EnsureCapturePhotoPromptWidget();
 	void UpdateCapturePhotoPrompt(double Now);
 	void FinishCapturePhotoPresentation();
+
+	/** Slate-level press interception, live only while the card owns the screen. */
+	void RegisterCapturePhotoDismissInput();
+	void UnregisterCapturePhotoDismissInput();
 	bool EnsureFocusGuideWidget();
 	void HideFocusGuideWidget();
 	void UpdateFocusGuideWidget(
@@ -130,6 +147,7 @@ private:
 	float PhotoFlashRemaining = 0.0f;
 	float CapturePhotoLayoutWaitStartTime = -1.0f;
 	FCapturePhotoPresentationState CapturePhotoPresentationState;
+	TSharedPtr<FCapturePhotoDismissInputProcessor> CapturePhotoDismissInputProcessor;
 	bool bCapturePhotoMovementLocked = false;
 	bool bCaptureUIHiddenForScreenshot = false;
 	FVector2D DisplayedGuidePosition = FVector2D::ZeroVector;
