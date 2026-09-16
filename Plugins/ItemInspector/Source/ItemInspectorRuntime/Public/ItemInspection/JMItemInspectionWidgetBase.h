@@ -111,6 +111,7 @@ public:
 
 protected:
 	void BuildDefaultWidgetTreeIfNeeded();
+	void ConfigurePreviewLayout();
 	void ApplyInspectionDataToWidgets();
 	void SetTextBlockOrHide(UTextBlock* TextBlock, const FText& Text);
 	bool IsPointerOverInteractionArea(

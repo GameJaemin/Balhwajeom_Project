@@ -43,7 +43,8 @@ protected:
 	void ApplyViewSettings();
 	void ApplyCameraDistance();
 	void ApplyLightingSettings(float BoundsRadius);
-	float CalculateCameraDistance(float BoundsRadius, float PreviewFOV) const;
+	float CalculateCameraDistance(float BoundsRadius, float PreviewFOV, float AspectRatio) const;
+	float CalculateMinimumCameraDistance() const;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "JM Gameplay|Item Inspection")
 	TObjectPtr<USceneComponent> SceneRoot = nullptr;

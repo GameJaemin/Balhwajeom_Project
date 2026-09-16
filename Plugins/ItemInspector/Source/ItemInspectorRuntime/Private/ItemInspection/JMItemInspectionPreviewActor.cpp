@@ -173,6 +173,8 @@ AJMItemInspectionPreviewActor::AJMItemInspectionPreviewActor()
 	SceneCapture->ViewLightingChannels.bViewChannel1 = false;
 	SceneCapture->ViewLightingChannels.bViewChannel2 = true;
 	SceneCapture->FOVAngle = 45.0f;
+	SceneCapture->bOverride_CustomNearClippingPlane = true;
+	SceneCapture->CustomNearClippingPlane = 1.0f;
 
 	KeyLight = CreateDefaultSubobject<USpotLightComponent>(TEXT("KeyLight"));
 	KeyLight->SetupAttachment(SceneRoot);
@@ -290,6 +292,7 @@ void AJMItemInspectionPreviewActor::RotatePreview(float ScreenDeltaX, float Scre
 
 	CurrentRotationQuat = (DeltaRotation * CurrentRotationQuat).GetNormalized();
 	PreviewPivot->SetRelativeRotation(CurrentRotationQuat);
+	ApplyCameraDistance();
 	CapturePreview();
 }
 
@@ -323,6 +326,7 @@ void AJMItemInspectionPreviewActor::ResetPreviewRotation()
 
 	CurrentRotationQuat = CurrentInspectionData->ViewSettings.InitialRotation.Quaternion();
 	PreviewPivot->SetRelativeRotation(CurrentRotationQuat);
+	ApplyCameraDistance();
 	CapturePreview();
 }
 
@@ -494,7 +498,13 @@ void AJMItemInspectionPreviewActor::ApplyViewSettings()
 	PreviewPivot->SetRelativeRotation(CurrentRotationQuat);
 
 	CurrentZoom = FMath::Clamp(ViewSettings.InitialZoom, FMath::Max(0.01f, FMath::Min(ViewSettings.MinZoom, ViewSettings.MaxZoom)), FMath::Max(ViewSettings.MinZoom, ViewSettings.MaxZoom));
-	BaseCameraDistance = CalculateCameraDistance(MeshBounds.SphereRadius * SafeScale, SceneCapture->FOVAngle);
+	const float AspectRatio = SceneCapture->TextureTarget && SceneCapture->TextureTarget->SizeY > 0
+		? static_cast<float>(SceneCapture->TextureTarget->SizeX) / static_cast<float>(SceneCapture->TextureTarget->SizeY)
+		: 1.0f;
+	BaseCameraDistance = CalculateCameraDistance(
+		MeshBounds.SphereRadius * SafeScale,
+		SceneCapture->FOVAngle,
+		AspectRatio);
 	ApplyLightingSettings(MeshBounds.SphereRadius * SafeScale);
 	ApplyCameraDistance();
 }
@@ -572,16 +582,73 @@ void AJMItemInspectionPreviewActor::ApplyCameraDistance()
 		return;
 	}
 
+	const float MinimumCameraDistance = CalculateMinimumCameraDistance();
 	const float SafeZoom = FMath::Max(CurrentZoom, 0.01f);
-	SceneCapture->SetRelativeLocation(FVector(-BaseCameraDistance / SafeZoom, 0.0f, 0.0f));
+	const float ActualCameraDistance = FMath::Max(BaseCameraDistance / SafeZoom, MinimumCameraDistance);
+	SceneCapture->SetRelativeLocation(FVector(-ActualCameraDistance, 0.0f, 0.0f));
 	SceneCapture->SetRelativeRotation(FRotator::ZeroRotator);
 }
 
-float AJMItemInspectionPreviewActor::CalculateCameraDistance(float BoundsRadius, float PreviewFOV) const
+float AJMItemInspectionPreviewActor::CalculateCameraDistance(
+	float BoundsRadius,
+	float PreviewFOV,
+	float AspectRatio) const
 {
 	const float SafeRadius = FMath::Max(BoundsRadius, 1.0f);
 	const float SafeFOV = FMath::Clamp(PreviewFOV, 5.0f, 170.0f);
-	const float HalfFOVRadians = FMath::DegreesToRadians(SafeFOV * 0.5f);
-	const float Distance = SafeRadius / FMath::Max(FMath::Tan(HalfFOVRadians), 0.01f);
+	const float HorizontalHalfFOV = FMath::DegreesToRadians(SafeFOV * 0.5f);
+	const float VerticalHalfFOV = FMath::Atan(
+		FMath::Tan(HorizontalHalfFOV) / FMath::Max(AspectRatio, 0.01f));
+	const float LimitingHalfFOV = FMath::Min(HorizontalHalfFOV, VerticalHalfFOV);
+	const float Distance = SafeRadius / FMath::Max(FMath::Sin(LimitingHalfFOV), 0.01f);
 	return FMath::Max(Distance * 1.15f, 20.0f);
+}
+
+float AJMItemInspectionPreviewActor::CalculateMinimumCameraDistance() const
+{
+	if (!PreviewMeshComponent || !PreviewMeshComponent->GetStaticMesh() || !SceneRoot || !SceneCapture)
+	{
+		return 1.0f;
+	}
+
+	const FBox LocalBounds = PreviewMeshComponent->GetStaticMesh()->GetBounds().GetBox();
+	const FTransform MeshToWorld = PreviewMeshComponent->GetComponentTransform();
+	const FTransform WorldToRoot = SceneRoot->GetComponentTransform().Inverse();
+	const float AspectRatio = SceneCapture->TextureTarget && SceneCapture->TextureTarget->SizeY > 0
+		? static_cast<float>(SceneCapture->TextureTarget->SizeX) / static_cast<float>(SceneCapture->TextureTarget->SizeY)
+		: 1.0f;
+	const float SafeFOV = FMath::Clamp(SceneCapture->FOVAngle, 5.0f, 170.0f);
+	const float HorizontalTangent = FMath::Max(
+		FMath::Tan(FMath::DegreesToRadians(SafeFOV * 0.5f)),
+		0.01f);
+	const float VerticalTangent = HorizontalTangent / FMath::Max(AspectRatio, 0.01f);
+	const float EffectiveNearClip = SceneCapture->bOverride_CustomNearClippingPlane
+		? SceneCapture->CustomNearClippingPlane
+		: GNearClippingPlane;
+	// Reserve five percent on each edge so rotating a long item never appears clipped.
+	constexpr float SafeFrameFraction = 0.90f;
+	constexpr float SurfaceClearance = 1.0f;
+	float MinimumDistance = 1.0f;
+
+	for (int32 CornerIndex = 0; CornerIndex < 8; ++CornerIndex)
+	{
+		const FVector LocalCorner(
+			(CornerIndex & 1) != 0 ? LocalBounds.Max.X : LocalBounds.Min.X,
+			(CornerIndex & 2) != 0 ? LocalBounds.Max.Y : LocalBounds.Min.Y,
+			(CornerIndex & 4) != 0 ? LocalBounds.Max.Z : LocalBounds.Min.Z);
+		const FVector RootSpaceCorner = WorldToRoot.TransformPosition(
+			MeshToWorld.TransformPosition(LocalCorner));
+
+		MinimumDistance = FMath::Max(
+			MinimumDistance,
+			EffectiveNearClip + SurfaceClearance - RootSpaceCorner.X);
+		MinimumDistance = FMath::Max(
+			MinimumDistance,
+			FMath::Abs(RootSpaceCorner.Y) / (HorizontalTangent * SafeFrameFraction) - RootSpaceCorner.X);
+		MinimumDistance = FMath::Max(
+			MinimumDistance,
+			FMath::Abs(RootSpaceCorner.Z) / (VerticalTangent * SafeFrameFraction) - RootSpaceCorner.X);
+	}
+
+	return MinimumDistance;
 }
