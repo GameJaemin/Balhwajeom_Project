@@ -58,6 +58,12 @@ struct FIntroFlowActorTestAccessor
 		return IntroFlow->CinematicVideoWidget;
 	}
 
+	static bool IsAudioFadingWithScreen(
+		const ABalhwajeomIntroFlowActor* IntroFlow)
+	{
+		return IntroFlow->bFadeCinematicAudioWithScreen;
+	}
+
 	static EBalhwajeomIntroState GetState(
 		const ABalhwajeomIntroFlowActor* IntroFlow)
 	{
