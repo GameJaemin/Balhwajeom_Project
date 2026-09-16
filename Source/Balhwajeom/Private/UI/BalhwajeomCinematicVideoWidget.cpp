@@ -18,6 +18,17 @@ void UBalhwajeomCinematicVideoWidget::SetMediaTexture(UMediaTexture* MediaTextur
 	IMG_Video->SetBrush(Brush);
 }
 
+void UBalhwajeomCinematicVideoWidget::SetSkipEnabled(bool bEnabled)
+{
+	if (!BTN_Skip)
+	{
+		return;
+	}
+
+	BTN_Skip->SetIsEnabled(bEnabled);
+	BTN_Skip->SetVisibility(bEnabled ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+}
+
 void UBalhwajeomCinematicVideoWidget::NativeConstruct()
 {
 	Super::NativeConstruct();

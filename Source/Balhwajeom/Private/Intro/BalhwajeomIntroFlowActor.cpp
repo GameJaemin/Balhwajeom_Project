@@ -12,6 +12,7 @@
 #include "LevelSequenceActor.h"
 #include "LevelSequencePlayer.h"
 #include "MediaPlayer.h"
+#include "MediaSoundComponent.h"
 #include "MediaSource.h"
 #include "MediaTexture.h"
 #include "MovieSceneSequencePlaybackSettings.h"
@@ -256,6 +257,7 @@ bool ABalhwajeomIntroFlowActor::StartMediaCinematic()
 	IntroMediaPlayer->OnMediaOpenFailed.AddDynamic(this, &ThisClass::HandleMediaOpenFailed);
 	IntroMediaPlayer->OnEndReached.AddDynamic(this, &ThisClass::HandleMediaEndReached);
 	IntroMediaPlayer->SetLooping(false);
+	SetCinematicAudioVolume(1.0f);
 	State = EBalhwajeomIntroState::Cinematic;
 	if (!IntroMediaPlayer->OpenSource(IntroMediaSource))
 	{
@@ -317,6 +319,24 @@ void ABalhwajeomIntroFlowActor::HandleMediaEndReached()
 	}
 }
 
+void ABalhwajeomIntroFlowActor::SetCinematicAudioVolume(float Volume)
+{
+	// BP_IntroFlowController routes movie audio through a Blueprint-added MediaSoundComponent.
+	if (UMediaSoundComponent* MediaSound = FindComponentByClass<UMediaSoundComponent>())
+	{
+		MediaSound->SetVolumeMultiplier(Volume);
+	}
+	// Covers setups that output through the OS mixer instead of a sound component.
+	if (IntroMediaPlayer)
+	{
+		IntroMediaPlayer->SetNativeVolume(Volume);
+	}
+	if (EndingMediaPlayer)
+	{
+		EndingMediaPlayer->SetNativeVolume(Volume);
+	}
+}
+
 void ABalhwajeomIntroFlowActor::HandleSkipRequested()
 {
 	if (State != EBalhwajeomIntroState::Cinematic && State != EBalhwajeomIntroState::Ending)
@@ -324,19 +344,24 @@ void ABalhwajeomIntroFlowActor::HandleSkipRequested()
 		return;
 	}
 
+	// The fade widget is added at ZOrder 9999 and the cinematic widget at 2000, so the movie stays
+	// on screen while the fade covers it. Closing the player or removing the widget here would show
+	// the level for a frame before the fade even starts; both happen once the screen is fully black
+	// (EnterGameplayAtBlack for the intro, the level reload for the ending).
 	UMediaPlayer* ActiveMediaPlayer = State == EBalhwajeomIntroState::Ending
 		? EndingMediaPlayer.Get() : IntroMediaPlayer.Get();
 	if (ActiveMediaPlayer)
 	{
+		// Detach the playback notifications so a natural end during the fade cannot start a second
+		// transition. The player itself keeps rendering into the widget.
 		ActiveMediaPlayer->OnMediaOpened.RemoveAll(this);
 		ActiveMediaPlayer->OnMediaOpenFailed.RemoveAll(this);
 		ActiveMediaPlayer->OnEndReached.RemoveAll(this);
-		ActiveMediaPlayer->Close();
 	}
+	SetCinematicAudioVolume(0.0f);
 	if (CinematicVideoWidget)
 	{
-		CinematicVideoWidget->RemoveFromParent();
-		CinematicVideoWidget = nullptr;
+		CinematicVideoWidget->SetSkipEnabled(false);
 	}
 
 	if (State == EBalhwajeomIntroState::Ending)
@@ -515,6 +540,7 @@ bool ABalhwajeomIntroFlowActor::StartEndingMediaCinematic()
 	EndingMediaPlayer->OnMediaOpenFailed.AddDynamic(this, &ThisClass::HandleMediaOpenFailed);
 	EndingMediaPlayer->OnEndReached.AddDynamic(this, &ThisClass::HandleMediaEndReached);
 	EndingMediaPlayer->SetLooping(false);
+	SetCinematicAudioVolume(1.0f);
 	State = EBalhwajeomIntroState::Ending;
 	if (!EndingMediaPlayer->OpenSource(EndingMediaSource))
 	{

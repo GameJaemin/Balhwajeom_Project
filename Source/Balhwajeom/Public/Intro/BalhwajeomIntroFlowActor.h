@@ -161,6 +161,9 @@ private:
 	UFUNCTION()
 	void HandleBGMTriggerDoorOpened();
 
+	/** Scales the movie audio without touching the picture, so a skip can mute while the fade runs. */
+	void SetCinematicAudioVolume(float Volume);
+
 	void SetGameplayEnabled(bool bEnabled);
 	void ResetInvestigationPhotosIfRequested();
 	void StartCinematic();
