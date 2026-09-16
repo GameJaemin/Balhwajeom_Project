@@ -21,4 +21,14 @@ namespace BalhwajeomEvidenceFocusGuideLayout
 			StatusImage->SetBrushFromTexture(StatusTexture, false);
 		}
 	}
+
+	FText ResolveLabelText(const FText& AuthoredLabel, const bool bNeedsCloserView)
+	{
+		return bNeedsCloserView
+			? NSLOCTEXT(
+				"BalhwajeomCamera",
+				"MoveCloserOrZoom",
+				"조금 더 가까이 가거나 확대해 보자.")
+			: AuthoredLabel;
+	}
 }

@@ -195,6 +195,14 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 				NearLabelText = Inspection ? Inspection->NearLabel : FText::GetEmpty();
 			}
 		}
+		const bool bNeedsCloserView =
+			bShowCenteredText &&
+			bCanCapture &&
+			!bAlreadyCaptured &&
+			PhotoCamera->IsDisplayedFocusTargetTooSmallForCapture();
+		NearLabelText = BalhwajeomEvidenceFocusGuideLayout::ResolveLabelText(
+			NearLabelText,
+			bNeedsCloserView);
 
 		UpdateFocusGuideWidget(
 			DisplayedGuidePosition,

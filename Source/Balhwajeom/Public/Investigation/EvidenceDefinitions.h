@@ -146,6 +146,10 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture|Focus", meta = (Units = "cm"))
 	float MaximumFocusDistanceOffset = 0.0f;
 
+	/** Minimum viewport area the target must occupy. Negative uses the camera's global value; zero disables the size check. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture|Focus", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
+	float MinimumCaptureScreenOccupancyRatioOverride = -1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture|Legacy", meta = (ClampMin = "1.0", DeprecatedProperty, DeprecationMessage = "Focus distance is now owned by the photo camera. Use MinimumFocusDistanceOffset and MaximumFocusDistanceOffset for per-state variation."))
 	float PreferredFocusDistance = 700.0f;
 

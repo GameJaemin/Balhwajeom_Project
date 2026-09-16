@@ -954,6 +954,17 @@ bool UBalhwajeomPhotoCameraComponent::GetActiveFocusGuide(
 	return true;
 }
 
+bool UBalhwajeomPhotoCameraComponent::IsDisplayedFocusTargetTooSmallForCapture() const
+{
+	const AActor* Target = DisplayedFocusTarget.Get();
+	if (!Target)
+	{
+		return false;
+	}
+
+	return !IsTargetScreenOccupancySufficient(Target, DisplayedFocusTargetInfo);
+}
+
 void UBalhwajeomPhotoCameraComponent::RefreshDisplayedGuideSnapshot()
 {
 	DisplayedFocusTarget = ActiveFocusTarget;
@@ -1092,11 +1103,11 @@ bool UBalhwajeomPhotoCameraComponent::IsViewportCenterOverTarget(const AActor* T
 	return TraceViewportCenter(Hit) && ResolveCameraTargetFromHit(Hit.GetActor()) == Target;
 }
 
-bool UBalhwajeomPhotoCameraComponent::CalculateTargetFrameCoverage(
+bool UBalhwajeomPhotoCameraComponent::CalculateTargetScreenFrameMetrics(
 	const AActor* Target,
-	float& OutCoverageRatio) const
+	FBalhwajeomScreenFrameMetrics& OutMetrics) const
 {
-	OutCoverageRatio = 0.0f;
+	OutMetrics = FBalhwajeomScreenFrameMetrics{};
 	APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
 	if (!Target || !PlayerController ||
 		!Target->GetClass()->ImplementsInterface(UBalhwajeomCameraTargetInterface::StaticClass()))
@@ -1155,26 +1166,39 @@ bool UBalhwajeomPhotoCameraComponent::CalculateTargetFrameCoverage(
 		ScreenMax.Y = FMath::Max(ScreenMax.Y, ScreenCorner.Y);
 	}
 
-	const float FullWidth = ScreenMax.X - ScreenMin.X;
-	const float FullHeight = ScreenMax.Y - ScreenMin.Y;
-	const float FullArea = FullWidth * FullHeight;
-	if (FullWidth <= KINDA_SMALL_NUMBER || FullHeight <= KINDA_SMALL_NUMBER ||
-		FullArea <= KINDA_SMALL_NUMBER)
+	return FBalhwajeomCameraFocusModel::CalculateScreenFrameMetrics(
+		ScreenMin,
+		ScreenMax,
+		FVector2D(ViewportWidth, ViewportHeight),
+		OutMetrics);
+}
+
+bool UBalhwajeomPhotoCameraComponent::IsTargetScreenOccupancySufficient(
+	const AActor* Target,
+	const FBalhwajeomCameraTargetInfo& TargetInfo,
+	FBalhwajeomScreenFrameMetrics* OutMetrics) const
+{
+	FBalhwajeomScreenFrameMetrics Metrics;
+	if (!CalculateTargetScreenFrameMetrics(Target, Metrics))
 	{
+		if (OutMetrics)
+		{
+			*OutMetrics = Metrics;
+		}
 		return false;
 	}
 
-	const float VisibleMinX = FMath::Clamp(ScreenMin.X, 0.0f, static_cast<float>(ViewportWidth));
-	const float VisibleMinY = FMath::Clamp(ScreenMin.Y, 0.0f, static_cast<float>(ViewportHeight));
-	const float VisibleMaxX = FMath::Clamp(ScreenMax.X, 0.0f, static_cast<float>(ViewportWidth));
-	const float VisibleMaxY = FMath::Clamp(ScreenMax.Y, 0.0f, static_cast<float>(ViewportHeight));
-	const float VisibleWidth = FMath::Max(VisibleMaxX - VisibleMinX, 0.0f);
-	const float VisibleHeight = FMath::Max(VisibleMaxY - VisibleMinY, 0.0f);
-	OutCoverageRatio = FMath::Clamp(
-		(VisibleWidth * VisibleHeight) / FullArea,
-		0.0f,
-		1.0f);
-	return true;
+	if (OutMetrics)
+	{
+		*OutMetrics = Metrics;
+	}
+
+	float RequiredRatio = 0.0f;
+	return FBalhwajeomCameraFocusModel::IsScreenOccupancySufficient(
+		Metrics.ScreenOccupancyRatio,
+		MinimumCaptureScreenOccupancyRatio,
+		TargetInfo.MinimumCaptureScreenOccupancyRatioOverride,
+		RequiredRatio);
 }
 
 void UBalhwajeomPhotoCameraComponent::UpdateEvidenceFocus(float DeltaTime)
@@ -1255,6 +1279,8 @@ bool UBalhwajeomPhotoCameraComponent::FindStrictFocusTarget(
 		TargetInfo.bCanCapture = ResolvedTarget.bCanCapture;
 		TargetInfo.MinimumFocusDistanceOffset = ResolvedTarget.MinimumFocusDistanceOffset;
 		TargetInfo.MaximumFocusDistanceOffset = ResolvedTarget.MaximumFocusDistanceOffset;
+		TargetInfo.MinimumCaptureScreenOccupancyRatioOverride =
+			ResolvedTarget.MinimumCaptureScreenOccupancyRatioOverride;
 		MinimumOffset = ResolvedTarget.MinimumFocusDistanceOffset;
 		MaximumOffset = ResolvedTarget.MaximumFocusDistanceOffset;
 	}
@@ -1477,6 +1503,11 @@ bool UBalhwajeomPhotoCameraComponent::TryCaptureActiveFocusTarget()
 			return false;
 		}
 
+		if (!IsTargetScreenOccupancySufficient(Target, TargetInfo))
+		{
+			return false;
+		}
+
 		return BeginInvestigationImageCapture(ResolvedTarget);
 	}
 
@@ -1492,6 +1523,11 @@ bool UBalhwajeomPhotoCameraComponent::TryCaptureActiveFocusTarget()
 	if (CapturedFocusTargets.Contains(Target) || TargetInfo.EvidenceData.bAlreadyCollected)
 	{
 		ShowPhotoFeedback(TEXT("이미 기록한 대상이다."), FColor::Yellow);
+		return false;
+	}
+
+	if (!IsTargetScreenOccupancySufficient(Target, TargetInfo))
+	{
 		return false;
 	}
 
@@ -1554,6 +1590,8 @@ bool UBalhwajeomPhotoCameraComponent::ResolveInvestigationTarget(
 	OutTarget.bCanCapture = StateDefinition.bCanCapture;
 	OutTarget.MinimumFocusDistanceOffset = StateDefinition.MinimumFocusDistanceOffset;
 	OutTarget.MaximumFocusDistanceOffset = StateDefinition.MaximumFocusDistanceOffset;
+	OutTarget.MinimumCaptureScreenOccupancyRatioOverride =
+		StateDefinition.MinimumCaptureScreenOccupancyRatioOverride;
 	return true;
 }
 

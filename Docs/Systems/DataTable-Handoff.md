@@ -64,8 +64,9 @@ CSV 헤더 = Row Struct의 `UPROPERTY` 이름이다. Row Name(CSV 첫 컬럼)은
 | `StateEffect` | Niagara System 참조 | 이 상태로 **전환될 때 1회** 재생할 이펙트. 메시에 Attach되며 이전 상태의 이펙트는 정지한다. 레벨 로드로 상태를 복원할 때는 재생하지 않는다(다시 켜질 때마다 터지는 것을 막기 위해) |
 | `bCanCapture` | Bool | 카메라로 촬영 가능한 상태인지 |
 | `PhotoID` | Name (참조: `DT_Photos.PhotoID`) | `bCanCapture`가 true일 때 촬영 성공 시 등록될 사진. true인데 유효한 `PhotoID`가 없으면 검증 오류. `WorldStory` 상태에서는 촬영용이 아니라 **띄울 스토리를 가리키는 참조**로 쓰이므로, `bCanCapture`가 false여도 채워 둔다(비우면 촬영 완료 아이콘이 물음표로 되돌아간다) |
-| `PreferredFocusDistance` / `FocusDistanceTolerance` | Float | 카메라 초점 판정 기준 거리와 허용 오차(1배율 기준, cm) |
-| `bScaleFocusDistanceWithZoom` | Bool | 줌 배율에 따라 위 초점 거리 기준을 함께 스케일할지 여부 |
+| `MinimumFocusDistanceOffset` / `MaximumFocusDistanceOffset` | Float(cm) | 카메라 공통 최소·최대 초점/촬영 거리에 더하는 상태별 보정값 |
+| `MinimumCaptureScreenOccupancyRatioOverride` | Float | 촬영 대상의 최소 화면 점유율. `-1`은 카메라 공통값(기본 4%) 사용, `0`은 크기 검사 해제, 양수는 상태별 최소 비율 |
+| `PreferredFocusDistance` / `FocusDistanceTolerance` / `bScaleFocusDistanceWithZoom` | Legacy | 이전 초점 거리 방식과의 직렬화 호환용. 신규 데이터에서는 사용하지 않는다 |
 
 ### DT_Words — 키워드 정의
 

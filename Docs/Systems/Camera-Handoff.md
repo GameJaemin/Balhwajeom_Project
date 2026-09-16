@@ -15,7 +15,8 @@
 - `FEvidenceStateDefinition`의 `MinimumFocusDistanceOffset`과 `MaximumFocusDistanceOffset`이 대상별 범위를 조절한다. 두 값의 기본값은 0이며, 유효 최소값은 0cm 아래로 내려가지 않는다.
 - 줌/FOV는 화면 확대에만 관여한다. 초점 거리, 촬영 가능 거리, 블러 구간은 바꾸지 않는다.
 - 화면 가이드는 `CameraFocusPoint`의 투영 위치에 표시한다. 엄격 초점을 잃어도 `FocusTargetGracePeriod`(기본 0.1초) 동안 시각 초점만 유지되며, 이 유예 상태로는 촬영할 수 없다.
-- 기존 실루엣 후보 탐색과 70% 프레이밍 커버리지는 촬영 판정에서 사용하지 않는다.
+- 기존 실루엣 후보 탐색과 70% 프레이밍 커버리지는 촬영 판정에서 사용하지 않는다. 대신 초점 대상 메시의 화면 투영 사각형 중 실제 뷰포트에 보이는 면적이 화면 전체에서 차지하는 비율을 검사한다. 기본 최소값은 `MinimumCaptureScreenOccupancyRatio=0.04`(화면의 4%)다.
+- 대상이 최소 화면 점유율보다 작아도 초점, 가이드, 블러는 유지한다. 이때 `WBP_EvidenceFocusGuide.LabelText`는 `조금 더 가까이 가거나 확대해 보자.`로 바뀌고 촬영만 거부된다. 가까이 이동하거나 줌으로 투영 크기를 키우면 별도 상태 변경 없이 촬영 가능해진다.
 - 화면 블러는 깊이 버퍼와 좌표계를 맞추기 위해 `CameraFocusPoint`의 카메라 전방축 깊이를 사용한다. 초점 대상이 있으면 이 깊이의 앞뒤 `BlurStartDistance`까지 선명하다. 대상이 없으면 전역 최소~최대 범위 전체가 선명하다. 바깥은 `BlurTransitionDistance` 동안 2차 Ease-In으로 `MaximumBlurStrength`까지 흐려진다.
 - 블러는 원거리 가로/세로, 근거리 가로/세로, 최종 합성의 전체 해상도 5패스로 처리한다. 17샘플 가우시안 커널이 텍스처뿐 아니라 흐린 물체의 외곽선도 연속적으로 퍼뜨린다. 근거리 패스는 색과 커버리지를 함께 누적한 뒤 원거리 결과 위에 합성하므로 앞쪽 물체가 뒤쪽 물체를 자연스럽게 덮는다. 모든 색상/깊이 샘플은 같은 Viewport UV에서 출발해 각 텍스처 좌표로 따로 변환·고정하므로 중간 렌더 타깃 크기 차이로 인한 위치 밀림이 없다. 카메라 HUD/WBP는 장면 후처리 뒤에 그려져 선명하게 유지된다.
 - 일반 불투명/마스크드 메시에는 별도의 메시 머티리얼 수정 없이 자동 적용된다. 단, Translucent 및 Separate Translucency 렌더링은 장면 깊이/후처리 순서 특성상 동일한 블러 결과를 보장하지 않는다. 해당 렌더링 방식은 별도 아트 대응이 필요하다.
@@ -27,6 +28,7 @@
 
 - 플레이어 카메라 Blueprint의 `BalhwajeomPhotoCameraComponent` Class Defaults:
   - `MinimumFocusDistance`, `MaximumFocusDistance`: 공통 초점/촬영 가능 범위
+  - `MinimumCaptureScreenOccupancyRatio`: 촬영 대상이 화면에서 차지해야 하는 최소 면적 비율. 기본값 `0.04`
   - `BlurStartDistance`: 초점점 앞뒤의 완전 선명 범위
   - `BlurTransitionDistance`: 최대 블러에 도달하기까지의 거리
   - `MaximumBlurStrength`: 정규화된 최대 블러 강도(0~1)
@@ -38,6 +40,7 @@
   - `FocusTargetGracePeriod`: 순간적인 중앙 레이 이탈을 숨기는 시각 유예 시간
 - `DT_EvidenceStates` 각 행:
   - `MinimumFocusDistanceOffset`, `MaximumFocusDistanceOffset`: 해당 상태만의 거리 보정
+  - `MinimumCaptureScreenOccupancyRatioOverride`: 상태별 최소 화면 점유율. `-1`은 카메라 공통값 사용, `0`은 크기 검사 해제, 양수는 해당 비율로 덮어쓰기
 - 증거 Blueprint/레벨 인스턴스:
   - `CameraFocusPoint`: 거리 측정과 가이드 표시의 정확한 기준점
 - 후처리 에셋(기존 직렬화 참조 호환을 위해 에셋 경로는 유지):
@@ -49,7 +52,7 @@
   - 런타임 공통 파라미터는 `SharpNearDistance`, `SharpFarDistance`, `BlurTransitionDistance`, `MaximumBlurStrength`, `MaximumBlurRadiusPixels`, `NearBlurRadiusScale`, `FarBlurRadiusScale`다.
   - 새 불투명/마스크드 모델을 맵에 배치하는 것만으로 블러에는 자동 참여한다. 카메라 자동 초점/촬영 대상으로 사용하려면 별도로 증거 액터 구성과 `CameraFocusPoint`가 필요하다.
 
-PIE에서는 먼저 FOV를 바꿔도 같은 실제 거리에서 초점 판정이 유지되는지 확인하고, 대상 앞을 다른 메시로 가렸을 때 뒤 대상이 잡히지 않는지 확인한다. 이어서 중앙에서 살짝 벗어났을 때 약 0.1초 뒤 가이드가 사라지는지, 그 짧은 유예 중 셔터가 촬영을 거절하는지 확인한다.
+PIE에서는 먼저 FOV를 바꿔도 같은 실제 거리에서 초점 판정이 유지되는지 확인하고, 대상 앞을 다른 메시로 가렸을 때 뒤 대상이 잡히지 않는지 확인한다. 화면 점유율이 기준보다 작을 때 안내 문구가 표시되고 촬영이 거부되는지, 줌 또는 전진으로 기준을 넘으면 원래 `NearLabel`로 돌아오며 촬영되는지도 확인한다. 이어서 중앙에서 살짝 벗어났을 때 약 0.1초 뒤 가이드가 사라지는지, 그 짧은 유예 중 셔터가 촬영을 거절하는지 확인한다.
 
 ## 3. 변경 필요 사항 (세부 시스템 수정)
 

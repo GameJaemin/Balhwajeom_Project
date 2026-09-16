@@ -34,6 +34,29 @@ bool FEvidenceStatusIconUsesTwoStatesTest::RunTest(const FString& Parameters)
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FEvidenceFocusGuideUsesCloserViewFeedbackTest,
+	"Balhwajeom.Camera.Evidence.FocusGuide.UsesCloserViewFeedback",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FEvidenceFocusGuideUsesCloserViewFeedbackTest::RunTest(const FString& Parameters)
+{
+	const FText AuthoredLabel = FText::FromString(TEXT("낡은 스노우글로브다."));
+	TestEqual(
+		TEXT("A target that is too small replaces the authored label with capture guidance"),
+		BalhwajeomEvidenceFocusGuideLayout::ResolveLabelText(AuthoredLabel, true).ToString(),
+		FString(TEXT("조금 더 가까이 가거나 확대해 보자.")));
+	TestEqual(
+		TEXT("A large-enough target keeps its authored label"),
+		BalhwajeomEvidenceFocusGuideLayout::ResolveLabelText(AuthoredLabel, false).ToString(),
+		AuthoredLabel.ToString());
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FEvidenceFocusGuideCentersOnGuidePositionTest,
 	"Balhwajeom.Camera.Evidence.FocusGuide.RuntimeCentersOnGuidePosition",
 	EAutomationTestFlags::EditorContext |

@@ -15,4 +15,7 @@ namespace BalhwajeomEvidenceFocusGuideLayout
 
 	/** Swaps the status texture without replacing the WBP-authored image size. */
 	void ApplyStatusTexture(UImage* StatusImage, UTexture2D* StatusTexture);
+
+	/** Replaces the authored centered label while the target is too small to photograph. */
+	FText ResolveLabelText(const FText& AuthoredLabel, bool bNeedsCloserView);
 }
