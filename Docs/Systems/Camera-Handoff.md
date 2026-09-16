@@ -17,6 +17,7 @@
 - 화면 가이드는 `CameraFocusPoint`의 투영 위치에 표시한다. 엄격 초점을 잃어도 `FocusTargetGracePeriod`(기본 0.1초) 동안 시각 초점만 유지되며, 이 유예 상태로는 촬영할 수 없다.
 - 기존 실루엣 후보 탐색과 70% 프레이밍 커버리지는 촬영 판정에서 사용하지 않는다. 대신 초점 대상 메시의 화면 투영 사각형 중 실제 뷰포트에 보이는 면적이 화면 전체에서 차지하는 비율을 검사한다. 기본 최소값은 `MinimumCaptureScreenOccupancyRatio=0.04`(화면의 4%)다.
 - 대상이 최소 화면 점유율보다 작아도 초점, 가이드, 블러는 유지한다. 이때 `WBP_EvidenceFocusGuide.LabelText`는 `조금 더 가까이 가거나 확대해 보자.`로 바뀌고 촬영만 거부된다. 가까이 이동하거나 줌으로 투영 크기를 키우면 별도 상태 변경 없이 촬영 가능해진다.
+- 엄격한 중앙 초점이 잡힌 대상의 현재 상태가 촬영 불가이면 `WBP_EvidenceFocusGuide.LabelText_sub`에 `FEvidenceStateDefinition.CaptureBlockedLabel`을 표시한다. 이 값이 비어 있으면 `이건 굳이 사진으로 남기지 않아도 될 것 같다.`를 사용한다. 촬영 가능한 대상, 초점 유예 상태, 초점 대상이 없는 상태에서는 보조 문구의 내용과 표시 상태를 모두 비운다. 이미 촬영한 대상도 원래 촬영 가능한 상태라면 보조 문구를 표시하지 않는다.
 - 화면 블러는 깊이 버퍼와 좌표계를 맞추기 위해 `CameraFocusPoint`의 카메라 전방축 깊이를 사용한다. 초점 대상이 있으면 이 깊이의 앞뒤 `BlurStartDistance`까지 선명하다. 대상이 없으면 전역 최소~최대 범위 전체가 선명하다. 바깥은 `BlurTransitionDistance` 동안 2차 Ease-In으로 `MaximumBlurStrength`까지 흐려진다.
 - 블러는 원거리 가로/세로, 근거리 가로/세로, 최종 합성의 전체 해상도 5패스로 처리한다. 17샘플 가우시안 커널이 텍스처뿐 아니라 흐린 물체의 외곽선도 연속적으로 퍼뜨린다. 근거리 패스는 색과 커버리지를 함께 누적한 뒤 원거리 결과 위에 합성하므로 앞쪽 물체가 뒤쪽 물체를 자연스럽게 덮는다. 모든 색상/깊이 샘플은 같은 Viewport UV에서 출발해 각 텍스처 좌표로 따로 변환·고정하므로 중간 렌더 타깃 크기 차이로 인한 위치 밀림이 없다. 카메라 HUD/WBP는 장면 후처리 뒤에 그려져 선명하게 유지된다.
 - 일반 불투명/마스크드 메시에는 별도의 메시 머티리얼 수정 없이 자동 적용된다. 단, Translucent 및 Separate Translucency 렌더링은 장면 깊이/후처리 순서 특성상 동일한 블러 결과를 보장하지 않는다. 해당 렌더링 방식은 별도 아트 대응이 필요하다.
@@ -41,6 +42,7 @@
 - `DT_EvidenceStates` 각 행:
   - `MinimumFocusDistanceOffset`, `MaximumFocusDistanceOffset`: 해당 상태만의 거리 보정
   - `MinimumCaptureScreenOccupancyRatioOverride`: 상태별 최소 화면 점유율. `-1`은 카메라 공통값 사용, `0`은 크기 검사 해제, 양수는 해당 비율로 덮어쓰기
+  - `CaptureBlockedLabel`: 현재 상태가 촬영 불가일 때 `LabelText_sub`에 표시할 행동 안내. 비우면 공통 촬영 불필요 문구 사용
 - 증거 Blueprint/레벨 인스턴스:
   - `CameraFocusPoint`: 거리 측정과 가이드 표시의 정확한 기준점
 - 후처리 에셋(기존 직렬화 참조 호환을 위해 에셋 경로는 유지):

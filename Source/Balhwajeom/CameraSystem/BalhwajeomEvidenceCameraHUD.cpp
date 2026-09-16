@@ -203,13 +203,21 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 		NearLabelText = BalhwajeomEvidenceFocusGuideLayout::ResolveLabelText(
 			NearLabelText,
 			bNeedsCloserView);
+		const FText SubLabelText =
+			BalhwajeomEvidenceFocusGuideLayout::ResolveSubLabelText(
+				bShowCenteredText,
+				bCanCapture,
+				bResolvedInvestigationDefinitions
+					? StateDefinition.CaptureBlockedLabel
+					: FText::GetEmpty());
 
 		UpdateFocusGuideWidget(
 			DisplayedGuidePosition,
 			GuideOpacity,
 			bShowStatusIcon,
 			bUsePhotoRequiredIcon,
-			NearLabelText);
+			NearLabelText,
+			SubLabelText);
 	}
 	else
 	{
@@ -272,6 +280,7 @@ void ABalhwajeomEvidenceCameraHUD::EndPlay(const EEndPlayReason::Type EndPlayRea
 	FocusGuideWidget = nullptr;
 	FocusGuideStatusImage = nullptr;
 	FocusGuideLabelText = nullptr;
+	FocusGuideSubLabelText = nullptr;
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -297,6 +306,8 @@ bool ABalhwajeomEvidenceCameraHUD::EnsureFocusGuideWidget()
 		FocusGuideWidget->GetWidgetFromName(TEXT("UseCamera")));
 	FocusGuideLabelText = Cast<UMultiShadowTextWidget>(
 		FocusGuideWidget->GetWidgetFromName(TEXT("LabelText")));
+	FocusGuideSubLabelText = Cast<UMultiShadowTextWidget>(
+		FocusGuideWidget->GetWidgetFromName(TEXT("LabelText_sub")));
 	FocusGuideWidget->AddToViewport(100);
 	FocusGuideWidget->SetVisibility(ESlateVisibility::Collapsed);
 	return true;
@@ -304,6 +315,11 @@ bool ABalhwajeomEvidenceCameraHUD::EnsureFocusGuideWidget()
 
 void ABalhwajeomEvidenceCameraHUD::HideFocusGuideWidget()
 {
+	if (FocusGuideSubLabelText)
+	{
+		FocusGuideSubLabelText->SetText(FText::GetEmpty());
+		FocusGuideSubLabelText->SetVisibility(ESlateVisibility::Collapsed);
+	}
 	if (FocusGuideWidget)
 	{
 		FocusGuideWidget->SetVisibility(ESlateVisibility::Collapsed);
@@ -315,10 +331,13 @@ void ABalhwajeomEvidenceCameraHUD::UpdateFocusGuideWidget(
 	const float GuideOpacity,
 	const bool bShowStatusIcon,
 	const bool bUsePhotoRequiredIcon,
-	const FText& LabelText)
+	const FText& LabelText,
+	const FText& SubLabelText)
 {
 	const bool bShowLabel = !LabelText.IsEmptyOrWhitespace();
-	if ((!bShowStatusIcon && !bShowLabel) || !EnsureFocusGuideWidget())
+	const bool bShowSubLabel = !SubLabelText.IsEmptyOrWhitespace();
+	if ((!bShowStatusIcon && !bShowLabel && !bShowSubLabel) ||
+		!EnsureFocusGuideWidget())
 	{
 		HideFocusGuideWidget();
 		return;
@@ -342,6 +361,14 @@ void ABalhwajeomEvidenceCameraHUD::UpdateFocusGuideWidget(
 		FocusGuideLabelText->SetText(LabelText);
 		FocusGuideLabelText->SetVisibility(
 			bShowLabel
+				? ESlateVisibility::HitTestInvisible
+				: ESlateVisibility::Collapsed);
+	}
+	if (FocusGuideSubLabelText)
+	{
+		FocusGuideSubLabelText->SetText(SubLabelText);
+		FocusGuideSubLabelText->SetVisibility(
+			bShowSubLabel
 				? ESlateVisibility::HitTestInvisible
 				: ESlateVisibility::Collapsed);
 	}

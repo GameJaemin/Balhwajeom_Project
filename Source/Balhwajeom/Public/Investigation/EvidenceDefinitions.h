@@ -127,6 +127,10 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture")
 	bool bCanCapture = false;
 
+	/** Camera guide text shown while this state itself does not permit capture. Empty uses the generic message. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture")
+	FText CaptureBlockedLabel;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture")
 	FName PhotoID = NAME_None;
 

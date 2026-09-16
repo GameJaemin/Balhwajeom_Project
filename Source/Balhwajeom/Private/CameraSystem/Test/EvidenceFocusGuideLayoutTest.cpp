@@ -57,6 +57,41 @@ bool FEvidenceFocusGuideUsesCloserViewFeedbackTest::RunTest(const FString& Param
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FEvidenceFocusGuideUsesCaptureDisabledFeedbackTest,
+	"Balhwajeom.Camera.Evidence.FocusGuide.UsesCaptureDisabledFeedback",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FEvidenceFocusGuideUsesCaptureDisabledFeedbackTest::RunTest(
+	const FString& Parameters)
+{
+	const FText AuthoredGuidance =
+		FText::FromString(TEXT("사진을 찍기 전에 먼지부터 털어 보자."));
+	TestEqual(
+		TEXT("A centered capture-disabled target prioritizes its authored guidance"),
+		BalhwajeomEvidenceFocusGuideLayout::ResolveSubLabelText(
+			true, false, AuthoredGuidance).ToString(),
+		AuthoredGuidance.ToString());
+	TestEqual(
+		TEXT("A capture-disabled target without authored guidance uses the generic message"),
+		BalhwajeomEvidenceFocusGuideLayout::ResolveSubLabelText(
+			true, false, FText::GetEmpty()).ToString(),
+		FString(TEXT("이건 굳이 사진으로 남기지 않아도 될 것 같다.")));
+	TestTrue(
+		TEXT("A capture-enabled target clears the secondary guidance"),
+		BalhwajeomEvidenceFocusGuideLayout::ResolveSubLabelText(
+			true, true, AuthoredGuidance).IsEmpty());
+	TestTrue(
+		TEXT("Losing strict centered focus clears the secondary guidance"),
+		BalhwajeomEvidenceFocusGuideLayout::ResolveSubLabelText(
+			false, false, AuthoredGuidance).IsEmpty());
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FEvidenceFocusGuideCentersOnGuidePositionTest,
 	"Balhwajeom.Camera.Evidence.FocusGuide.RuntimeCentersOnGuidePosition",
 	EAutomationTestFlags::EditorContext |
