@@ -664,6 +664,24 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 	{
 		return;
 	}
+
+	const EBalhwajeomTutorialHintTarget TutorialHintTarget =
+		ABalhwajeomTutorialDirector::GetTutorialHintTarget(this);
+	const bool bShouldBeBehindTutorialDim =
+		TutorialHintTarget == EBalhwajeomTutorialHintTarget::PhotoCameraIcon;
+	if (bInteractionPromptBehindTutorialDim != bShouldBeBehindTutorialDim)
+	{
+		// The tutorial dim is ZOrder 5. Put WB_Interact just below it only while
+		// the camera icon owns the player's attention, then restore its normal layer.
+		if (UGameViewportSubsystem* ViewportSubsystem = UGameViewportSubsystem::Get(GetWorld()))
+		{
+			FGameViewportWidgetSlot Slot = ViewportSubsystem->GetWidgetSlot(InteractionPromptWidget);
+			Slot.ZOrder = bShouldBeBehindTutorialDim ? 4 : 10;
+			ViewportSubsystem->SetWidgetSlot(InteractionPromptWidget, Slot);
+			bInteractionPromptBehindTutorialDim = bShouldBeBehindTutorialDim;
+		}
+	}
+
 	if (!bGameplayPresentationEnabled)
 	{
 		InteractionPromptWidget->SetVisibility(ESlateVisibility::Collapsed);
@@ -700,10 +718,16 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 
 	// A tutorial step can ask for the [F] prompt itself to pulse.
 	float DisplayOpacity = InteractionPromptAlpha;
-	if (ABalhwajeomTutorialDirector::GetTutorialHintTarget(this) ==
-		EBalhwajeomTutorialHintTarget::InteractPrompt)
+	if (TutorialHintTarget == EBalhwajeomTutorialHintTarget::InteractPrompt)
 	{
 		DisplayOpacity *= ABalhwajeomTutorialDirector::GetTutorialHighlightPulse(this);
+	}
+	else if (bShouldBeBehindTutorialDim)
+	{
+		// The dim is intentionally translucent, so a bright prompt can still show through
+		// even at the lower Z-order. Hide only the authored [F] text pixels while keeping
+		// its alpha and the rest of the interaction/input update alive.
+		DisplayOpacity = 0.0f;
 	}
 
 	if (!bShouldShow && InteractionPromptAlpha <= KINDA_SMALL_NUMBER)
@@ -719,7 +743,7 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 		return;
 	}
 
-	if (bShouldShow &&
+	if (bShouldShow && !bShouldBeBehindTutorialDim &&
 		InteractionPromptFadeTarget->GetVisibility() != ESlateVisibility::HitTestInvisible)
 	{
 		InteractionPromptFadeTarget->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -727,7 +751,7 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 
 	InteractionPromptFadeTarget->SetRenderOpacity(DisplayOpacity);
 
-	if (!bShouldShow && InteractionPromptAlpha <= 0.0f)
+	if (bShouldBeBehindTutorialDim || (!bShouldShow && InteractionPromptAlpha <= 0.0f))
 	{
 		InteractionPromptFadeTarget->SetVisibility(ESlateVisibility::Hidden);
 	}
