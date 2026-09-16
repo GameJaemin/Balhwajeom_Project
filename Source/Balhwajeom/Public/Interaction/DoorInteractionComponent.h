@@ -66,6 +66,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Door")
 	bool RequestInteraction();
 
+	/** Action displayed beside [ F ] while this door can be interacted with. */
+	UFUNCTION(BlueprintPure, Category = "Door|UI")
+	FText GetInteractionPromptText() const { return InteractionPromptText; }
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door|UI")
+	FText InteractionPromptText;
+
 	/** Fired when the player presses interact while the unlock condition is not met. */
 	UPROPERTY(BlueprintAssignable, Category = "Door|Gate")
 	FOnDoorLockedInteractionRequested OnLockedInteractionRequested;
