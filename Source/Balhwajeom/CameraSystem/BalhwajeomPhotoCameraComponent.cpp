@@ -527,6 +527,17 @@ void UBalhwajeomPhotoCameraComponent::ZoomCamera(float Value)
 
 void UBalhwajeomPhotoCameraComponent::TakePhoto()
 {
+	if (APlayerController* PlayerController =
+		Cast<APlayerController>(GetOwningController(this)))
+	{
+		if (ABalhwajeomEvidenceCameraHUD* CameraHUD =
+			Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD());
+			CameraHUD && CameraHUD->TryConfirmCapturePhotoPresentation())
+		{
+			return;
+		}
+	}
+
 	if (!bIsInCameraMode || bIsCameraTransitioning || !PhotoCamera || !GetWorld())
 	{
 		return;

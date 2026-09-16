@@ -1,5 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
+#include "CameraSystem/BalhwajeomCapturePhotoPresentationState.h"
 #include "CameraSystem/BalhwajeomCapturePhotoWidget.h"
 #include "Components/Border.h"
 #include "Components/CanvasPanel.h"
@@ -54,6 +55,79 @@ bool FCapturePhotoMultilineSentenceTest::RunTest(const FString& Parameters)
 	return !HasAnyErrors();
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCapturePhotoConfirmationFlowTest,
+	"Balhwajeom.Camera.CapturePhotoConfirmationFlow",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCapturePhotoConfirmationFlowTest::RunTest(const FString& Parameters)
+{
+	FCapturePhotoPresentationState State;
+	constexpr double StartTime = 10.0;
+	constexpr float EntryCompletionTime = 50.0f / 60.0f;
+	constexpr float ExitStartTime = 68.0f / 60.0f;
+	constexpr float TotalDuration = 93.0f / 60.0f;
+	constexpr float PromptFadeDuration = 10.0f / 60.0f;
+	State.Start(
+		StartTime,
+		EntryCompletionTime,
+		ExitStartTime,
+		TotalDuration,
+		PromptFadeDuration);
+
+	State.Update(StartTime + 25.0 / 60.0);
+	TestEqual(TEXT("presentation starts in the entering phase"),
+		State.GetPhase(), ECapturePhotoPresentationPhase::Entering);
+	TestTrue(TEXT("entry timeline advances before the final keyword arrives"),
+		FMath::IsNearlyEqual(State.GetTimelineTime(StartTime + 25.0 / 60.0), 25.0f / 60.0f));
+	TestEqual(TEXT("continue prompt stays hidden during entry"),
+		State.GetPromptOpacity(StartTime + 25.0 / 60.0), 0.0f);
+	TestFalse(TEXT("left click cannot skip the entrance"),
+		State.TryConfirm(StartTime + 25.0 / 60.0));
+
+	State.Update(StartTime + 50.0 / 60.0);
+	TestEqual(TEXT("presentation waits after every keyword has entered"),
+		State.GetPhase(), ECapturePhotoPresentationPhase::AwaitingConfirmation);
+	TestTrue(TEXT("timeline holds on the completed entrance"),
+		FMath::IsNearlyEqual(State.GetTimelineTime(StartTime + 55.0 / 60.0), EntryCompletionTime));
+	TestTrue(TEXT("continue prompt fades halfway in over five frames"),
+		FMath::IsNearlyEqual(
+			State.GetPromptOpacity(StartTime + 55.0 / 60.0),
+			0.5f,
+			0.002f));
+
+	const double ConfirmTime = StartTime + 55.0 / 60.0;
+	TestTrue(TEXT("left click starts exit while awaiting confirmation"),
+		State.TryConfirm(ConfirmTime));
+	TestEqual(TEXT("confirmation changes the presentation to the exit phase"),
+		State.GetPhase(), ECapturePhotoPresentationPhase::Exiting);
+	TestTrue(TEXT("exit resumes at authored frame 68 without replaying the hold"),
+		FMath::IsNearlyEqual(State.GetTimelineTime(ConfirmTime), ExitStartTime));
+	TestTrue(TEXT("prompt keeps its current opacity on the confirmation frame"),
+		FMath::IsNearlyEqual(State.GetPromptOpacity(ConfirmTime), 0.5f, 0.002f));
+	TestFalse(TEXT("additional clicks are ignored during exit"),
+		State.TryConfirm(ConfirmTime));
+
+	State.Update(ConfirmTime + 5.0 / 60.0);
+	TestTrue(TEXT("photo exit and prompt fade-out advance together"),
+		FMath::IsNearlyEqual(
+			State.GetTimelineTime(ConfirmTime + 5.0 / 60.0),
+			73.0f / 60.0f,
+			0.002f) &&
+		FMath::IsNearlyEqual(
+			State.GetPromptOpacity(ConfirmTime + 5.0 / 60.0),
+			0.25f,
+			0.002f));
+
+	State.Update(ConfirmTime + 25.0 / 60.0);
+	TestEqual(TEXT("presentation completes after the 25-frame exit"),
+		State.GetPhase(), ECapturePhotoPresentationPhase::Completed);
+	TestTrue(TEXT("completed presentation reaches authored frame 93"),
+		FMath::IsNearlyEqual(State.GetTimelineTime(ConfirmTime + 25.0 / 60.0), TotalDuration));
+	TestEqual(TEXT("continue prompt is hidden when exit completes"),
+		State.GetPromptOpacity(ConfirmTime + 25.0 / 60.0), 0.0f);
+	return !HasAnyErrors();
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCapturePhotoFlightTest,
 	"Balhwajeom.Camera.CapturePhotoFlight",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -88,6 +162,12 @@ bool FCapturePhotoFlightTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("AE presentation can start without TAB target geometry"), Widget->IsPresentationReady());
 	TestTrue(TEXT("extended AE timeline ends at frame 93"),
 		FMath::IsNearlyEqual(Widget->GetAnimationDuration(), 93.0f / 60.0f));
+	const float EntryCompletionTime = Widget->GetEntryCompletionTime();
+	TestTrue(
+		*FString::Printf(
+			TEXT("three keywords finish entering at frame 50 (actual %.3f frames)"),
+			EntryCompletionTime * 60.0f),
+		FMath::IsNearlyEqual(EntryCompletionTime, 50.0f / 60.0f, 0.002f));
 	TestEqual(TEXT("one animated widget exists per granted keyword"),
 		Widget->KeywordList->GetChildrenCount(), 3);
 	TestTrue(TEXT("exit distance places the moving content below the viewport"),

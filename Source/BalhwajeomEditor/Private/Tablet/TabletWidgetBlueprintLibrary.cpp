@@ -3722,6 +3722,54 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 	return TabletDesigner::SaveAndCompile(Blueprint);
 }
 
+bool UTabletWidgetBlueprintLibrary::ConfigureCapturePhotoPromptWidgetBlueprint()
+{
+	static const TCHAR* PromptAssetPath =
+		TEXT("/Game/Balhwajeom/UI/Camera/WBP_PhotoCheck.WBP_PhotoCheck");
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, PromptAssetPath);
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PHOTO_CHECK_PROMPT failed: prompt Widget Blueprint is missing."));
+		return false;
+	}
+
+	UCanvasPanel* Root = Cast<UCanvasPanel>(Blueprint->WidgetTree->RootWidget);
+	USizeBox* PromptContainer = Cast<USizeBox>(
+		Blueprint->WidgetTree->FindWidget(TEXT("SizeBox_0")));
+	UMultiShadowTextWidget* PromptLabel = Cast<UMultiShadowTextWidget>(
+		Blueprint->WidgetTree->FindWidget(TEXT("LabelText")));
+	UCanvasPanelSlot* PromptSlot = PromptContainer
+		? Cast<UCanvasPanelSlot>(PromptContainer->Slot)
+		: nullptr;
+	if (!Root || !PromptContainer || !PromptLabel || !PromptSlot)
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("PHOTO_CHECK_PROMPT failed: expected CanvasPanel/SizeBox_0/LabelText structure is missing."));
+		return false;
+	}
+
+	Blueprint->Modify();
+	PromptContainer->Modify();
+	PromptLabel->Modify();
+	PromptSlot->Modify();
+	PromptLabel->SetText(FText::FromString(TEXT("좌클릭하여 계속")));
+	PromptLabel->Justification = ETextJustify::Center;
+	PromptSlot->SetAnchors(FAnchors(0.5f, 1.0f));
+	PromptSlot->SetAlignment(FVector2D(0.5f, 1.0f));
+	PromptSlot->SetPosition(FVector2D(0.0f, -96.0f));
+	PromptSlot->SetAutoSize(true);
+
+	const bool bSaved = TabletDesigner::SaveAndCompile(Blueprint);
+	UE_LOG(
+		LogTemp,
+		Display,
+		TEXT("PHOTO_CHECK_PROMPT Result=%s Position=(0,-96) Text=좌클릭하여 계속"),
+		bSaved ? TEXT("Success") : TEXT("Failure"));
+	return bSaved;
+}
+
 bool UTabletWidgetBlueprintLibrary::CreateIntroFlowAssets()
 {
 	const FString Folder = TEXT("/Game/Balhwajeom/UI/Title");

@@ -36,6 +36,8 @@ public:
 	void ResetPresentation();
 
 	float GetAnimationDuration() const;
+	float GetEntryCompletionTime() const;
+	float GetExitStartTime() const { return ExitStartTime; }
 
 protected:
 	UPROPERTY(meta = (BindWidgetOptional))

@@ -268,6 +268,20 @@ float UBalhwajeomCapturePhotoWidget::GetAnimationDuration() const
 	return FMath::Max(AnimationDuration, KINDA_SMALL_NUMBER);
 }
 
+float UBalhwajeomCapturePhotoWidget::GetEntryCompletionTime() const
+{
+	float CompletionTime = CardEntryDuration;
+	if (bHasGrantedKeywords && KeywordList && KeywordList->GetChildrenCount() > 0)
+	{
+		CompletionTime = FMath::Max(
+			CompletionTime,
+			FirstKeywordDelay +
+				KeywordStagger * (KeywordList->GetChildrenCount() - 1) +
+				KeywordEntryDuration);
+	}
+	return FMath::Clamp(CompletionTime, 0.0f, ExitStartTime);
+}
+
 void UBalhwajeomCapturePhotoWidget::ApplyPresentationTimeline(const float LinearAlpha)
 {
 	if (!bPresentationReady)
