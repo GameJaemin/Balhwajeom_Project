@@ -1,5 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
+#include "CameraSystem/BalhwajeomCapturePhotoPresentationState.h"
 #include "CameraSystem/BalhwajeomCapturePhotoWidget.h"
 #include "Components/Border.h"
 #include "Components/CanvasPanel.h"
@@ -54,6 +55,79 @@ bool FCapturePhotoMultilineSentenceTest::RunTest(const FString& Parameters)
 	return !HasAnyErrors();
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCapturePhotoConfirmationFlowTest,
+	"Balhwajeom.Camera.CapturePhotoConfirmationFlow",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FCapturePhotoConfirmationFlowTest::RunTest(const FString& Parameters)
+{
+	FCapturePhotoPresentationState State;
+	constexpr double StartTime = 10.0;
+	constexpr float EntryCompletionTime = 50.0f / 60.0f;
+	constexpr float ExitStartTime = 68.0f / 60.0f;
+	constexpr float TotalDuration = 93.0f / 60.0f;
+	constexpr float PromptFadeDuration = 10.0f / 60.0f;
+	State.Start(
+		StartTime,
+		EntryCompletionTime,
+		ExitStartTime,
+		TotalDuration,
+		PromptFadeDuration);
+
+	State.Update(StartTime + 25.0 / 60.0);
+	TestEqual(TEXT("presentation starts in the entering phase"),
+		State.GetPhase(), ECapturePhotoPresentationPhase::Entering);
+	TestTrue(TEXT("entry timeline advances before the final keyword arrives"),
+		FMath::IsNearlyEqual(State.GetTimelineTime(StartTime + 25.0 / 60.0), 25.0f / 60.0f));
+	TestEqual(TEXT("continue prompt stays hidden during entry"),
+		State.GetPromptOpacity(StartTime + 25.0 / 60.0), 0.0f);
+	TestFalse(TEXT("left click cannot skip the entrance"),
+		State.TryConfirm(StartTime + 25.0 / 60.0));
+
+	State.Update(StartTime + 50.0 / 60.0);
+	TestEqual(TEXT("presentation waits after every keyword has entered"),
+		State.GetPhase(), ECapturePhotoPresentationPhase::AwaitingConfirmation);
+	TestTrue(TEXT("timeline holds on the completed entrance"),
+		FMath::IsNearlyEqual(State.GetTimelineTime(StartTime + 55.0 / 60.0), EntryCompletionTime));
+	TestTrue(TEXT("continue prompt fades halfway in over five frames"),
+		FMath::IsNearlyEqual(
+			State.GetPromptOpacity(StartTime + 55.0 / 60.0),
+			0.5f,
+			0.002f));
+
+	const double ConfirmTime = StartTime + 55.0 / 60.0;
+	TestTrue(TEXT("left click starts exit while awaiting confirmation"),
+		State.TryConfirm(ConfirmTime));
+	TestEqual(TEXT("confirmation changes the presentation to the exit phase"),
+		State.GetPhase(), ECapturePhotoPresentationPhase::Exiting);
+	TestTrue(TEXT("exit resumes at authored frame 68 without replaying the hold"),
+		FMath::IsNearlyEqual(State.GetTimelineTime(ConfirmTime), ExitStartTime));
+	TestTrue(TEXT("prompt keeps its current opacity on the confirmation frame"),
+		FMath::IsNearlyEqual(State.GetPromptOpacity(ConfirmTime), 0.5f, 0.002f));
+	TestFalse(TEXT("additional clicks are ignored during exit"),
+		State.TryConfirm(ConfirmTime));
+
+	State.Update(ConfirmTime + 5.0 / 60.0);
+	TestTrue(TEXT("photo exit and prompt fade-out advance together"),
+		FMath::IsNearlyEqual(
+			State.GetTimelineTime(ConfirmTime + 5.0 / 60.0),
+			73.0f / 60.0f,
+			0.002f) &&
+		FMath::IsNearlyEqual(
+			State.GetPromptOpacity(ConfirmTime + 5.0 / 60.0),
+			0.25f,
+			0.002f));
+
+	State.Update(ConfirmTime + 25.0 / 60.0);
+	TestEqual(TEXT("presentation completes after the 25-frame exit"),
+		State.GetPhase(), ECapturePhotoPresentationPhase::Completed);
+	TestTrue(TEXT("completed presentation reaches authored frame 93"),
+		FMath::IsNearlyEqual(State.GetTimelineTime(ConfirmTime + 25.0 / 60.0), TotalDuration));
+	TestEqual(TEXT("continue prompt is hidden when exit completes"),
+		State.GetPromptOpacity(ConfirmTime + 25.0 / 60.0), 0.0f);
+	return !HasAnyErrors();
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCapturePhotoFlightTest,
 	"Balhwajeom.Camera.CapturePhotoFlight",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -86,10 +160,24 @@ bool FCapturePhotoFlightTest::RunTest(const FString& Parameters)
 		true);
 
 	TestTrue(TEXT("AE presentation can start without TAB target geometry"), Widget->IsPresentationReady());
-	TestTrue(TEXT("AE timeline ends at trimmed frame 73"),
-		FMath::IsNearlyEqual(Widget->GetAnimationDuration(), 73.0f / 60.0f));
+	TestTrue(TEXT("extended AE timeline ends at frame 93"),
+		FMath::IsNearlyEqual(Widget->GetAnimationDuration(), 93.0f / 60.0f));
+	const float EntryCompletionTime = Widget->GetEntryCompletionTime();
+	TestTrue(
+		*FString::Printf(
+			TEXT("three keywords finish entering at frame 50 (actual %.3f frames)"),
+			EntryCompletionTime * 60.0f),
+		FMath::IsNearlyEqual(EntryCompletionTime, 50.0f / 60.0f, 0.002f));
 	TestEqual(TEXT("one animated widget exists per granted keyword"),
 		Widget->KeywordList->GetChildrenCount(), 3);
+	TestTrue(TEXT("exit distance places the moving content below the viewport"),
+		FMath::IsNearlyEqual(
+			UBalhwajeomCapturePhotoWidget::CalculateExitDistance(
+				1080.0f,
+				240.0f,
+				360.0f,
+				32.0f),
+			872.0f));
 
 	auto ApplyAtFrame = [Widget](const float Frame)
 	{
@@ -133,23 +221,25 @@ bool FCapturePhotoFlightTest::RunTest(const FString& Parameters)
 				0.002f));
 	};
 
-	ApplyAtFrame(5.0f);
+	ApplyAtFrame(6.25f);
 	TestAeEntrySample(
 		TEXT("card matches AE temporal bezier at 25 percent"),
 		CardComposite->GetRenderTransform(),
 		0.3094796f);
 
-	ApplyAtFrame(10.0f);
+	ApplyAtFrame(12.5f);
 	TestAeEntrySample(
 		TEXT("card matches AE temporal bezier at 50 percent"),
 		CardComposite->GetRenderTransform(),
 		0.1101237f);
 
-	ApplyAtFrame(15.0f);
+	ApplyAtFrame(18.75f);
 	TestAeEntrySample(
 		TEXT("card matches AE temporal bezier at 75 percent"),
 		CardComposite->GetRenderTransform(),
 		0.0235550f);
+
+	ApplyAtFrame(17.5f);
 	const FWidgetTransform Keyword1MidEntry =
 		Widget->KeywordList->GetChildAt(0)->GetRenderTransform();
 	TestTrue(TEXT("keywords use the same AE temporal bezier"),
@@ -163,18 +253,36 @@ bool FCapturePhotoFlightTest::RunTest(const FString& Parameters)
 			0.002f));
 
 	ApplyAtFrame(20.0f);
-	TestTrue(TEXT("card finishes its 20-frame entrance"),
+	TestTrue(TEXT("card is still moving after the former 20-frame entrance"),
+		!CardComposite->GetRenderTransform().Translation.IsNearlyZero() &&
+		!FMath::IsNearlyZero(CardComposite->GetRenderTransform().Angle));
+
+	ApplyAtFrame(25.0f);
+	TestTrue(TEXT("card finishes its 25-frame entrance"),
 		CardComposite->GetRenderTransform().Translation.IsNearlyZero() &&
 		FMath::IsNearlyZero(CardComposite->GetRenderTransform().Angle));
 	TestTrue(TEXT("card never scales during entry"),
 		CardComposite->GetRenderTransform().Scale.Equals(FVector2D(1.0f, 1.0f)));
+
+	ApplyAtFrame(14.0f);
+	TestTrue(TEXT("second keyword waits for its ten-frame interval"),
+		FMath::IsNearlyEqual(
+			Widget->KeywordList->GetChildAt(1)->GetRenderTransform().Translation.X,
+			Keyword1StartX));
+	ApplyAtFrame(24.0f);
+	TestTrue(TEXT("third keyword waits for its ten-frame interval"),
+		FMath::IsNearlyEqual(
+			Widget->KeywordList->GetChildAt(2)->GetRenderTransform().Translation.X,
+			Keyword1StartX));
+
+	ApplyAtFrame(30.0f);
 	const float Keyword1X = Widget->KeywordList->GetChildAt(0)->GetRenderTransform().Translation.X;
 	const float Keyword2X = Widget->KeywordList->GetChildAt(1)->GetRenderTransform().Translation.X;
 	const float Keyword3X = Widget->KeywordList->GetChildAt(2)->GetRenderTransform().Translation.X;
-	TestTrue(TEXT("keywords follow at five-frame intervals"),
+	TestTrue(TEXT("keywords follow at ten-frame intervals"),
 		Keyword1X < Keyword2X && Keyword2X < Keyword3X);
 
-	ApplyAtFrame(35.0f);
+	ApplyAtFrame(50.0f);
 	for (int32 KeywordIndex = 0; KeywordIndex < 3; ++KeywordIndex)
 	{
 		UWidget* Keyword = Widget->KeywordList->GetChildAt(KeywordIndex);
@@ -196,54 +304,64 @@ bool FCapturePhotoFlightTest::RunTest(const FString& Parameters)
 	};
 
 	ApplyAtFrame(58.0f);
+	TestTrue(TEXT("downward exit waits for the extended entry sequence"),
+		Widget->CardRoot->GetRenderTransform().Translation.IsNearlyZero());
+
+	ApplyAtFrame(74.25f);
 	TestAeExitPosition(
 		TEXT("exit position matches AE temporal bezier at 25 percent"),
-		0.0288015f);
-	TestEqual(TEXT("opacity remains unchanged before its linear fade"),
+		0.0308012f);
+	TestEqual(TEXT("card remains opaque throughout the downward exit"),
 		CardComposite->GetRenderOpacity(), 1.0f);
 
-	ApplyAtFrame(63.0f);
+	ApplyAtFrame(80.5f);
 	TestAeExitPosition(
 		TEXT("exit position matches AE temporal bezier at 50 percent"),
-		0.1327807f);
-	TestEqual(TEXT("card remains opaque until AE fade frame 63"),
+		0.1465657f);
+	TestEqual(TEXT("card remains opaque at the exit midpoint"),
 		CardComposite->GetRenderOpacity(), 1.0f);
-	TestEqual(TEXT("screen dimmer remains fixed until fade starts"),
+	TestEqual(TEXT("screen dimmer remains fixed until frame 83"),
 		Widget->ScreenDimmer->GetRenderOpacity(), 1.0f);
 
-	ApplyAtFrame(68.0f);
+	ApplyAtFrame(86.75f);
 	TestAeExitPosition(
 		TEXT("exit position matches AE temporal bezier at 75 percent"),
-		0.3640511f);
-	TestEqual(TEXT("composited card keeps a linear fade"),
-		CardComposite->GetRenderOpacity(), 0.5f);
+		0.4232377f);
+	TestEqual(TEXT("composited card does not fade during exit"),
+		CardComposite->GetRenderOpacity(), 1.0f);
 	TestEqual(TEXT("photo does not fade independently"),
 		Widget->CapturedPhotoImage->GetRenderOpacity(), 1.0f);
 	TestEqual(TEXT("card background does not fade independently"),
 		Widget->CardBackground->GetRenderOpacity(), 1.0f);
 	TestEqual(TEXT("sentence does not fade independently"),
 		Widget->SentenceBackground->GetRenderOpacity(), 1.0f);
-	TestTrue(TEXT("screen dimmer fades linearly without moving"),
+	TestTrue(TEXT("screen dimmer keeps its independent linear fade"),
 		FMath::IsNearlyEqual(
-			Widget->ScreenDimmer->GetRenderOpacity(), 0.5f, 0.002f) &&
+			Widget->ScreenDimmer->GetRenderOpacity(), 0.625f, 0.002f) &&
 		Widget->ScreenDimmer->GetRenderTransform().Translation.IsNearlyZero());
 	for (int32 KeywordIndex = 0; KeywordIndex < 3; ++KeywordIndex)
 	{
-		TestEqual(TEXT("each keyword keeps the same linear fade"),
-			Widget->KeywordList->GetChildAt(KeywordIndex)->GetRenderOpacity(), 0.5f);
+		TestEqual(TEXT("each keyword remains opaque during exit"),
+			Widget->KeywordList->GetChildAt(KeywordIndex)->GetRenderOpacity(), 1.0f);
 	}
 
-	ApplyAtFrame(73.0f);
+	ApplyAtFrame(88.0f);
+	TestEqual(TEXT("card stays opaque while the dimmer reaches half opacity"),
+		CardComposite->GetRenderOpacity(), 1.0f);
+	TestTrue(TEXT("screen dimmer fades over the final ten frames"),
+		FMath::IsNearlyEqual(Widget->ScreenDimmer->GetRenderOpacity(), 0.5f, 0.002f));
+
+	ApplyAtFrame(93.0f);
 	TestTrue(TEXT("shared root completes the downward exit"),
 		Widget->CardRoot->GetRenderTransform().Translation.Y > 0.0f);
-	TestEqual(TEXT("composited card is fully faded at the end"),
-		CardComposite->GetRenderOpacity(), 0.0f);
+	TestEqual(TEXT("composited card remains opaque at the end"),
+		CardComposite->GetRenderOpacity(), 1.0f);
 	TestEqual(TEXT("screen dimmer is fully faded at the end"),
 		Widget->ScreenDimmer->GetRenderOpacity(), 0.0f);
 	for (int32 KeywordIndex = 0; KeywordIndex < 3; ++KeywordIndex)
 	{
-		TestEqual(TEXT("each keyword is fully faded at the end"),
-			Widget->KeywordList->GetChildAt(KeywordIndex)->GetRenderOpacity(), 0.0f);
+		TestEqual(TEXT("each keyword remains opaque at the end"),
+			Widget->KeywordList->GetChildAt(KeywordIndex)->GetRenderOpacity(), 1.0f);
 	}
 
 	Widget->RemoveFromRoot();
