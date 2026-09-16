@@ -83,6 +83,12 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|File Tile", meta = (ClampMin = "1.0"))
 	float ThumbnailHeight = 64.0f;
 
+	/** Width TXT_Label's text is manually truncated ("...") against in Configure(). Must match
+	 * SB_Label's own Width Override in the WBP Designer -- TXT_Label is center-justified, and UMG's
+	 * built-in Ellipsis overflow policy does not truncate center-justified text correctly. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|File Tile", meta = (ClampMin = "1.0"))
+	float LabelWidth = 140.0f;
+
 private:
 	virtual void NativeOnInitialized() override;
 	void BuildFallbackVisuals();

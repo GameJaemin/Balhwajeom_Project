@@ -22,6 +22,8 @@
 #include "Components/WidgetSwitcher.h"
 #include "Blueprint/WidgetTree.h"
 #include "Animation/WidgetAnimation.h"
+#include "Fonts/FontMeasure.h"
+#include "Framework/Application/SlateApplication.h"
 #include "ImageUtils.h"
 #include "Internationalization/BreakIterator.h"
 #include "Misc/Paths.h"
@@ -165,6 +167,51 @@ namespace
 		Style.SetNormalPadding(FMargin(0.0f));
 		Style.SetPressedPadding(FMargin(0.0f));
 		Button->SetStyle(Style);
+	}
+
+	/** Manually shortens InText to fit MaxWidth, appending "...", instead of relying on UMG's
+	 * ETextOverflowPolicy::Ellipsis -- that overflow policy only truncates correctly (visible "..."
+	 * at the tail) for left-justified text. TXT_Label is center-justified by design, which made
+	 * long labels get hard-clipped on both sides instead, with no ellipsis shown.
+	 *
+	 * The kept prefix is measured against MaxWidth on its own (not prefix+"..." together), so the
+	 * readable word is never shortened by one more character just to make room for the dots -- the
+	 * trailing "..." is allowed to spill past MaxWidth instead and rely on the label's own
+	 * ClipToBounds to crop it, which is preferable to ever clipping mid-word. */
+	FText TruncateLabelToFit(const FText& InText, const FSlateFontInfo& FontInfo, const float MaxWidth)
+	{
+		const FString FullString = InText.ToString();
+		if (MaxWidth <= 0.0f || FullString.IsEmpty())
+		{
+			return InText;
+		}
+
+		const TSharedRef<FSlateFontMeasure> FontMeasure =
+			FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+		if (FontMeasure->Measure(FullString, FontInfo).X <= MaxWidth)
+		{
+			return InText;
+		}
+
+		// Binary search for the longest prefix of FullString that alone fits within MaxWidth.
+		int32 Low = 0;
+		int32 High = FullString.Len();
+		FString Best;
+		while (Low <= High)
+		{
+			const int32 Mid = (Low + High) / 2;
+			const FString Candidate = FullString.Left(Mid);
+			if (FontMeasure->Measure(Candidate, FontInfo).X <= MaxWidth)
+			{
+				Best = Candidate;
+				Low = Mid + 1;
+			}
+			else
+			{
+				High = Mid - 1;
+			}
+		}
+		return FText::FromString(Best + TEXT("..."));
 	}
 
 	/** Uses only the painted 106x39 area of the 144x47 source, excluding its right/bottom padding. */
@@ -2755,19 +2802,21 @@ void UBalhwajeomTabletPhotoButton::Configure(
 	}
 	if (TXT_Label)
 	{
-		TXT_Label->SetText(InLabel);
-		TXT_Label->SetToolTipText(InLabel);
-		TXT_Label->SetJustification(ETextJustify::Center);
-		TXT_Label->SetMinDesiredWidth(0.0f);
-		TXT_Label->SetAutoWrapText(false);
-		TXT_Label->SetClipping(EWidgetClipping::ClipToBounds);
-		TXT_Label->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
 		FSlateFontInfo LabelFontInfo = TXT_Label->GetFont();
 		if (LabelFont)
 		{
 			LabelFontInfo.FontObject = LabelFont;
 		}
 		LabelFontInfo.Size = LabelFontSize;
+
+		// Center-justified by design, so the built-in Ellipsis overflow policy can't be used (see
+		// TruncateLabelToFit) -- pre-shorten the string ourselves against LabelWidth instead.
+		TXT_Label->SetText(TruncateLabelToFit(InLabel, LabelFontInfo, LabelWidth));
+		TXT_Label->SetToolTipText(InLabel);
+		TXT_Label->SetJustification(ETextJustify::Center);
+		TXT_Label->SetMinDesiredWidth(0.0f);
+		TXT_Label->SetAutoWrapText(false);
+		TXT_Label->SetClipping(EWidgetClipping::ClipToBounds);
 		TXT_Label->SetFont(LabelFontInfo);
 	}
 	if (BTN_File)
