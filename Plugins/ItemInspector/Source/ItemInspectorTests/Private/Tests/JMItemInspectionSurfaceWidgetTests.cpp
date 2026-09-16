@@ -140,10 +140,19 @@ bool FJMItemInspectionPaperSurfaceWidgetTest::RunTest(const FString& Parameters)
 				static_cast<float>(FMath::Abs(SceneCapture->GetRelativeLocation().X)));
 		}
 
-		const FQuat BeforeRotation = PreviewPivot->GetRelativeRotation().Quaternion();
-		PreviewActor->RotatePreview(30.0f, 10.0f);
-		const FQuat AfterRotation = PreviewPivot->GetRelativeRotation().Quaternion();
-		TestFalse(TEXT("Paper and surface rotate during inspection"), BeforeRotation.Equals(AfterRotation));
+		PreviewActor->ResetPreviewRotation();
+		PreviewActor->RotatePreview(30.0f, 0.0f);
+		const FQuat ExpectedYawRotation = FQuat(FVector::UpVector, FMath::DegreesToRadians(-10.5f));
+		TestTrue(
+			TEXT("Dragging right rotates the inspected item in the direct-manipulation yaw direction"),
+			PreviewPivot->GetRelativeRotation().Quaternion().Equals(ExpectedYawRotation, KINDA_SMALL_NUMBER));
+
+		PreviewActor->ResetPreviewRotation();
+		PreviewActor->RotatePreview(0.0f, 10.0f);
+		const FQuat ExpectedPitchRotation = FQuat(FVector::RightVector, FMath::DegreesToRadians(-3.5f));
+		TestTrue(
+			TEXT("Dragging down rotates the inspected item in the direct-manipulation pitch direction"),
+			PreviewPivot->GetRelativeRotation().Quaternion().Equals(ExpectedPitchRotation, KINDA_SMALL_NUMBER));
 
 		FJMItemInspectionTransitionSource ExitSource;
 		ExitSource.bIsValid = true;

@@ -17,7 +17,7 @@ struct BALHWAJEOM_API FPhotoStoryCue
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo|Story", meta = (MultiLine = "true"))
 	FText Text;
 
-	/** Seconds from the start of StoryVoice. The first cue must start at zero. */
+	/** Seconds from the start of the story. The first cue must start at zero. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo|Story",
 		meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
 	float StartTimeSeconds = 0.0f;
@@ -66,7 +66,19 @@ struct BALHWAJEOM_API FPhotoDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo|Story")
 	TArray<FPhotoStoryCue> WorldStoryCues;
 
-	/** Optional narration voice played alongside WorldStoryCues. Cues also play as a timed text-only story when unset. */
+	/** Optional narration used by systems that replay the recorded memory, such as the tablet and bed. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo|Audio")
 	TSoftObjectPtr<USoundBase> StoryVoice;
+
+	/**
+	 * Optional one-shot sound restarted whenever a non-empty WorldStoryCue appears
+	 * (for example, a keyboard tap). Caption timing and completion never depend on this sound.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo|Audio")
+	TSoftObjectPtr<USoundBase> StoryCueSound;
+
+	/** How long the final world-story caption remains visible before it starts fading out. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo|Story",
+		meta = (ClampMin = "0.1", UIMin = "0.1", Units = "s"))
+	float LastCueDurationSeconds = 2.5f;
 };

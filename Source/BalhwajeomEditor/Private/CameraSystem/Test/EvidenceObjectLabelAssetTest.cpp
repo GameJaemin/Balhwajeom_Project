@@ -4,7 +4,9 @@
 
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
+#include "Components/CanvasPanelSlot.h"
 #include "Components/Image.h"
+#include "Components/SizeBox.h"
 #include "Components/Widget.h"
 #include "Engine/Texture2D.h"
 #include "UObject/UnrealType.h"
@@ -24,6 +26,40 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	EAutomationTestFlags::EditorContext |
 	EAutomationTestFlags::EngineFilter
 )
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FInspectionMessageSupportsLegacyFocusRequestTest,
+	"Balhwajeom.UI.InspectionMessage.SupportsLegacyFocusRequest",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FInspectionMessageSupportsLegacyFocusRequestTest::RunTest(
+	const FString& Parameters)
+{
+	const UWidgetBlueprint* MessageBlueprint = LoadObject<UWidgetBlueprint>(
+		nullptr,
+		TEXT("/Game/Balhwajeom/UI/Inspection/WBP_InspectionMessage.WBP_InspectionMessage"));
+	TestNotNull(TEXT("WBP_InspectionMessage should load"), MessageBlueprint);
+	if (!MessageBlueprint || !MessageBlueprint->GeneratedClass)
+	{
+		return false;
+	}
+
+	const UUserWidget* DefaultMessage = Cast<UUserWidget>(
+		MessageBlueprint->GeneratedClass->GetDefaultObject());
+	TestNotNull(TEXT("WBP_InspectionMessage should have a widget CDO"), DefaultMessage);
+	if (!DefaultMessage)
+	{
+		return false;
+	}
+
+	TestTrue(
+		TEXT("The legacy interaction component must be able to focus its message without warnings"),
+		DefaultMessage->IsFocusable());
+	return true;
+}
 
 
 bool FMultiShadowTextRuntimeSetTextTest::RunTest(const FString& Parameters)
@@ -118,6 +154,23 @@ bool FEvidenceObjectLabelAssetTest::RunTest(const FString& Parameters)
 		TEXT("UseCamera should preserve the non-photo default icon"),
 		StatusImage->GetBrush().GetResourceObject(),
 		static_cast<UObject*>(const_cast<UTexture2D*>(DefaultIcon)));
+
+	const USizeBox* LabelContainer = Cast<USizeBox>(
+		ObjectLabelBlueprint->WidgetTree->FindWidget(TEXT("LabelContainer")));
+	TestNotNull(TEXT("WBP_ObjectLabel should contain LabelContainer"), LabelContainer);
+	const UCanvasPanelSlot* LabelContainerSlot = LabelContainer
+		? Cast<UCanvasPanelSlot>(LabelContainer->Slot)
+		: nullptr;
+	TestNotNull(
+		TEXT("LabelContainer should occupy a Canvas slot"),
+		LabelContainerSlot);
+	if (LabelContainerSlot)
+	{
+		TestEqual(
+			TEXT("The default non-capturable label should start at X=22"),
+			LabelContainerSlot->GetPosition().X,
+			22.0);
+	}
 
 	const UClass* MultiShadowTextClass = LoadObject<UClass>(
 		nullptr,

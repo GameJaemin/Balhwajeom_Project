@@ -56,6 +56,7 @@ CSV 헤더 = Row Struct의 `UPROPERTY` 이름이다. Row Name(CSV 첫 컬럼)은
 | `InteractionPresentation` | Enum(`None`/`SimpleText`/`KeywordSelectionWindow`/`WorldStory`) | 상호작용 결과를 어떻게 보여줄지. `SimpleText`=문구만 표시, `KeywordSelectionWindow`=`KeywordDocumentID` 문서의 선택창을 연다, `WorldStory`=같은 행의 `PhotoID`가 가리키는 `DT_Photos.WorldStoryCues`를 Evidence Actor의 `StoryAnchor` 위치에 3D 텍스트로 띄운다(2D 문구는 표시하지 않는다) |
 | `NextStateID` | Name (참조: `DT_EvidenceStates.StateID`) | `ChangeState`일 때 전환할 다음 상태. 같은 `ObjectID` 소속이어야 한다 |
 | `PostCaptureStateID` | Name (참조: `DT_EvidenceStates.StateID`) | 이 상태의 사진을 촬영하면 전환할 상태. 같은 `ObjectID` 소속이어야 한다. 비워두면 촬영해도 상태가 유지된다. 값이 있으면 **촬영 직후의 월드 스토리 연출을 생략**하고, 전환된 상태의 상호작용이 스토리를 담당한다 |
+| `bDisable3DInspection` | Bool | 이 State가 활성화된 동안 Evidence Actor의 3D 회전 인스펙션을 비활성화한다. 촬영 이후 회전뷰를 막으려면 `PostCaptureStateID`가 가리키는 State에서 체크한다 |
 | `InteractionText` | Text | `SimpleText`일 때 보여줄 문구 |
 | `KeywordDocumentID` | Name (참조: `DT_KeywordDocuments.KeywordDocumentID`) | `KeywordSelectionWindow`일 때 열 문서 |
 | `FarLabel` / `MidLabel` / `NearLabel` | Text | 거리 단계별(멀리/중간/가까이) 표시 라벨. `NearLabel`은 F 조사와 별개로, 가장 가까운 거리에서 상시 표시되는 관찰 정보 문구다(2026-09-09 기준 `ObservationText`에서 개명) |
@@ -106,11 +107,13 @@ CSV 헤더 = Row Struct의 `UPROPERTY` 이름이다. Row Name(CSV 첫 컬럼)은
 | `EvidenceSentenceID` | Name (참조: `DT_Sentences.SentenceID`, `SentenceType=PhotoAnalysis`, 선택) | 이 사진을 **어느 진술서에서든 증거로 제출할 때** 추가로 풀어야 하는 빈칸 문제. 사진 고유 속성이라 어느 진술서·어느 슬롯에서 쓰이든 항상 같은 문장이 뜬다. 비어있으면 추가 문제 없이 기존처럼 판정 |
 | `CharacterID` | Name (참조: `DT_Characters.CharacterID`) | 이 사진이 표시될 태블릿 인물 폴더 |
 | `GrantedWordIDs` | Name 배열 (참조: `DT_Words.WordID`) | 촬영 성공 시 1회 지급되는 키워드들 |
-| `WorldStoryCues` | `FPhotoStoryCue` 배열 | 촬영 직후 월드에 보여줄 대사와 음성 시작 기준 전환 시각. 각 항목은 `Text`, `StartTimeSeconds`를 가지며 첫 항목은 반드시 0초, 이후 항목은 시간 오름차순이어야 한다. 자동 줄바꿈은 하지 않으며 한 화면 안의 개행은 `Text` 내부에 직접 입력한다 |
+| `WorldStoryCues` | `FPhotoStoryCue` 배열 | 촬영 직후 월드에 보여줄 문장과 스토리 시작 기준 전환 시각. 각 항목은 `Text`, `StartTimeSeconds`를 가지며 첫 항목은 반드시 0초, 이후 항목은 시간 오름차순이어야 한다. 자동 줄바꿈은 하지 않으며 한 화면 안의 개행은 `Text` 내부에 직접 입력한다 |
 | `WorldStoryLines` | Text 배열 | 기존 DataTable 호환용 무시간 대사. 신규 데이터는 사용하지 않으며 `WorldStoryCues` 이관 완료 후 제거 예정 |
-| `StoryVoice` | Sound 참조 | 선택 사항. 지정하면 `WorldStoryCues`와 함께 가족 음성을 한 번 재생하고, 비워두면 텍스트 Cue만 시작 시각에 맞춰 재생한다 |
+| `StoryVoice` | Sound 참조 | 태블릿 재생 버튼과 침대 회상 등에서 사용할 원래 음성. 월드 스토리 문장 타닥 효과음과는 분리되어 있다 |
+| `StoryCueSound` | Sound 참조 | 선택 사항. 각 `WorldStoryCues` 문장이 화면에 나타날 때 처음부터 재생할 타닥 효과음. 비어 있거나 로드에 실패해도 문장은 설정된 시각에 계속 표시된다 |
+| `LastCueDurationSeconds` | Float(초) | 마지막 문장이 표시된 뒤 페이드아웃을 시작하기까지 유지할 시간. 최소 0.1초, 기본 2.5초 |
 
-`WorldStoryCues`의 배열 항목 하나는 화면 하나를 뜻한다. Cue가 세 개여도 월드 액터와 TextBlock은 하나이며, 같은 TextBlock의 내용이 각 시작 시각에 교체된다. `Text`가 비어 있거나 공백만 있어도 Cue를 제거하지 않으므로, 특정 시각부터 문구를 의도적으로 비우는 용도로 사용할 수 있다. 음성이 있으면 마지막 Cue는 음성이 끝날 때까지 유지된다. 음성이 없으면 마지막 Cue를 기본 2.5초 동안 유지한 뒤 페이드아웃한다. 태블릿에서 사진을 다시 열 때는 Cue의 시간값을 무시하고 모든 `Text`를 순서대로 이어서 보여주며 음성은 다시 재생하지 않는다.
+`WorldStoryCues`의 배열 항목 하나는 화면 하나를 뜻한다. Cue가 세 개여도 월드 액터와 TextBlock은 하나이며, 같은 TextBlock의 내용이 각 시작 시각에 교체된다. `Text`가 비어 있거나 공백만 있으면 문구를 의도적으로 지우는 Cue로 처리하며 효과음은 재생하지 않는다. 효과음의 길이와 성공 여부는 자막 진행 및 종료 시각에 영향을 주지 않는다. 마지막 Cue는 `LastCueDurationSeconds` 동안 유지된 뒤 페이드아웃한다. 태블릿에서 사진을 다시 열 때는 Cue의 시간값을 무시하고 모든 `Text`를 순서대로 이어서 보여준다.
 
 CSV 예시:
 

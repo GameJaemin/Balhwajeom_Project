@@ -32,7 +32,9 @@
 #include "Materials/Material.h"
 #include "Misc/PackageName.h"
 #include "UObject/SavePackage.h"
+#include "UObject/StrongObjectPtr.h"
 #include "WidgetBlueprint.h"
+#include "Widgets/SWidget.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FItemInspectionAssetsTest, "Balhwajeom.ItemInspection.AssetsAndFixture",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -51,15 +53,13 @@ bool FItemInspectionAssetsTest::RunTest(const FString& Parameters)
 		const UWidget* Backdrop = WidgetBlueprint->WidgetTree->FindWidget(TEXT("Backdrop"));
 		const UWidget* MainRow = WidgetBlueprint->WidgetTree->FindWidget(TEXT("MainRow"));
 		const UWidget* ControlsPanel = WidgetBlueprint->WidgetTree->FindWidget(TEXT("ControlsHintPanel"));
-		const UCanvasPanelSlot* BackdropSlot = Backdrop ? Cast<UCanvasPanelSlot>(Backdrop->Slot) : nullptr;
 		const UCanvasPanelSlot* MainRowSlot = MainRow ? Cast<UCanvasPanelSlot>(MainRow->Slot) : nullptr;
 		const UCanvasPanelSlot* ControlsSlot = ControlsPanel ? Cast<UCanvasPanelSlot>(ControlsPanel->Slot) : nullptr;
-		TestNotNull(TEXT("Backdrop uses an explicit canvas layer"), BackdropSlot);
+		TestNull(TEXT("Inspector stays visually transparent without a backdrop widget"), Backdrop);
 		TestNotNull(TEXT("Inspection content uses an explicit canvas layer"), MainRowSlot);
 		TestNotNull(TEXT("Controls hint uses an explicit canvas layer"), ControlsSlot);
-		if (BackdropSlot && MainRowSlot && ControlsSlot)
+		if (MainRowSlot && ControlsSlot)
 		{
-			TestTrue(TEXT("Backdrop is behind inspection content"), BackdropSlot->GetZOrder() < MainRowSlot->GetZOrder());
 			TestTrue(TEXT("Controls hint is above inspection content"), ControlsSlot->GetZOrder() > MainRowSlot->GetZOrder());
 		}
 		TestNotNull(TEXT("Editable controls hint row"), Cast<UHorizontalBox>(
@@ -83,6 +83,14 @@ bool FItemInspectionAssetsTest::RunTest(const FString& Parameters)
 			TestEqual(TEXT("Rotate key hint text"), RotateKey->GetText().ToString(), FString(TEXT("[마우스 클릭]")));
 			TestEqual(TEXT("Rotate action hint text"), RotateAction->GetText().ToString(), FString(TEXT("회전하기")));
 		}
+	}
+	TStrongObjectPtr<UJMItemInspectionWidgetBase> InspectorWidgetOwner(
+		NewObject<UJMItemInspectionWidgetBase>(GetTransientPackage(), Widget));
+	if (TestNotNull(TEXT("Inspector widget instance"), InspectorWidgetOwner.Get()))
+	{
+		const TSharedRef<SWidget> InspectorSlateWidget = InspectorWidgetOwner->TakeWidget();
+		TestTrue(TEXT("Inspector receives pointer input across its full viewport slot"),
+			InspectorSlateWidget->GetVisibility().IsHitTestVisible());
 	}
 	TestEqual(TEXT("UI material domain"), Material->MaterialDomain, MD_UI);
 	UInputAction* InteractAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/Balhwajeom/Input/IA_Interact.IA_Interact"));

@@ -98,6 +98,15 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inspection", meta = (MultiLine = "true"))
 	FText NearLabel;
 
+	/**
+	 * Prevents this state from opening the rotating 3D inspector even when the
+	 * owning Evidence Actor has Enable 3D Inspection checked. Enable this on a
+	 * PostCaptureStateID destination when the photographed object should no
+	 * longer open the 3D view.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Inspection|3D")
+	bool bDisable3DInspection = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture")
 	bool bCanCapture = false;
 
