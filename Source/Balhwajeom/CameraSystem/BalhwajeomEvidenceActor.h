@@ -13,6 +13,7 @@
 
 class APhotoWorldStoryActor;
 class UArrowComponent;
+class UBalhwajeomCeilingFrameSinkComponent;
 class UNiagaraComponent;
 class UStaticMeshComponent;
 class UBoxComponent;
@@ -170,6 +171,9 @@ protected:
 
 	UFUNCTION()
 	void HandleStoryStateTagChanged(FGameplayTag StateTag);
+
+	UFUNCTION()
+	void HandleProgressionSinkFinished();
 
 	/** Defaults to immediate removal; a Blueprint can override it to play an animation first. */
 	UFUNCTION(BlueprintNativeEvent, Category = "Evidence|Progression")

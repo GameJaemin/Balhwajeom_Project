@@ -29,6 +29,7 @@
 #include "Story/StoryStateSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
+#include "Environment/BalhwajeomCeilingFrameSinkComponent.h"
 
 ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 {
@@ -867,6 +868,30 @@ bool ABalhwajeomEvidenceActor::CanClearForProgression() const
 
 void ABalhwajeomEvidenceActor::BeginProgressionRemoval_Implementation()
 {
+	if (UBalhwajeomCeilingFrameSinkComponent* SinkComponent =
+		FindComponentByClass<UBalhwajeomCeilingFrameSinkComponent>())
+	{
+		SinkComponent->OnSinkFinished.AddUniqueDynamic(
+			this, &ThisClass::HandleProgressionSinkFinished);
+		if (SinkComponent->StartSink())
+		{
+			return;
+		}
+		SinkComponent->OnSinkFinished.RemoveDynamic(
+			this, &ThisClass::HandleProgressionSinkFinished);
+	}
+
+	FinalizeProgressionRemoval();
+}
+
+void ABalhwajeomEvidenceActor::HandleProgressionSinkFinished()
+{
+	if (UBalhwajeomCeilingFrameSinkComponent* SinkComponent =
+		FindComponentByClass<UBalhwajeomCeilingFrameSinkComponent>())
+	{
+		SinkComponent->OnSinkFinished.RemoveDynamic(
+			this, &ThisClass::HandleProgressionSinkFinished);
+	}
 	FinalizeProgressionRemoval();
 }
 
