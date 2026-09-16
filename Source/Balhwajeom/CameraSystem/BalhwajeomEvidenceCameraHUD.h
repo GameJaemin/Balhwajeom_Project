@@ -108,7 +108,8 @@ private:
 		float GuideOpacity,
 		bool bShowStatusIcon,
 		bool bUsePhotoRequiredIcon,
-		const FText& LabelText);
+		const FText& LabelText,
+		const FText& SubLabelText);
 
 	UPROPERTY(EditDefaultsOnly, Category = "Camera|Guide")
 	TSubclassOf<UUserWidget> FocusGuideWidgetClass;
@@ -130,6 +131,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMultiShadowTextWidget> FocusGuideLabelText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMultiShadowTextWidget> FocusGuideSubLabelText;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Camera|Evidence")
 	TSubclassOf<UBalhwajeomCapturePhotoWidget> CapturePhotoWidgetClass;

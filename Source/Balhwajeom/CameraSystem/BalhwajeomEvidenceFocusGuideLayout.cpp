@@ -21,4 +21,31 @@ namespace BalhwajeomEvidenceFocusGuideLayout
 			StatusImage->SetBrushFromTexture(StatusTexture, false);
 		}
 	}
+
+	FText ResolveLabelText(const FText& AuthoredLabel, const bool bNeedsCloserView)
+	{
+		return bNeedsCloserView
+			? NSLOCTEXT(
+				"BalhwajeomCamera",
+				"MoveCloserOrZoom",
+				"조금 더 가까이 가거나 확대해 보자.")
+			: AuthoredLabel;
+	}
+
+	FText ResolveSubLabelText(
+		const bool bShowCenteredText,
+		const bool bCanCapture,
+		const FText& AuthoredCaptureBlockedLabel)
+	{
+		if (!bShowCenteredText || bCanCapture)
+		{
+			return FText::GetEmpty();
+		}
+		return !AuthoredCaptureBlockedLabel.IsEmptyOrWhitespace()
+			? AuthoredCaptureBlockedLabel
+			: NSLOCTEXT(
+				"BalhwajeomCamera",
+				"CaptureNotNeeded",
+				"이건 굳이 사진으로 남기지 않아도 될 것 같다.");
+	}
 }

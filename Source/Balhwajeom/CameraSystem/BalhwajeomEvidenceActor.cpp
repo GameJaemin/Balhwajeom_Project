@@ -795,6 +795,7 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID, bool bInit
 		Investigation->HasCapturedPhoto(State.PhotoID);
 	MinimumFocusDistanceOffset = State.MinimumFocusDistanceOffset;
 	MaximumFocusDistanceOffset = State.MaximumFocusDistanceOffset;
+	MinimumCaptureScreenOccupancyRatioOverride = State.MinimumCaptureScreenOccupancyRatioOverride;
 	PreferredFocusDistanceAt1x = State.PreferredFocusDistance;
 	FocusDistanceToleranceAt1x = State.FocusDistanceTolerance;
 	bScaleFocusDistanceWithZoom = State.bScaleFocusDistanceWithZoom;
@@ -1174,6 +1175,8 @@ bool ABalhwajeomEvidenceActor::RequestCameraTargetInfo_Implementation(
 			OutInfo.bCanCapture = State.bCanCapture;
 			OutInfo.MinimumFocusDistanceOffset = State.MinimumFocusDistanceOffset;
 			OutInfo.MaximumFocusDistanceOffset = State.MaximumFocusDistanceOffset;
+			OutInfo.MinimumCaptureScreenOccupancyRatioOverride =
+				State.MinimumCaptureScreenOccupancyRatioOverride;
 			OutInfo.PreferredFocusDistance = State.PreferredFocusDistance;
 			OutInfo.FocusDistanceTolerance = State.FocusDistanceTolerance;
 			OutInfo.bScaleFocusDistanceWithZoom = State.bScaleFocusDistanceWithZoom;
@@ -1186,6 +1189,8 @@ bool ABalhwajeomEvidenceActor::RequestCameraTargetInfo_Implementation(
 	OutInfo.bCanBeCaptured = bCanBeCaptured;
 	OutInfo.MinimumFocusDistanceOffset = MinimumFocusDistanceOffset;
 	OutInfo.MaximumFocusDistanceOffset = MaximumFocusDistanceOffset;
+	OutInfo.MinimumCaptureScreenOccupancyRatioOverride =
+		MinimumCaptureScreenOccupancyRatioOverride;
 	OutInfo.PreferredFocusDistanceAt1x = PreferredFocusDistanceAt1x;
 	OutInfo.FocusDistanceToleranceAt1x = FocusDistanceToleranceAt1x;
 	OutInfo.bScaleFocusDistanceWithZoom = bScaleFocusDistanceWithZoom;
