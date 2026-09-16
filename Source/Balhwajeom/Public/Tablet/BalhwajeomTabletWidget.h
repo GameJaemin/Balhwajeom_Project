@@ -450,9 +450,9 @@ public:
 	void SetFilled(FName InWordID, const FText& WordText);
 	void SetEmpty();
 	void SetErrorStyle(bool bInError);
-	/** Tints a filled blank's word gold as a brief "correct" flash, played right before the whole
-	 * sentence fades away in place in ValidateActivePuzzle's success transition. */
-	void SetSuccessStyle(bool bInSuccess);
+	/** Tints a filled blank's word FlashColor as a brief "correct" flash, played right before the
+	 * whole sentence fades away in place in ValidateActivePuzzle's success transition. */
+	void SetSuccessStyle(bool bInSuccess, const FLinearColor& FlashColor = FLinearColor::White);
 	int32 GetSlotIndex() const { return SlotIndex; }
 	bool IsFilled() const { return !FilledWordID.IsNone(); }
 
