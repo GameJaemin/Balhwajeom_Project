@@ -74,6 +74,7 @@ void ABalhwajeomIntroFlowActor::BeginPlay()
 	MainMenuWidget->OnStartRequested.AddDynamic(this, &ThisClass::HandleStartRequested);
 	ScreenFadeWidget->OnFadeToBlackFinished.AddDynamic(this, &ThisClass::HandleFadeToBlackFinished);
 	ScreenFadeWidget->OnFadeFromBlackFinished.AddDynamic(this, &ThisClass::HandleFadeFromBlackFinished);
+	ScreenFadeWidget->OnFadeProgress.AddDynamic(this, &ThisClass::HandleFadeProgress);
 	MainMenuWidget->AddToPlayerScreen(1000);
 	ScreenFadeWidget->SetBlackImmediately();
 	ScreenFadeWidget->AddToPlayerScreen(9999);
@@ -210,6 +211,17 @@ void ABalhwajeomIntroFlowActor::HandleFadeFromBlackFinished()
 	}
 }
 
+void ABalhwajeomIntroFlowActor::HandleFadeProgress(float Opacity)
+{
+	if (!bFadeCinematicAudioWithScreen)
+	{
+		return;
+	}
+
+	// Track the overlay exactly: fully clear keeps full volume, fully black is silent.
+	SetCinematicAudioVolume(FMath::Clamp(1.0f - Opacity, 0.0f, 1.0f));
+}
+
 void ABalhwajeomIntroFlowActor::StartCinematic()
 {
 	if (MainMenuWidget)
@@ -257,6 +269,7 @@ bool ABalhwajeomIntroFlowActor::StartMediaCinematic()
 	IntroMediaPlayer->OnMediaOpenFailed.AddDynamic(this, &ThisClass::HandleMediaOpenFailed);
 	IntroMediaPlayer->OnEndReached.AddDynamic(this, &ThisClass::HandleMediaEndReached);
 	IntroMediaPlayer->SetLooping(false);
+	bFadeCinematicAudioWithScreen = false;
 	SetCinematicAudioVolume(1.0f);
 	State = EBalhwajeomIntroState::Cinematic;
 	if (!IntroMediaPlayer->OpenSource(IntroMediaSource))
@@ -358,7 +371,9 @@ void ABalhwajeomIntroFlowActor::HandleSkipRequested()
 		ActiveMediaPlayer->OnMediaOpenFailed.RemoveAll(this);
 		ActiveMediaPlayer->OnEndReached.RemoveAll(this);
 	}
-	SetCinematicAudioVolume(0.0f);
+	// Duck the movie audio in step with the fade rather than cutting it, so picture and sound
+	// disappear together. HandleFadeProgress drives the volume from here on.
+	bFadeCinematicAudioWithScreen = true;
 	if (CinematicVideoWidget)
 	{
 		CinematicVideoWidget->SetSkipEnabled(false);
@@ -421,6 +436,8 @@ void ABalhwajeomIntroFlowActor::BeginGameplayTransition()
 
 void ABalhwajeomIntroFlowActor::EnterGameplayAtBlack()
 {
+	// Release the ducking before the fade back in, or it would ramp the closed movie's audio up.
+	bFadeCinematicAudioWithScreen = false;
 	if (IntroMediaPlayer)
 	{
 		IntroMediaPlayer->OnMediaOpened.RemoveAll(this);
@@ -540,6 +557,7 @@ bool ABalhwajeomIntroFlowActor::StartEndingMediaCinematic()
 	EndingMediaPlayer->OnMediaOpenFailed.AddDynamic(this, &ThisClass::HandleMediaOpenFailed);
 	EndingMediaPlayer->OnEndReached.AddDynamic(this, &ThisClass::HandleMediaEndReached);
 	EndingMediaPlayer->SetLooping(false);
+	bFadeCinematicAudioWithScreen = false;
 	SetCinematicAudioVolume(1.0f);
 	State = EBalhwajeomIntroState::Ending;
 	if (!EndingMediaPlayer->OpenSource(EndingMediaSource))

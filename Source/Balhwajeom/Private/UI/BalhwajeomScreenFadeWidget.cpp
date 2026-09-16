@@ -43,7 +43,9 @@ void UBalhwajeomScreenFadeWidget::NativeTick(const FGeometry& MyGeometry, float 
 	const float Alpha = FadeDuration <= KINDA_SMALL_NUMBER
 		? 1.0f
 		: FMath::Clamp(FadeElapsed / FadeDuration, 0.0f, 1.0f);
-	SetRenderOpacity(FMath::Lerp(FadeStartOpacity, FadeTargetOpacity, Alpha));
+	const float Opacity = FMath::Lerp(FadeStartOpacity, FadeTargetOpacity, Alpha);
+	SetRenderOpacity(Opacity);
+	OnFadeProgress.Broadcast(Opacity);
 	if (Alpha < 1.0f)
 	{
 		return;

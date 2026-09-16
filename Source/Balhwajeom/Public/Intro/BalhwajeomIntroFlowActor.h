@@ -143,6 +143,9 @@ private:
 	void HandleFadeFromBlackFinished();
 
 	UFUNCTION()
+	void HandleFadeProgress(float Opacity);
+
+	UFUNCTION()
 	void HandleSequenceFinished();
 
 	UFUNCTION()
@@ -198,4 +201,7 @@ private:
 
 	EBalhwajeomIntroState State = EBalhwajeomIntroState::Boot;
 	bool bEndingTriggered = false;
+
+	/** While set, movie audio is ducked in step with the fade overlay's opacity. */
+	bool bFadeCinematicAudioWithScreen = false;
 };

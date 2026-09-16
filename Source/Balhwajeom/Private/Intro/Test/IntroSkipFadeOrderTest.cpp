@@ -73,6 +73,9 @@ bool FIntroSkipFadeOrderTest::RunTest(const FString& Parameters)
 	TestNotNull(
 		TEXT("The movie must stay on screen while the fade to black plays"),
 		FIntroFlowActorTestAccessor::GetCinematicVideoWidget(IntroFlow));
+	TestTrue(
+		TEXT("Movie audio should duck along with the fade instead of cutting out"),
+		FIntroFlowActorTestAccessor::IsAudioFadingWithScreen(IntroFlow));
 
 	// A second click during the fade must not start another transition.
 	FIntroFlowActorTestAccessor::RequestSkip(IntroFlow);
@@ -88,6 +91,10 @@ bool FIntroSkipFadeOrderTest::RunTest(const FString& Parameters)
 	TestNull(
 		TEXT("The movie should be removed once the screen is fully black"),
 		FIntroFlowActorTestAccessor::GetCinematicVideoWidget(IntroFlow));
+	// Otherwise the fade back in would ramp the closed movie's audio up again.
+	TestFalse(
+		TEXT("Audio ducking should be released before the fade from black"),
+		FIntroFlowActorTestAccessor::IsAudioFadingWithScreen(IntroFlow));
 
 	// --- Ending skip ------------------------------------------------------
 	// Only the transition is driven here; completing this fade reopens the level.
