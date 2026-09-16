@@ -596,6 +596,20 @@ public:
 	 * itself (see ABalhwajeomIntroFlowActor::HandleStatementSolved). */
 	FSimpleMulticastDelegate OnStatementSolved;
 
+	/** Played whenever a keyword is dropped into a sentence blank (HandleSentenceBlankDropped) or
+	 * pulled back out of one (HandleSentenceBlankClicked). Shared by the statement and photo
+	 * analysis puzzles alike. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Sentence Audio")
+	TSoftObjectPtr<USoundBase> KeywordDropSound;
+
+	/** Played by ValidateActivePuzzle when a submitted sentence (statement or photo analysis) is correct. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Sentence Audio")
+	TSoftObjectPtr<USoundBase> SentenceCorrectSound;
+
+	/** Played by ValidateActivePuzzle when a submitted sentence (statement or photo analysis) is wrong. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Sentence Audio")
+	TSoftObjectPtr<USoundBase> SentenceErrorSound;
+
 	/** Plays the designer-authored TabletUpAnim using its authored duration. */
 	bool PlayTabletOpenAnimation();
 
