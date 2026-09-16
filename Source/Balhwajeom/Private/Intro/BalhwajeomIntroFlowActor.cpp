@@ -132,9 +132,11 @@ void ABalhwajeomIntroFlowActor::HandleStartRequested()
 		return;
 	}
 	ResetInvestigationPhotosIfRequested();
-	State = EBalhwajeomIntroState::TransitionToCinematic;
+	State = EBalhwajeomIntroState::TitleStart;
 	if (BGMAudioComponent->IsPlaying()) BGMAudioComponent->FadeOut(BGMFadeDuration, 0.0f);
-	ScreenFadeWidget->FadeToBlack(TransitionFadeDuration);
+	// No FadeToBlack here: TitleStart is a ripple effect meant to play immediately, layered over
+	// the still-visible title screen, not after a black cut. See StartTitleStart().
+	StartTitleStart();
 }
 
 void ABalhwajeomIntroFlowActor::HandleBGMTriggerDoorOpened()
@@ -222,12 +224,74 @@ void ABalhwajeomIntroFlowActor::HandleFadeProgress(float Opacity)
 	SetCinematicAudioVolume(FMath::Clamp(1.0f - Opacity, 0.0f, 1.0f));
 }
 
+void ABalhwajeomIntroFlowActor::StartTitleStart()
+{
+	// MainMenuWidget is deliberately left on screen (unlike StartCinematic, which removes it) --
+	// the ripple effect plays layered on top of the still-visible title screen, and StartCinematic
+	// (called once this step finishes or is skipped) removes it when the cinematic actually needs
+	// the screen to itself.
+
+	// Any of the three unset: skip this step entirely, exactly as if it never existed.
+	if (!TitleStartMediaSource || !TitleStartMediaPlayer || !TitleStartMediaTexture)
+	{
+		StartCinematic();
+		return;
+	}
+
+	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	const TSubclassOf<UBalhwajeomCinematicVideoWidget> WidgetClass =
+		CinematicVideoWidgetClass.LoadSynchronous();
+	if (!PC || !WidgetClass)
+	{
+		StartCinematic();
+		return;
+	}
+
+	CinematicVideoWidget = CreateWidget<UBalhwajeomCinematicVideoWidget>(PC, WidgetClass);
+	if (!CinematicVideoWidget)
+	{
+		StartCinematic();
+		return;
+	}
+
+	TitleStartMediaTexture->SetMediaPlayer(TitleStartMediaPlayer);
+	CinematicVideoWidget->SetMediaTexture(TitleStartMediaTexture);
+	CinematicVideoWidget->AddToPlayerScreen(2000);
+	// Start invisible: OpenSource()/Play() below take a frame or more to actually produce a real
+	// frame, and this widget is opaque, so showing it immediately would blank the title screen
+	// underneath for that gap. HandleMediaOpened() reveals it (via FadeIn) once a frame is imminent.
+	CinematicVideoWidget->SetRenderOpacity(0.0f);
+	// Always plays to completion -- no BTN_Skip for this clip.
+	CinematicVideoWidget->SetSkipEnabled(false);
+	TitleStartMediaPlayer->OnMediaOpened.RemoveAll(this);
+	TitleStartMediaPlayer->OnMediaOpenFailed.RemoveAll(this);
+	TitleStartMediaPlayer->OnEndReached.RemoveAll(this);
+	TitleStartMediaPlayer->OnMediaOpened.AddDynamic(this, &ThisClass::HandleMediaOpened);
+	TitleStartMediaPlayer->OnMediaOpenFailed.AddDynamic(this, &ThisClass::HandleMediaOpenFailed);
+	TitleStartMediaPlayer->OnEndReached.AddDynamic(this, &ThisClass::HandleMediaEndReached);
+	TitleStartMediaPlayer->SetLooping(false);
+	bFadeCinematicAudioWithScreen = false;
+	SetCinematicAudioVolume(1.0f);
+	if (!TitleStartMediaPlayer->OpenSource(TitleStartMediaSource))
+	{
+		HandleMediaOpenFailed(TitleStartMediaSource->GetUrl());
+	}
+}
+
 void ABalhwajeomIntroFlowActor::StartCinematic()
 {
 	if (MainMenuWidget)
 	{
 		MainMenuWidget->RemoveFromParent();
 		MainMenuWidget = nullptr;
+	}
+	if (CinematicVideoWidget)
+	{
+		// Left over from StartTitleStart() if the ripple clip played -- the screen is already
+		// fully black at this point (called from HandleFadeToBlackFinished), so removing it here
+		// instead of right when the clip ended is invisible to the player.
+		CinematicVideoWidget->RemoveFromParent();
+		CinematicVideoWidget = nullptr;
 	}
 
 	if (StartMediaCinematic())
@@ -283,22 +347,43 @@ bool ABalhwajeomIntroFlowActor::StartMediaCinematic()
 void ABalhwajeomIntroFlowActor::HandleMediaOpened(FString OpenedUrl)
 {
 	(void)OpenedUrl;
-	UMediaPlayer* ActiveMediaPlayer = State == EBalhwajeomIntroState::Ending
-		? EndingMediaPlayer.Get() : IntroMediaPlayer.Get();
-	if ((State != EBalhwajeomIntroState::Cinematic && State != EBalhwajeomIntroState::Ending) ||
-		!ActiveMediaPlayer)
+	UMediaPlayer* ActiveMediaPlayer = nullptr;
+	switch (State)
+	{
+	case EBalhwajeomIntroState::TitleStart: ActiveMediaPlayer = TitleStartMediaPlayer.Get(); break;
+	case EBalhwajeomIntroState::Cinematic: ActiveMediaPlayer = IntroMediaPlayer.Get(); break;
+	case EBalhwajeomIntroState::Ending: ActiveMediaPlayer = EndingMediaPlayer.Get(); break;
+	default: break;
+	}
+	if (!ActiveMediaPlayer)
 	{
 		return;
 	}
 	ActiveMediaPlayer->Play();
+	if (State == EBalhwajeomIntroState::TitleStart)
+	{
+		// No black screen to fade from here (see StartTitleStart/HandleStartRequested) -- instead
+		// ease the widget itself in from the 0 opacity it started at, now that a real frame is
+		// about to play, instead of popping straight to fully visible.
+		if (CinematicVideoWidget)
+		{
+			CinematicVideoWidget->FadeIn(TitleStartRevealFadeDuration);
+		}
+		return;
+	}
 	ScreenFadeWidget->FadeFromBlack(TransitionFadeDuration);
 }
 
 void ABalhwajeomIntroFlowActor::HandleMediaOpenFailed(FString FailedUrl)
 {
 	UE_LOG(LogTemp, Error, TEXT("%s: Failed to open intro media: %s"), *GetName(), *FailedUrl);
-	UMediaPlayer* FailedPlayer = State == EBalhwajeomIntroState::Ending
-		? EndingMediaPlayer.Get() : IntroMediaPlayer.Get();
+	UMediaPlayer* FailedPlayer = nullptr;
+	switch (State)
+	{
+	case EBalhwajeomIntroState::TitleStart: FailedPlayer = TitleStartMediaPlayer.Get(); break;
+	case EBalhwajeomIntroState::Ending: FailedPlayer = EndingMediaPlayer.Get(); break;
+	default: FailedPlayer = IntroMediaPlayer.Get(); break;
+	}
 	if (FailedPlayer)
 	{
 		FailedPlayer->OnMediaOpened.RemoveAll(this);
@@ -313,6 +398,11 @@ void ABalhwajeomIntroFlowActor::HandleMediaOpenFailed(FString FailedUrl)
 	if (State == EBalhwajeomIntroState::Ending)
 	{
 		StartEndingSequenceCinematic();
+	}
+	else if (State == EBalhwajeomIntroState::TitleStart)
+	{
+		// No fallback clip for this step -- just proceed straight to the real intro cinematic.
+		StartCinematic();
 	}
 	else
 	{
@@ -329,6 +419,17 @@ void ABalhwajeomIntroFlowActor::HandleMediaEndReached()
 	else if (State == EBalhwajeomIntroState::Cinematic)
 	{
 		BeginGameplayTransition();
+	}
+	else if (State == EBalhwajeomIntroState::TitleStart)
+	{
+		// Deliberately do NOT remove CinematicVideoWidget here: ScreenFadeWidget starts this fade
+		// fully transparent and only reaches opaque black after TransitionFadeDuration, so clearing
+		// the ripple widget now would flash the title screen underneath back into view for the
+		// length of the fade. StartCinematic() removes it once the screen is already black.
+		// Reuse the existing Title->Cinematic transition path: fade to black, then
+		// HandleFadeToBlackFinished's TransitionToCinematic branch calls StartCinematic().
+		State = EBalhwajeomIntroState::TransitionToCinematic;
+		ScreenFadeWidget->FadeToBlack(TransitionFadeDuration);
 	}
 }
 

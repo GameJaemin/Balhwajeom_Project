@@ -23,6 +23,7 @@ enum class EBalhwajeomIntroState : uint8
 {
 	Boot,
 	Title,
+	TitleStart,
 	TransitionToCinematic,
 	Cinematic,
 	TransitionToGameplay,
@@ -80,6 +81,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Assets")
 	TObjectPtr<ULevelSequence> IntroSequence;
 
+	/** Optional clip played once, right after Start is clicked and before the intro cinematic. Plays
+	 * to completion with no skip control. Leave any of the three unset to skip this step entirely
+	 * and go straight to the existing intro cinematic, unchanged. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Media")
+	TObjectPtr<UMediaSource> TitleStartMediaSource;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Media")
+	TObjectPtr<UMediaPlayer> TitleStartMediaPlayer;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Media")
+	TObjectPtr<UMediaTexture> TitleStartMediaTexture;
+
 	/** Optional full-screen MP4 path. Takes priority over IntroSequence when all three assets are valid. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Media")
 	TObjectPtr<UMediaSource> IntroMediaSource;
@@ -98,6 +111,13 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Timing", meta = (ClampMin = "0.0", Units = "s"))
 	float TransitionFadeDuration = 0.8f;
+
+	/** How long the TitleStart clip takes to fade from invisible to fully opaque once its media
+	 * actually opens. The widget is added at 0 opacity so the still-open/buffering media source
+	 * never shows a blank gap over the title screen; this softens the reveal once real frames
+	 * are ready instead of popping straight to full opacity. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Timing", meta = (ClampMin = "0.0", Units = "s"))
+	float TitleStartRevealFadeDuration = 0.2f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Timing", meta = (ClampMin = "0.0", Units = "s"))
 	float BGMFadeDuration = 0.8f;
@@ -169,6 +189,7 @@ private:
 
 	void SetGameplayEnabled(bool bEnabled);
 	void ResetInvestigationPhotosIfRequested();
+	void StartTitleStart();
 	void StartCinematic();
 	bool StartMediaCinematic();
 	void StartSequenceCinematic();
