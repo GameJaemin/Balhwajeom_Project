@@ -326,13 +326,16 @@ TArray<FBalhwajeomEvidenceData> ABalhwajeomCameraCharacter::GetCollectedEvidence
 
 void ABalhwajeomCameraCharacter::ApplyMouseYawInput(float Value)
 {
-	if (ActiveCameraZone)
-	{
-		ActiveCameraZone->AddYawInput(Value);
-	}
-	else if (PhotoCameraComponent && PhotoCameraComponent->IsInCameraMode())
+	// Photo mode owns both look axes even while the pawn remains inside a fixed-camera
+	// zone. Routing yaw to the zone here leaves movement using a stale control yaw,
+	// so the first-person view and WASD directions disagree.
+	if (PhotoCameraComponent && PhotoCameraComponent->IsInCameraMode())
 	{
 		PhotoCameraComponent->LookYaw(Value);
+	}
+	else if (ActiveCameraZone)
+	{
+		ActiveCameraZone->AddYawInput(Value);
 	}
 	else
 	{

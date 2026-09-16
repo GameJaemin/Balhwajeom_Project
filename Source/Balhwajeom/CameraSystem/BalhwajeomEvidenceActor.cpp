@@ -727,6 +727,15 @@ bool ABalhwajeomEvidenceActor::CanRequestInvestigationInteraction() const
 		Investigation->BeginEvidenceInteraction(EvidenceInstanceID, ViewData);
 }
 
+FText ABalhwajeomEvidenceActor::GetInteractionPromptText() const
+{
+	const UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	FEvidenceStateDefinition State;
+	return Investigation && Investigation->GetEvidenceStateDefinition(CurrentStateID, State)
+		? State.InteractionPromptText
+		: FText::GetEmpty();
+}
+
 UBalhwajeomInvestigationSubsystem* ABalhwajeomEvidenceActor::GetInvestigationSubsystem() const
 {
 	const UWorld* World = GetWorld();

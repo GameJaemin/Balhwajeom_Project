@@ -10,6 +10,7 @@
 
 class UUserWidget;
 class UWidget;
+class UTextBlock;
 class UTexture2D;
 class UBalhwajeomInvestigationSubsystem;
 class UBalhwajeomInteractionModalWidget;
@@ -153,6 +154,18 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UWidget> InteractionPromptFadeTarget;
 
+	/** TextBlock that receives the state-specific action text. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction")
+	FName InteractionPromptTextWidgetName = TEXT("TextBlock_50");
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> InteractionPromptTextWidget;
+
+	/** Applied when a target supplies an action; {Action} is replaced at runtime. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction")
+	FText InteractionPromptFormat = NSLOCTEXT(
+		"BalhwajeomInteraction", "PromptFormat", "[ F ] {Action}");
+
 	/** True while WB_Interact is drawn below the tutorial dim for the camera hint. */
 	bool bInteractionPromptBehindTutorialDim = false;
 
@@ -201,6 +214,8 @@ private:
 	UFUNCTION()
 	void HandleInvestigationPhotoGalleryReset();
 	bool ShouldShowInteractionPrompt() const;
+	FText ResolveInteractionPromptActionText() const;
+	void RefreshInteractionPromptText(bool bHasValidInteractionTarget);
 	bool IsInteractionPromptSuppressedByTablet() const;
 	bool IsInteractionPromptSuppressedByPhotoCamera() const;
 	void UpdateInteractionPrompt(float DeltaSeconds);
@@ -209,6 +224,7 @@ private:
 
 	/** Fade value of the [F] prompt before any tutorial blink is applied. */
 	float InteractionPromptAlpha = 0.0f;
+	FText DefaultInteractionPromptText;
 	float BedMemoryHUDAlpha = 0.0f;
 	bool bBedMemoryHUDActive = false;
 	bool bGameplayPresentationEnabled = true;

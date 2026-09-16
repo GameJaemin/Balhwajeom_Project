@@ -3,6 +3,7 @@
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Story/StoryStateSubsystem.h"
 #include "Story/StoryStateTags.h"
@@ -182,6 +183,17 @@ bool FPlayerRuntimeModePhotoCameraTransitionTest::RunTest(
 	{
 		return false;
 	}
+	UCharacterMovementComponent* Movement = Fixture.Character->GetCharacterMovement();
+	if (!TestNotNull(TEXT("Character movement component should exist"), Movement))
+	{
+		return false;
+	}
+	const bool bOriginalUseControllerRotationYaw =
+		Fixture.Character->bUseControllerRotationYaw;
+	const bool bOriginalOrientRotationToMovement =
+		Movement->bOrientRotationToMovement;
+	const bool bOriginalUseControllerDesiredRotation =
+		Movement->bUseControllerDesiredRotation;
 
 	PhotoCamera->ToggleCameraMode();
 	TestTrue(
@@ -197,6 +209,15 @@ bool FPlayerRuntimeModePhotoCameraTransitionTest::RunTest(
 		TEXT("The photo camera transition should finish"),
 		PhotoCamera->IsCameraTransitioning()
 	);
+	TestTrue(
+		TEXT("First-person movement should follow control yaw"),
+		Fixture.Character->bUseControllerRotationYaw);
+	TestFalse(
+		TEXT("First-person strafing should not rotate the character toward movement"),
+		Movement->bOrientRotationToMovement);
+	TestFalse(
+		TEXT("First-person movement should not use a second desired-rotation path"),
+		Movement->bUseControllerDesiredRotation);
 
 	TestTrue(
 		TEXT("Entering the photo camera should select photo camera mode"),
@@ -226,6 +247,18 @@ bool FPlayerRuntimeModePhotoCameraTransitionTest::RunTest(
 			BalhwajeomGameplayTags::Runtime_Player_Mode_PhotoCamera
 		)
 	);
+	TestEqual(
+		TEXT("Leaving first person should restore controller-yaw policy"),
+		Fixture.Character->bUseControllerRotationYaw,
+		bOriginalUseControllerRotationYaw);
+	TestEqual(
+		TEXT("Leaving first person should restore orient-to-movement policy"),
+		Movement->bOrientRotationToMovement,
+		bOriginalOrientRotationToMovement);
+	TestEqual(
+		TEXT("Leaving first person should restore desired-rotation policy"),
+		Movement->bUseControllerDesiredRotation,
+		bOriginalUseControllerDesiredRotation);
 
 	return true;
 }

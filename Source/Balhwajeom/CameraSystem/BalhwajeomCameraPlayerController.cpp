@@ -15,6 +15,7 @@
 #include "Interaction/DoorInteractionComponent.h"
 #include "Interaction/InspectionComponent.h"
 #include "Interaction/PlayerInteractionComponent.h"
+#include "Interaction/WorldInteractable.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Story/StoryStateSubsystem.h"
 #include "Story/StoryStateTags.h"
@@ -648,6 +649,8 @@ void ABalhwajeomCameraPlayerController::EnsureInteractionPrompt()
 		InteractionPromptWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 		InteractionPromptFadeTarget =
 			InteractionPromptWidget->GetWidgetFromName(InteractionPromptFadeTargetName);
+		InteractionPromptTextWidget = Cast<UTextBlock>(
+			InteractionPromptWidget->GetWidgetFromName(InteractionPromptTextWidgetName));
 		// Older prompt widgets named their text TextBlock_50. Keep this
 		// fallback so an older BP_OrbitViewPlayerController CDO that inherited the
 		// previous, incorrect "Text" default still resolves the real text widget.
@@ -655,6 +658,14 @@ void ABalhwajeomCameraPlayerController::EnsureInteractionPrompt()
 		{
 			InteractionPromptFadeTarget =
 				InteractionPromptWidget->GetWidgetFromName(TEXT("TextBlock_50"));
+		}
+		if (!InteractionPromptTextWidget)
+		{
+			InteractionPromptTextWidget = Cast<UTextBlock>(InteractionPromptFadeTarget);
+		}
+		if (InteractionPromptTextWidget)
+		{
+			DefaultInteractionPromptText = InteractionPromptTextWidget->GetText();
 		}
 		if (InteractionPromptFadeTarget)
 		{
@@ -723,6 +734,67 @@ bool ABalhwajeomCameraPlayerController::ShouldShowInteractionPrompt() const
 
 	const ABalhwajeomEvidenceActor* EvidenceActor = Cast<ABalhwajeomEvidenceActor>(FocusedActor);
 	return IsValid(EvidenceActor) && EvidenceActor->CanRequestInvestigationInteraction();
+}
+
+FText ABalhwajeomCameraPlayerController::ResolveInteractionPromptActionText() const
+{
+	const APawn* ControlledPawn = GetPawn();
+	const UPlayerInteractionComponent* InteractionComponent = IsValid(ControlledPawn)
+		? ControlledPawn->FindComponentByClass<UPlayerInteractionComponent>()
+		: nullptr;
+	if (!IsValid(InteractionComponent))
+	{
+		return FText::GetEmpty();
+	}
+
+	UInspectionComponent* FocusedInspection = InteractionComponent->GetFocusedInspection();
+	AActor* FocusedActor = IsValid(FocusedInspection) ? FocusedInspection->GetOwner() : nullptr;
+	if (!IsValid(FocusedActor))
+	{
+		return FText::GetEmpty();
+	}
+
+	if (const ABalhwajeomEvidenceActor* EvidenceActor = Cast<ABalhwajeomEvidenceActor>(FocusedActor))
+	{
+		return EvidenceActor->GetInteractionPromptText();
+	}
+	if (const UDoorInteractionComponent* DoorInteraction =
+		FocusedActor->FindComponentByClass<UDoorInteractionComponent>())
+	{
+		return DoorInteraction->GetInteractionPromptText();
+	}
+	if (FocusedActor->Implements<UWorldInteractable>())
+	{
+		return IWorldInteractable::Execute_GetInteractionPromptText(FocusedActor);
+	}
+	return FText::GetEmpty();
+}
+
+void ABalhwajeomCameraPlayerController::RefreshInteractionPromptText(
+	bool bHasValidInteractionTarget)
+{
+	if (!InteractionPromptTextWidget || !bHasValidInteractionTarget)
+	{
+		// Losing focus starts an opacity fade. Keep the last valid target's text
+		// during that fade instead of briefly replacing it with WBP_Interact's
+		// generic default while pixels are still visible. The next valid target
+		// refreshes the text before its fade-in begins.
+		return;
+	}
+
+	const FText ActionText = ResolveInteractionPromptActionText();
+	FText DesiredText = DefaultInteractionPromptText;
+	if (!ActionText.IsEmptyOrWhitespace())
+	{
+		FFormatNamedArguments Arguments;
+		Arguments.Add(TEXT("Action"), ActionText);
+		DesiredText = FText::Format(InteractionPromptFormat, Arguments);
+	}
+
+	if (!InteractionPromptTextWidget->GetText().EqualTo(DesiredText))
+	{
+		InteractionPromptTextWidget->SetText(DesiredText);
+	}
 }
 
 bool ABalhwajeomCameraPlayerController::IsInteractionPromptSuppressedByTablet() const
@@ -802,6 +874,7 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 		InteractionPromptWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 	const bool bShouldShow = ShouldShowInteractionPrompt();
+	RefreshInteractionPromptText(bShouldShow);
 	const float TargetOpacity = bShouldShow ? 1.0f : 0.0f;
 	InteractionPromptAlpha = FMath::FInterpTo(
 		InteractionPromptAlpha,
