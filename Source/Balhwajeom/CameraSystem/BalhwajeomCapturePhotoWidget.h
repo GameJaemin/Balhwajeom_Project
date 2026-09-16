@@ -67,14 +67,14 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> ScreenDimmer;
 
-	/** Trimmed AE timeline: source frames 37-110 at 60 fps. */
+	/** Extended presentation timeline: 93 frames at 60 fps. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
 		meta = (ClampMin = "0.01", Units = "s"))
-	float AnimationDuration = 1.2166667f;
+	float AnimationDuration = 1.55f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
 		meta = (ClampMin = "0.01", Units = "s"))
-	float CardEntryDuration = 0.3333333f;
+	float CardEntryDuration = 0.4166667f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
 		meta = (ClampMin = "0.0", Units = "s"))
@@ -82,11 +82,11 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
 		meta = (ClampMin = "0.0", Units = "s"))
-	float KeywordStagger = 0.0833333f;
+	float KeywordStagger = 0.1666667f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
 		meta = (ClampMin = "0.01", Units = "s"))
-	float KeywordEntryDuration = 0.3333333f;
+	float KeywordEntryDuration = 0.4166667f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
 		meta = (ClampMin = "0.01", Units = "s"))
@@ -94,11 +94,11 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
 		meta = (ClampMin = "0.0", Units = "s"))
-	float ExitStartTime = 0.8833333f;
+	float ExitStartTime = 1.1333333f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
 		meta = (ClampMin = "0.0", Units = "s"))
-	float FadeOutStartTime = 1.05f;
+	float FadeOutStartTime = 1.3833333f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation")
 	FVector2D EntryOffset = FVector2D(318.0f, 0.0f);
@@ -108,6 +108,11 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation")
 	FVector2D ExitOffset = FVector2D(0.0f, 360.0f);
+
+	/** Extra local-space distance beyond the bottom edge before the presentation ends. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
+		meta = (ClampMin = "0.0"))
+	float ExitSafetyMargin = 32.0f;
 
 	/** Optional font asset used by every dynamically generated keyword label. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Keyword Style")
@@ -153,8 +158,15 @@ private:
 	friend class FCapturePhotoFlightTest;
 	friend class FCapturePhotoMultilineSentenceTest;
 #endif
+	static float CalculateExitDistance(
+		float ViewportHeight,
+		float ContentTop,
+		float MinimumDistance,
+		float SafetyMargin);
+	void UpdateResolvedExitDistance();
 	void ApplyEntryTransform(UWidget* Widget, float EntryAlpha);
 
 	bool bHasGrantedKeywords = false;
 	bool bPresentationReady = false;
+	float ResolvedExitDistanceY = 360.0f;
 };
