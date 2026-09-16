@@ -1,4 +1,4 @@
-Name,StateID,ObjectID,StateName,InteractionBehavior,InteractionPresentation,NextStateID,InteractionText,KeywordDocumentID,StateMesh,StateEffect,FarLabel,MidLabel,NearLabel,bCanCapture,PhotoID,PostCaptureStateID ,MinimumFocusDistanceOffset,MaximumFocusDistanceOffset
+Name,StateID,ObjectID,StateName,InteractionBehavior,InteractionPresentation,NextStateID,InteractionText,KeywordDocumentID,StateMesh,StateEffect,FarLabel,MidLabel,NearLabel,bCanCapture,PhotoID,PostCaptureStateID ,MinimumFocusDistanceOffset,MaximumFocusDistanceOffset,InteractionWidgetClass,GrantedWordIDs
 STATE_01_001_DUST,STATE_01_001_DUST,OBJ_01_001,먼지 쌓인 형의 돌 사진,ChangeState,SimpleText,STATE_01_001_CLEAR,사진의 먼지를 닦았다.,,,,,사진,먼지 덮인 사진,FALSE,,,0,0
 STATE_01_001_CLEAR,STATE_01_001_CLEAR,OBJ_01_001,형의 돌 사진,None,SimpleText,,,,,,,사진,첫째 형의 돌 사진,TRUE,PHOTO_01_001,STATE_01_001_MEMORY,0,0
 STATE_01_001_MEMORY,STATE_01_001_MEMORY,OBJ_01_001,첫째인 형의 돌 사진,PlayPhotoStory,None,,,,,,,사진,첫째 형의 돌 사진,FALSE,,,0,0
@@ -8,8 +8,8 @@ STATE_01_002_MEMORY,STATE_01_002_MEMORY,OBJ_01_002,즐거웠던 일상 사진,Pl
 STATE_01_003_DUST,STATE_01_003_DUST,OBJ_01_003,먼지 쌓인 가족 사진,ChangeState,SimpleText,STATE_01_003_CLEAR,사진의 먼지를 닦았다.,,,,,사진,더러워서 보이지 않는 사진,FALSE,,,0,0
 STATE_01_003_CLEAR,STATE_01_003_CLEAR,OBJ_01_003,가족 사진,None,SimpleText,,,,,,,사진,최근에 찍은 가족 사진,TRUE,PHOTO_01_003,STATE_01_003_MEMORY,0,0
 STATE_01_003_MEMORY,STATE_01_003_MEMORY,OBJ_01_003,단정한 가족 사진,PlayPhotoStory,None,,,,,,,사진,최근에 찍은 가족 사진,FALSE,,,0,0
-STATE_01_004_CLOSED,STATE_01_004_CLOSED,OBJ_01_004,닫혀 있는 일기장,ChangeState,SimpleText,STATE_01_004_OPEN,일기장을 열어보았다.,,,,,일기장,여동생의 일기장,FALSE,,,0,0
-STATE_01_004_OPEN,STATE_01_004_OPEN,OBJ_01_004,열려 있는 일기장,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_001,,,,열린 일기장,열린 여동생의 일기장,TRUE,PHOTO_01_004,STATE_01_004_MEMORY,0,0
+STATE_01_004_CLOSED,STATE_01_004_CLOSED,OBJ_01_004,닫혀 있는 일기장,ChangeState,ModalWidget,STATE_01_004_OPEN,일기장을 열어보았다.,KEYDOC_01_001,,,,일기장,여동생의 일기장,FALSE,,,0,0,WidgetBlueprintGeneratedClass'/Game/Balhwajeom/UI/Diary/WBP_Diary.WBP_Diary_C',"(WORD_01_004,WORD_01_005)"
+STATE_01_004_OPEN,STATE_01_004_OPEN,OBJ_01_004,열려 있는 일기장,Repeatable,ModalWidget,,,KEYDOC_01_001,,,,열린 일기장,열린 여동생의 일기장,TRUE,PHOTO_01_004,STATE_01_004_MEMORY,0,0,WidgetBlueprintGeneratedClass'/Game/Balhwajeom/UI/Diary/WBP_Diary.WBP_Diary_C',()
 STATE_01_004_MEMORY,STATE_01_004_MEMORY,OBJ_01_004,여동생의 일기장,PlayPhotoStory,None,,,,,,,열린 일기장,열린 여동생의 일기장,FALSE,,,0,0
 STATE_01_005_FRONT,STATE_01_005_FRONT,OBJ_01_005,고데기,ChangeState,SimpleText,STATE_01_005_BACK,고데기를 뒤집었다.,,,,,고데기,파손된 고데기,FALSE,,,0,0
 STATE_01_005_BACK,STATE_01_005_BACK,OBJ_01_005,고데기 뒷면,None,None,,,,,,,고데기,파손된 고데기,TRUE,PHOTO_01_005,STATE_01_005_MEMORY,0,0

@@ -6,6 +6,7 @@
 #include "ItemInspection/JMItemInspectionSubsystem.h"
 #include "Tablet/BalhwajeomTabletComponent.h"
 #include "CameraSystem/BalhwajeomPhotoCameraComponent.h"
+#include "CameraSystem/BalhwajeomCameraPlayerController.h"
 
 namespace
 {
@@ -53,7 +54,11 @@ bool BalhwajeomItemInspection::IsOtherModalOpen(const AActor* PlayerActor)
 	const UBalhwajeomTabletComponent* Tablet = Controller ? Controller->FindComponentByClass<UBalhwajeomTabletComponent>() : nullptr;
 	if (!Tablet && Pawn) Tablet = Pawn->FindComponentByClass<UBalhwajeomTabletComponent>();
 	const UBalhwajeomPhotoCameraComponent* Camera = Pawn ? Pawn->FindComponentByClass<UBalhwajeomPhotoCameraComponent>() : nullptr;
-	return (Tablet && Tablet->IsTabletOpen()) || (Camera && (Camera->IsInCameraMode() || Camera->IsCameraTransitioning()));
+	const ABalhwajeomCameraPlayerController* CameraController =
+		Cast<ABalhwajeomCameraPlayerController>(Controller);
+	return (Tablet && Tablet->IsTabletOpen()) ||
+		(Camera && (Camera->IsInCameraMode() || Camera->IsCameraTransitioning())) ||
+		(CameraController && CameraController->IsInteractionModalOpen());
 }
 bool BalhwajeomItemInspection::CanInspect(AActor* Target, APawn* Pawn)
 {

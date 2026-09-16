@@ -22,6 +22,7 @@
 #include "Tutorial/BalhwajeomTutorialDirector.h"
 #include "Tutorial/BalhwajeomTutorialFocusWidget.h"
 #include "UI/BalhwajeomKeywordCounterWidget.h"
+#include "UI/BalhwajeomInteractionModalWidget.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -94,6 +95,12 @@ void ABalhwajeomCameraPlayerController::BeginPlay()
 
 void ABalhwajeomCameraPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (InteractionModalWidget)
+	{
+		InteractionModalWidget->OnCloseRequested.RemoveAll(this);
+		InteractionModalWidget->RemoveFromParent();
+		InteractionModalWidget = nullptr;
+	}
 	if (BoundHudStoryStateSubsystem)
 	{
 		BoundHudStoryStateSubsystem->OnStateTagAdded.RemoveDynamic(
@@ -129,6 +136,92 @@ void ABalhwajeomCameraPlayerController::EndPlay(const EEndPlayReason::Type EndPl
 	KeywordCounterWidget = nullptr;
 
 	Super::EndPlay(EndPlayReason);
+}
+
+bool ABalhwajeomCameraPlayerController::ShowInteractionModal(
+	TSubclassOf<UUserWidget> ContentWidgetClass,
+	const FText& DocumentText,
+	const TArray<FText>& NewlyGrantedKeywords)
+{
+	if (!IsLocalController() || !bGameplayPresentationEnabled ||
+		IsInteractionModalOpen() || !ContentWidgetClass)
+	{
+		return false;
+	}
+
+	UBalhwajeomInteractionModalWidget* Modal =
+		CreateWidget<UBalhwajeomInteractionModalWidget>(
+			this, UBalhwajeomInteractionModalWidget::StaticClass());
+	if (!Modal || !Modal->Present(
+		ContentWidgetClass, DocumentText, NewlyGrantedKeywords))
+	{
+		return false;
+	}
+
+	InteractionModalWidget = Modal;
+	InteractionModalWidget->OnCloseRequested.AddUObject(
+		this, &ThisClass::HandleInteractionModalCloseRequested);
+	InteractionModalWidget->AddToViewport(1300);
+
+	bInteractionModalChangedMoveIgnore = !IsMoveInputIgnored();
+	bInteractionModalChangedLookIgnore = !IsLookInputIgnored();
+	bInteractionModalPreviousMouseCursor = bShowMouseCursor;
+	if (bInteractionModalChangedMoveIgnore)
+	{
+		SetIgnoreMoveInput(true);
+	}
+	if (bInteractionModalChangedLookIgnore)
+	{
+		SetIgnoreLookInput(true);
+	}
+	bShowMouseCursor = true;
+
+	FInputModeUIOnly InputMode;
+	InputMode.SetWidgetToFocus(InteractionModalWidget->TakeWidget());
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(InputMode);
+	InteractionModalWidget->SetKeyboardFocus();
+	return true;
+}
+
+bool ABalhwajeomCameraPlayerController::IsInteractionModalOpen() const
+{
+	return IsValid(InteractionModalWidget) && InteractionModalWidget->IsInViewport();
+}
+
+void ABalhwajeomCameraPlayerController::CloseInteractionModal()
+{
+	if (!InteractionModalWidget)
+	{
+		return;
+	}
+
+	InteractionModalWidget->OnCloseRequested.RemoveAll(this);
+	InteractionModalWidget->RemoveFromParent();
+	InteractionModalWidget = nullptr;
+	if (bInteractionModalChangedMoveIgnore)
+	{
+		SetIgnoreMoveInput(false);
+	}
+	if (bInteractionModalChangedLookIgnore)
+	{
+		SetIgnoreLookInput(false);
+	}
+	bShowMouseCursor = bInteractionModalPreviousMouseCursor;
+	bInteractionModalChangedMoveIgnore = false;
+	bInteractionModalChangedLookIgnore = false;
+
+	if (bGameplayPresentationEnabled)
+	{
+		FInputModeGameOnly InputMode;
+		InputMode.SetConsumeCaptureMouseDown(false);
+		SetInputMode(InputMode);
+	}
+}
+
+void ABalhwajeomCameraPlayerController::HandleInteractionModalCloseRequested()
+{
+	CloseInteractionModal();
 }
 
 void ABalhwajeomCameraPlayerController::EnsurePlayerHUD()

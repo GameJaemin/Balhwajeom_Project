@@ -1,5 +1,6 @@
 #include "BalhwajeomCapturePhotoWidget.h"
 
+#include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/CanvasPanel.h"
 #include "Components/Image.h"
@@ -13,6 +14,7 @@
 #include "Components/WrapBoxSlot.h"
 #include "Engine/Font.h"
 #include "Engine/Texture2D.h"
+#include "UI/BalhwajeomKeywordAcquireChipWidget.h"
 
 namespace
 {
@@ -220,31 +222,25 @@ void UBalhwajeomCapturePhotoWidget::PresentCapture(
 		KeywordList->ClearChildren();
 		for (const FText& Keyword : GrantedKeywords)
 		{
-			UBorder* Pill = NewObject<UBorder>(KeywordList);
-			if (KeywordBackgroundTexture)
+			UBalhwajeomKeywordAcquireChipWidget* Chip =
+				Cast<UBalhwajeomKeywordAcquireChipWidget>(
+					UUserWidget::CreateWidgetInstance(
+						*WidgetTree,
+						UBalhwajeomKeywordAcquireChipWidget::StaticClass(),
+						NAME_None));
+			if (!Chip)
 			{
-				Pill->SetBrushFromTexture(KeywordBackgroundTexture);
+				continue;
 			}
-			else
-			{
-				Pill->SetBrushColor(KeywordBackgroundColor);
-			}
-			Pill->SetPadding(FMargin(30.0f, 20.0f));
+			Chip->SetKeywordAppearance(
+				Keyword,
+				KeywordFontAsset,
+				KeywordFontSize,
+				KeywordTextColor,
+				KeywordBackgroundColor,
+				KeywordBackgroundTexture);
 
-			UTextBlock* Label = NewObject<UTextBlock>(Pill);
-			Label->SetText(Keyword);
-			Label->SetColorAndOpacity(FSlateColor(KeywordTextColor));
-			Label->SetJustification(ETextJustify::Center);
-			FSlateFontInfo KeywordFont = Label->GetFont();
-			if (KeywordFontAsset)
-			{
-				KeywordFont.FontObject = KeywordFontAsset.Get();
-			}
-			KeywordFont.Size = KeywordFontSize;
-			Label->SetFont(KeywordFont);
-			Pill->SetContent(Label);
-
-			if (UVerticalBoxSlot* KeywordSlot = KeywordList->AddChildToVerticalBox(Pill))
+			if (UVerticalBoxSlot* KeywordSlot = KeywordList->AddChildToVerticalBox(Chip))
 			{
 				KeywordSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 8.0f));
 				KeywordSlot->SetHorizontalAlignment(HAlign_Fill);

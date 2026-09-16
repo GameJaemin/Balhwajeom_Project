@@ -525,6 +525,26 @@ bool UBalhwajeomInvestigationSubsystem::ValidateLoadedDataTables() const
 				State->KeywordDocumentID);
 		}
 
+		if (State->InteractionPresentation == EEvidenceInteractionPresentation::ModalWidget &&
+			State->InteractionWidgetClass.IsNull())
+		{
+			UE_LOG(
+				LogBalhwajeomInvestigation,
+				Error,
+				TEXT("Evidence state '%s' uses ModalWidget but has no InteractionWidgetClass."),
+				*State->StateID.ToString());
+			bIsValid = false;
+		}
+
+		for (const FName WordID : State->GrantedWordIDs)
+		{
+			if (!HasWord(WordID))
+			{
+				ReportInvalidReference(
+					TEXT("EvidenceState"), State->StateID, TEXT("GrantedWordIDs"), WordID);
+			}
+		}
+
 		if (State->bCanCapture && !HasPhoto(State->PhotoID))
 		{
 			ReportInvalidReference(TEXT("EvidenceState"), State->StateID, TEXT("PhotoID"), State->PhotoID);
@@ -1131,6 +1151,7 @@ bool UBalhwajeomInvestigationSubsystem::BeginEvidenceInteraction(
 	OutViewData.Presentation = StateDefinition->InteractionPresentation;
 	OutViewData.InteractionText = StateDefinition->InteractionText;
 	OutViewData.KeywordDocumentID = StateDefinition->KeywordDocumentID;
+	OutViewData.InteractionWidgetClass = StateDefinition->InteractionWidgetClass;
 	return true;
 }
 
@@ -1180,6 +1201,29 @@ bool UBalhwajeomInvestigationSubsystem::CompleteEvidenceInteraction(
 	FGuid EvidenceInstanceID,
 	FName ExpectedStateID)
 {
+	return CompleteEvidenceInteractionInternal(
+		EvidenceInstanceID, ExpectedStateID, nullptr);
+}
+
+bool UBalhwajeomInvestigationSubsystem::CompleteEvidenceInteractionWithGrantedWords(
+	FGuid EvidenceInstanceID,
+	FName ExpectedStateID,
+	TArray<FName>& OutNewlyGrantedWordIDs)
+{
+	return CompleteEvidenceInteractionInternal(
+		EvidenceInstanceID, ExpectedStateID, &OutNewlyGrantedWordIDs);
+}
+
+bool UBalhwajeomInvestigationSubsystem::CompleteEvidenceInteractionInternal(
+	FGuid EvidenceInstanceID,
+	FName ExpectedStateID,
+	TArray<FName>* OutNewlyGrantedWordIDs)
+{
+	if (OutNewlyGrantedWordIDs)
+	{
+		OutNewlyGrantedWordIDs->Reset();
+	}
+
 	FEvidenceRuntimeState* RuntimeState = EvidenceRuntimeStates.Find(EvidenceInstanceID);
 	if (RuntimeState == nullptr || RuntimeState->CurrentStateID != ExpectedStateID)
 	{
@@ -1193,6 +1237,7 @@ bool UBalhwajeomInvestigationSubsystem::CompleteEvidenceInteraction(
 		return false;
 	}
 
+	bool bCompleted = false;
 	switch (StateDefinition->InteractionBehavior)
 	{
 	case EEvidenceInteractionBehavior::Once:
@@ -1201,10 +1246,12 @@ bool UBalhwajeomInvestigationSubsystem::CompleteEvidenceInteraction(
 			return false;
 		}
 		RuntimeState->CompletedInteractionStateIDs.Add(ExpectedStateID);
-		return true;
+		bCompleted = true;
+		break;
 
 	case EEvidenceInteractionBehavior::Repeatable:
-		return true;
+		bCompleted = true;
+		break;
 
 	case EEvidenceInteractionBehavior::ChangeState:
 	{
@@ -1221,13 +1268,31 @@ bool UBalhwajeomInvestigationSubsystem::CompleteEvidenceInteraction(
 			EvidenceInstanceID,
 			PreviousStateID,
 			RuntimeState->CurrentStateID);
-		return true;
+		bCompleted = true;
+		break;
 	}
 
 	case EEvidenceInteractionBehavior::None:
 	default:
 		return false;
 	}
+
+	if (!bCompleted)
+	{
+		return false;
+	}
+
+	for (const FName WordID : StateDefinition->GrantedWordIDs)
+	{
+		if (AcquireWord(
+			WordID,
+			EWordAcquisitionSource::EvidenceInteraction,
+			StateDefinition->StateID) && OutNewlyGrantedWordIDs)
+		{
+			OutNewlyGrantedWordIDs->Add(WordID);
+		}
+	}
+	return true;
 }
 
 bool UBalhwajeomInvestigationSubsystem::AcquireWord(

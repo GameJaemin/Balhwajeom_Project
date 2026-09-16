@@ -12,6 +12,7 @@ class UUserWidget;
 class UWidget;
 class UTexture2D;
 class UBalhwajeomInvestigationSubsystem;
+class UBalhwajeomInteractionModalWidget;
 class UBalhwajeomKeywordCounterWidget;
 class UStoryStateSubsystem;
 
@@ -86,6 +87,18 @@ public:
 
 	/** Applies a photo-capture keyword count after its card has reached the TAB HUD. */
 	void FlushPendingPhotoKeywordCount();
+
+	/** Opens a blocking interaction widget and decorates it with newly acquired keywords. */
+	bool ShowInteractionModal(
+		TSubclassOf<UUserWidget> ContentWidgetClass,
+		const FText& DocumentText,
+		const TArray<FText>& NewlyGrantedKeywords);
+
+	UFUNCTION(BlueprintPure, Category = "UI|Interaction")
+	bool IsInteractionModalOpen() const;
+
+	UFUNCTION(BlueprintCallable, Category = "UI|Interaction")
+	void CloseInteractionModal();
 
 protected:
 	virtual void BeginPlay() override;
@@ -176,6 +189,7 @@ private:
 	void BindHudModeEvents();
 	void RefreshHudModeIcons();
 	void HideInspectionMessage();
+	void HandleInteractionModalCloseRequested();
 
 	UFUNCTION()
 	void HandleHudModeTagChanged(FGameplayTag StateTag);
@@ -206,6 +220,13 @@ private:
 	/** Story state source used to keep the two WBP_HUID mode buttons in sync. */
 	UPROPERTY(Transient)
 	TObjectPtr<UStoryStateSubsystem> BoundHudStoryStateSubsystem;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UBalhwajeomInteractionModalWidget> InteractionModalWidget;
+
+	bool bInteractionModalChangedMoveIgnore = false;
+	bool bInteractionModalChangedLookIgnore = false;
+	bool bInteractionModalPreviousMouseCursor = false;
 
 	UPROPERTY(EditDefaultsOnly, Category = "UI|Mode Buttons")
 	TObjectPtr<UTexture2D> CameraButtonIdleTexture;
