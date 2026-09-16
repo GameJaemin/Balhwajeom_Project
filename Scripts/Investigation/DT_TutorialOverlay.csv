@@ -1,0 +1,9 @@
+---,RequiredTags,Images,OverlayText,CompletionTag
+StatementIntro,"(GameplayTags=)","","NSLOCTEXT(""DT_TutorialOverlay [443A275A7FF8ADFBFC50D52E9A480CEC]"", ""StatementIntro_OverlayText"", ""진술서를 확인해보세요.\n진술 반증서를 작성하기 위한 단어를 찾아야합니다."")","(TagName=""Tutorial.Overlay.Seen.StatementIntro"")"
+MovementAndLook,"(GameplayTags=)","","NSLOCTEXT(""DT_TutorialOverlay [443A275A7FF8ADFBFC50D52E9A480CEC]"", ""MovementAndLook_OverlayText"", ""WASD로 이동하고 마우스로 회전"")","(TagName=""Tutorial.Overlay.Seen.MovementAndLook"")"
+Interaction,"(GameplayTags=)","","NSLOCTEXT(""DT_TutorialOverlay [443A275A7FF8ADFBFC50D52E9A480CEC]"", ""Interaction_OverlayText"", ""F 상호작용 설명"")","(TagName=""Tutorial.Overlay.Seen.Interaction"")"
+PhotoCamera,"(GameplayTags=)","","NSLOCTEXT(""DT_TutorialOverlay [443A275A7FF8ADFBFC50D52E9A480CEC]"", ""PhotoCamera_OverlayText"", ""카메라 설명"")","(TagName=""Tutorial.Overlay.Seen.PhotoCamera"")"
+MemoryObject,"(GameplayTags=)","","NSLOCTEXT(""DT_TutorialOverlay [443A275A7FF8ADFBFC50D52E9A480CEC]"", ""MemoryObject_OverlayText"", ""회상(빛나는 오브젝트) 설명"")","(TagName=""Tutorial.Overlay.Seen.MemoryObject"")"
+Tablet,"(GameplayTags=)","","NSLOCTEXT(""DT_TutorialOverlay [443A275A7FF8ADFBFC50D52E9A480CEC]"", ""Tablet_OverlayText"", ""태블릿 설명"")","(TagName=""Tutorial.Overlay.Seen.Tablet"")"
+SisterFolder,"(GameplayTags=)","","NSLOCTEXT(""DT_TutorialOverlay [443A275A7FF8ADFBFC50D52E9A480CEC]"", ""SisterFolder_OverlayText"", ""여동생 폴더 설명"")","(TagName=""Tutorial.Overlay.Seen.SisterFolder"")"
+PhotoSentencePuzzle,"(GameplayTags=)","","NSLOCTEXT(""DT_TutorialOverlay [443A275A7FF8ADFBFC50D52E9A480CEC]"", ""PhotoSentencePuzzle_OverlayText"", ""단서 사진을 클릭하고 문장을 조합하세요"")","(TagName=""Tutorial.Overlay.Seen.PhotoSentencePuzzle"")"

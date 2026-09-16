@@ -24,6 +24,7 @@ public class BalhwajeomEditor : ModuleRules
 			"ItemInspectorRuntime",
 			"BlueprintGraph",
 			"ImageCore",
+			"GameplayTags",
 			"MediaAssets",
 			"MultiShadowText",
 			"SlateCore",

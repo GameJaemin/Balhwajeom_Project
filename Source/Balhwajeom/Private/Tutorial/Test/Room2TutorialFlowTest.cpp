@@ -39,6 +39,7 @@ namespace Room2TutorialFlowTest
 		TEXT("STATE_01_001_CLEAR"), TEXT("STATE_01_002_CLEAR"), TEXT("STATE_01_003_CLEAR") };
 	const FName MemoryStateIDs[3] = {
 		TEXT("STATE_01_001_MEMORY"), TEXT("STATE_01_002_MEMORY"), TEXT("STATE_01_003_MEMORY") };
+	const FName FamilyPhotoSentenceID = TEXT("SENT_01_PHOTO_001");
 
 	struct FFixture
 	{
@@ -150,29 +151,20 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 	UBalhwajeomPhotoCameraComponent* PhotoCamera =
 		Character->FindComponentByClass<UBalhwajeomPhotoCameraComponent>();
 
-	// The exit door is gated on the three family conversations having been heard. The tag
-	// is per object, not per state, so it does not matter whether the player heard the
-	// story before photographing or after.
+	// The exit door is gated on completing the family photo's analysis sentence.
 	AActor* DoorActor = Fixture.World->SpawnActor<AActor>();
 	UDoorInteractionComponent* Door = NewObject<UDoorInteractionComponent>(DoorActor);
 	DoorActor->AddInstanceComponent(Door);
 	Door->RegisterComponent();
-	FGameplayTagContainer DoorTags;
-	for (const FName& ObjectID : ObjectIDs)
+	const FGameplayTag FamilyPhotoSolvedTag = FGameplayTag::RequestGameplayTag(
+		TEXT("Evidence.SentenceSolved.PHOTO_01_003"), false);
+	if (!TestTrue(
+		TEXT("The family-photo sentence-solved tag must be registered"),
+		FamilyPhotoSolvedTag.IsValid()))
 	{
-		const FGameplayTag Tag = FGameplayTag::RequestGameplayTag(
-			FName(*FString::Printf(TEXT("Evidence.StoryHeard.%s"), *ObjectID.ToString())),
-			false);
-		if (!TestTrue(
-			FString::Printf(TEXT("Evidence.StoryHeard.%s must be registered in DefaultGameplayTags.ini"),
-				*ObjectID.ToString()),
-			Tag.IsValid()))
-		{
-			return false;
-		}
-		DoorTags.AddTag(Tag);
+		return false;
 	}
-	Door->UnlockRequiresTags = DoorTags;
+	Door->UnlockRequiresTags.AddTag(FamilyPhotoSolvedTag);
 
 	// BeginPlay already auto-started it; this is a no-op that documents the entry point.
 	Director->StartFlow();
@@ -284,38 +276,67 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 			FString::Printf(TEXT("%s should register"), *PhotoIDs[Index].ToString()),
 			Investigation->RegisterCapturedPhoto(Record));
 
-		// This is what swaps the mesh for the framed photo, so a missing
-		// PostCaptureStateID would strand the player before the conversations.
+		// This swaps the evidence into its optional memory-conversation state.
 		TestTrue(
 			FString::Printf(TEXT("%s should advance to its memory state"),
 				*ObjectIDs[Index].ToString()),
 			Investigation->AdvanceEvidenceStateAfterCapture(InstanceIDs[Index]));
 	}
 
-	TestEqual(TEXT("Photographing all three reaches Talk"),
-		Director->GetCurrentStepID(), FName(TEXT("Talk")));
-	TestTrue(TEXT("Talk blinks the [F] prompt"),
+	TestEqual(TEXT("Photographing all three reaches CompleteFamilyPhoto"),
+		Director->GetCurrentStepID(), FName(TEXT("CompleteFamilyPhoto")));
+	TestFalse(TEXT("The tablet unlocks for the family-photo puzzle"),
+		StoryState->HasStateTagExact(BalhwajeomGameplayTags::Runtime_Lock_Tablet));
+	TestTrue(TEXT("CompleteFamilyPhoto highlights the tablet icon"),
 		ABalhwajeomTutorialDirector::GetTutorialHintTarget(Character) ==
-			EBalhwajeomTutorialHintTarget::InteractPrompt);
+			EBalhwajeomTutorialHintTarget::TabletIcon);
+	TestFalse(TEXT("The exit door stays locked until the family photo is completed"),
+		Door->IsUnlocked());
 
-	// --- Listening to the three conversations finishes the tutorial -------------------
+	// --- The old family conversations remain optional and cannot finish the tutorial ---
 	for (int32 Index = 0; Index < 3; ++Index)
 	{
 		TestTrue(
 			FString::Printf(TEXT("%s story-heard tag should be recorded"),
 				*ObjectIDs[Index].ToString()),
 			StoryState->AddEvidenceStoryHeardTag(ObjectIDs[Index]));
+	}
+	TestEqual(TEXT("Conversations do not replace the family-photo puzzle"),
+		Director->GetCurrentStepID(), FName(TEXT("CompleteFamilyPhoto")));
+	TestFalse(TEXT("Hearing every conversation does not unlock the exit door"),
+		Door->IsUnlocked());
 
-		if (Index < 2)
-		{
-			TestEqual(TEXT("Talk waits for every conversation"),
-				Director->GetCurrentStepID(), FName(TEXT("Talk")));
-			TestFalse(TEXT("The exit door stays locked until all three are heard"),
-				Door->IsUnlocked());
-		}
+	// --- Completing the existing family-photo sentence finishes the tutorial ----------
+	FSentenceDefinition FamilyPhotoSentence;
+	if (!TestTrue(
+		TEXT("The family-photo sentence should exist"),
+		Investigation->GetSentenceDefinition(FamilyPhotoSentenceID, FamilyPhotoSentence)))
+	{
+		return false;
 	}
 
-	TestEqual(TEXT("Hearing all three conversations reaches Done"),
+	FSentenceSubmission Submission;
+	for (const FSentenceWordSlot& Slot : FamilyPhotoSentence.WordSlots)
+	{
+		TestTrue(
+			FString::Printf(TEXT("Capturing the three frames should acquire %s"),
+				*Slot.CorrectWordID.ToString()),
+			Investigation->HasAcquiredWord(Slot.CorrectWordID));
+		Submission.SubmittedWords.Add({Slot.SlotIndex, Slot.CorrectWordID});
+	}
+
+	FText ResultText;
+	bool bSolved = false;
+	{
+		FEditorScriptExecutionGuard ScriptExecutionGuard;
+		bSolved = Investigation->ValidateSentence(
+			FamilyPhotoSentenceID, Submission, ResultText);
+	}
+
+	TestTrue(TEXT("The family-photo sentence accepts the three captured words"), bSolved);
+	TestTrue(TEXT("Solving the family photo records its photo-based story tag"),
+		StoryState->HasStateTagExact(FamilyPhotoSolvedTag));
+	TestEqual(TEXT("Completing the family photo reaches Done"),
 		Director->GetCurrentStepID(), FName(TEXT("Done")));
 	TestTrue(TEXT("Done unlocks the exit door"), Door->IsUnlocked());
 	TestTrue(TEXT("An unlocked door offers its interaction"), Door->CanInteract());

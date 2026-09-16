@@ -1733,6 +1733,30 @@ void UBalhwajeomPhotoCameraComponent::HandleScreenshotProcessed()
 	const FString AbsolutePath = PendingCapture->AbsolutePath;
 	SetCameraUIHiddenForScreenshot(false);
 	ClearScreenshotDelegates();
+
+	// When the screenshot delegate is disabled, the engine writes the requested
+	// PNG itself and only sends the processed notification. That is still a
+	// successful capture, even though HandleScreenshotCaptured never received
+	// the in-memory pixels.
+	const int64 SavedFileSize = IFileManager::Get().FileSize(*AbsolutePath);
+	if (SavedFileSize > 0)
+	{
+		PendingCapturePreviewTexture = FImageUtils::ImportFileAsTexture2D(AbsolutePath);
+		UE_LOG(
+			LogTemp,
+			Display,
+			TEXT("Photo screenshot completed through engine disk save: %s (%lld bytes)."),
+			*AbsolutePath,
+			SavedFileSize);
+		CompleteImageSave(RequestID, true, AbsolutePath);
+		return;
+	}
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("Photo screenshot processed without pixels or a saved image: %s."),
+		*AbsolutePath);
 	CompleteImageSave(RequestID, false, AbsolutePath);
 }
 

@@ -17,11 +17,10 @@
  * Walks the exact route a player takes to open the tutorial's exit door, through the
  * placed actor rather than through the subsystem directly:
  *
- *     F (dust) -> photograph -> F (family conversation) -> door unlocks
+ *     F (dust) -> photograph all three -> complete family photo sentence -> door unlocks
  *
- * The earlier flow test called AddEvidenceStoryPlayedTag itself, so it proved the door's
- * condition but not that playing a world story actually records it. That gap is exactly
- * where "I did all three and the door stayed shut" would hide.
+ * The test keeps the optional family conversations in the route and proves they cannot
+ * unlock the door. Only the real photo-sentence validation path may do that.
  */
 namespace TutorialDoorUnlockPathTest
 {
@@ -99,27 +98,20 @@ bool FTutorialDoorUnlockPathTest::RunTest(const FString& Parameters)
 		return false;
 	}
 
-	// The exit door, gated exactly as the tutorial levels place it.
+	// The exit door, gated exactly as room3 places it.
 	AActor* DoorActor = Fixture.World->SpawnActor<AActor>();
 	UDoorInteractionComponent* Door = NewObject<UDoorInteractionComponent>(DoorActor);
 	DoorActor->AddInstanceComponent(Door);
 	Door->RegisterComponent();
-	FGameplayTagContainer DoorTags;
-	for (const FName& ObjectID : ObjectIDs)
+	const FGameplayTag FamilyPhotoSolvedTag = FGameplayTag::RequestGameplayTag(
+		TEXT("Evidence.SentenceSolved.PHOTO_01_003"), false);
+	if (!TestTrue(
+		TEXT("Evidence.SentenceSolved.PHOTO_01_003 must be registered"),
+		FamilyPhotoSolvedTag.IsValid()))
 	{
-		const FGameplayTag Tag = FGameplayTag::RequestGameplayTag(
-			FName(*FString::Printf(TEXT("Evidence.StoryHeard.%s"), *ObjectID.ToString())),
-			false);
-		if (!TestTrue(
-			FString::Printf(TEXT("Evidence.StoryHeard.%s must be registered"),
-				*ObjectID.ToString()),
-			Tag.IsValid()))
-		{
-			return false;
-		}
-		DoorTags.AddTag(Tag);
+		return false;
 	}
-	Door->UnlockRequiresTags = DoorTags;
+	Door->UnlockRequiresTags.AddTag(FamilyPhotoSolvedTag);
 	TestFalse(TEXT("The door starts locked"), Door->IsUnlocked());
 
 	for (int32 Index = 0; Index < 3; ++Index)
@@ -203,15 +195,41 @@ bool FTutorialDoorUnlockPathTest::RunTest(const FString& Parameters)
 				*ObjectIDs[Index].ToString()),
 			StoryState->HasStateTagExact(HeardTag));
 
-		if (Index < 2)
-		{
-			TestFalse(
-				TEXT("The door stays locked until every conversation is heard"),
-				Door->IsUnlocked());
-		}
+		TestFalse(
+			TEXT("Optional family conversations do not unlock the door"),
+			Door->IsUnlocked());
 	}
 
-	TestTrue(TEXT("Hearing all three conversations unlocks the door"), Door->IsUnlocked());
+	FSentenceDefinition FamilyPhotoSentence;
+	if (!TestTrue(
+		TEXT("The family-photo sentence should exist"),
+		Investigation->GetSentenceDefinition(TEXT("SENT_01_PHOTO_001"), FamilyPhotoSentence)))
+	{
+		return false;
+	}
+
+	FSentenceSubmission Submission;
+	for (const FSentenceWordSlot& Slot : FamilyPhotoSentence.WordSlots)
+	{
+		TestTrue(
+			FString::Printf(TEXT("The frame captures should acquire %s"),
+				*Slot.CorrectWordID.ToString()),
+			Investigation->HasAcquiredWord(Slot.CorrectWordID));
+		Submission.SubmittedWords.Add({Slot.SlotIndex, Slot.CorrectWordID});
+	}
+
+	FText ResultText;
+	bool bSolved = false;
+	{
+		FEditorScriptExecutionGuard ScriptExecutionGuard;
+		bSolved = Investigation->ValidateSentence(
+			TEXT("SENT_01_PHOTO_001"), Submission, ResultText);
+	}
+
+	TestTrue(TEXT("The three frame keywords complete the family photo"), bSolved);
+	TestTrue(TEXT("Completing the family photo records its story tag"),
+		StoryState->HasStateTagExact(FamilyPhotoSolvedTag));
+	TestTrue(TEXT("Completing the family photo unlocks the door"), Door->IsUnlocked());
 	TestTrue(TEXT("An unlocked door offers its interaction"), Door->CanInteract());
 	TestTrue(TEXT("The first unlocked-door interaction is accepted"), Door->RequestInteraction());
 	TestTrue(TEXT("The first interaction starts opening the door"), Door->IsOpening());

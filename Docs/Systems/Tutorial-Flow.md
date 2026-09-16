@@ -1,14 +1,14 @@
 # 튜토리얼 / 단계 진행 시스템
 
 > 설계 기록: [2026-09-13-room2-tutorial-design.md](../superpowers/specs/2026-09-13-room2-tutorial-design.md)
-> **상태: 구현 완료. Room2에서 바로 플레이 가능.**
-> 첫 적용 레벨: `/Game/Balhwajeom/Maps/Test/room2`
+> **상태: 구현 완료. room3에서 바로 플레이 가능.**
+> 적용 레벨: `/Game/Levels/room3`
 
 ---
 
 ## 1. 바로 해보기
 
-1. 에디터에서 `/Game/Balhwajeom/Maps/Test/room2` 를 연다
+1. 에디터에서 `/Game/Levels/room3` 를 연다
 2. **Play**
 3. 아래 순서대로 진행된다
 
@@ -17,8 +17,8 @@
 | **DustTeach** | 먼지 쌓인 사진을 **바라보면** 화면이 어두워지고 `[F]` 프롬프트가 **깜빡인다** | **F만** (우클릭·TAB 잠김) |
 | **PhotoPrompt** | **사진 한 장만 털면 바로** 화면 전체 암전 + **카메라 아이콘이 깜빡인다** | **우클릭 해금** |
 | **Photograph** | 1인칭 카메라. 암전은 사라지고 **`WBP_CAM` 뷰파인더**가 덮인다 | 우클릭으로 나와 F, 다시 우클릭으로 촬영 |
-| **Talk** | 촬영한 사진이 평면 메쉬로 바뀐다. 바라보면 암전 + `[F]` 프롬프트 **깜빡임** | F |
-| **Done** | — | **TAB 해금**, 문이 `[F] 문 열기`로 바뀐다 |
+| **CompleteFamilyPhoto** | 사진 세 장을 모두 찍으면 태블릿 잠금 해제 + **태블릿 아이콘 깜빡임** | TAB을 열고 `가족 사진`의 빈칸 문장 완성 |
+| **Done** | — | 문이 `[F] 문 열기`로 바뀐다 |
 
 > **화면에 설명 문구는 띄우지 않는다.** 안내는 두 가지뿐이다 —
 > 화면을 어둡게 해서 쓸 것만 남기고, **지금 눌러야 할 것을 밝기로 깜빡인다.**
@@ -26,7 +26,8 @@
 > `PhotoCameraIcon` / `TabletIcon`(= `WBP_HUID` 의 아이콘).
 
 사진 세 장은 벽에 걸린 `Evidence_OBJ_01_001/002/003`,
-문은 복도 끝(`y = -2975`)의 `GateDoor_Room2Exit` 이다.
+문은 `room3`의 `GateDoor_Exit` 이다. 촬영 후 액자의 가족 대화는 선택 콘텐츠로 남지만
+튜토리얼 완료나 문 해금 조건에는 포함되지 않는다.
 
 ### 자동 검증
 
@@ -34,9 +35,11 @@
 "D:\HDD_UnrealEngine\UE_5.7\UE_5.7\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "D:\UnrealProjects\Balhwajeom\Balhwajeom.uproject" -ExecCmds="Automation RunTests Balhwajeom.Tutorial" -TestExit="Automation Test Queue Empty" -unattended -nopause -nosplash -NullRHI -DisablePlugins=Fab
 ```
 
-12개 테스트가 돈다. 그중 `Balhwajeom.Tutorial.Room2.FlowEndToEnd` 는
+그중 `Balhwajeom.Tutorial.Room2.FlowEndToEnd` 는
 **실제 `DA_TutorialFlow_Room2` 와 실제 DataTable** 로 전체 흐름을 끝까지 돌려본다 —
 태그 오타, 빠진 `PostCaptureStateID`, ini 미등록 태그는 레벨이 아니라 이 테스트에서 먼저 깨진다.
+`Balhwajeom.Tutorial.Room3.GateConfiguration` 은 실제 `room3.umap`의 문이
+`Evidence.SentenceSolved.PHOTO_01_003` 하나만 요구하는지도 검사한다.
 
 ---
 
@@ -114,7 +117,7 @@ HUD 이미지 이름이 바뀌어도 하이라이트가 조용히 사라지지 �
 | 위치 | 내용 |
 |---|---|
 | `StoryStateTags` | 네이티브 태그 `Runtime.Lock` / `.PhotoCamera` / `.Tablet` — **ini 등록 불필요** |
-| `UStoryStateSubsystem` | 상태 전이 시 `Evidence.State.<StateID>` 발행, 월드 스토리 재생 시 `Evidence.StoryPlayed.<StateID>` 와 `Evidence.StoryHeard.<ObjectID>` 발행 |
+| `UStoryStateSubsystem` | 상태 전이 시 `Evidence.State.<StateID>`, 사진 문장 완성 시 `Evidence.SentenceSolved.<PhotoID>`, 월드 스토리 재생 시 `Evidence.StoryPlayed.<StateID>` 와 `Evidence.StoryHeard.<ObjectID>` 발행 |
 | `UBalhwajeomPhotoCameraComponent` | `BlockedByTags` 잠금. 진입만 차단, **이탈은 항상 허용** |
 | `UBalhwajeomTabletComponent` | `BlockedByTags` 잠금 (`ToggleTablet` / `RequestOpenTablet` 양쪽) |
 | `UDoorInteractionComponent` | `UnlockRequiresTags` / `UnlockQuery`, `IsOpen()` |
@@ -130,14 +133,16 @@ HUD 이미지 이름이 바뀌어도 하이라이트가 조용히 사라지지 �
 
 | 에셋 | 변경 |
 |---|---|
-| `DA_TutorialFlow_Room2` | **신규.** 스텝 5개 |
+| `DA_TutorialFlow_Room2` | 스텝 5개. 마지막 조건은 `가족 사진` 분석 문장 완성 |
 | `DT_EvidenceStates` | `STATE_01_002_MEMORY` / `STATE_01_003_MEMORY` **행 추가**<br>`STATE_01_002_CLEAR` / `_003_CLEAR` 에 `PostCaptureStateID` 연결<br>`STATE_01_001_CLEAR/MEMORY` 의 플레이스홀더 메쉬 정리 |
 | `DefaultGameplayTags.ini` | `Tutorial.Stage.*`, `Evidence.State.STATE_01_00X_CLEAR/MEMORY`, `Evidence.StoryPlayed.STATE_01_00X_MEMORY` |
-| `room2.umap` | 마커 `PHOTO_1/2/3` → `Evidence_OBJ_01_001/002/003`<br>`Door14` → `GateDoor_Room2Exit` (손잡이 부착)<br>`BP_TutorialDirector_Room2` 배치 |
+| `room3.umap` | `DA_TutorialFlow_Room2` 디렉터 배치<br>`GateDoor_Exit`의 해금 조건을 `Evidence.SentenceSolved.PHOTO_01_003`으로 설정 |
 
 > 삼남매 사진 세 장(`OBJ_01_001~003`)과 가족대화 자막(`DT_Photos.WorldStoryCues`)은
 > **이미 프로젝트에 있던 데이터**다. 새로 만들지 않고 그대로 썼고,
 > 002/003 에만 빠져 있던 촬영 후 상태를 001 과 같은 모양으로 채웠다.
+> `PHOTO_01_003`은 `SENT_01_PHOTO_001`과 연결되어 있으며, 세 사진이 지급하는
+> `WORD_01_001~003`으로 문장을 완성한다.
 
 ---
 
@@ -153,6 +158,7 @@ HUD 이미지 이름이 바뀌어도 하이라이트가 조용히 사라지지 �
 +GameplayTagList=(Tag="Evidence.Photographed.<ObjectID>",DevComment="")
 +GameplayTagList=(Tag="Evidence.StoryPlayed.<StateID>",DevComment="")
 +GameplayTagList=(Tag="Evidence.StoryHeard.<ObjectID>",DevComment="")
++GameplayTagList=(Tag="Evidence.SentenceSolved.<PhotoID>",DevComment="")
 ```
 
 `<StateID>` / `<ObjectID>` 는 DataTable 의 Row Name 과 **글자 그대로 같아야** 한다.
@@ -247,8 +253,9 @@ ID 는 `OBJ_02_001~003` 으로 잡는다.
 | 먼지만 털면 됨 | `Evidence.State.STATE_02_00X_CLEAR` |
 | 사진까지 찍어야 함 | `Evidence.Photographed.OBJ_02_00X` |
 | 대화까지 들어야 함 | **`Evidence.StoryHeard.OBJ_02_00X`** |
+| 특정 사진의 빈칸 문장까지 풀어야 함 | **`Evidence.SentenceSolved.PHOTO_02_003`** |
 
-Room2 는 마지막 것을 쓴다.
+room3 튜토리얼은 `Evidence.SentenceSolved.PHOTO_01_003`을 쓴다.
 
 ### 1) 태그 등록 — `Config/DefaultGameplayTags.ini`
 
@@ -262,6 +269,7 @@ Room2 는 마지막 것을 쓴다.
 +GameplayTagList=(Tag="Evidence.StoryHeard.OBJ_02_001",DevComment="")
 +GameplayTagList=(Tag="Evidence.StoryHeard.OBJ_02_002",DevComment="")
 +GameplayTagList=(Tag="Evidence.StoryHeard.OBJ_02_003",DevComment="")
++GameplayTagList=(Tag="Evidence.SentenceSolved.PHOTO_02_003",DevComment="")
 ```
 
 `Tutorial.Stage.*` 는 **다시 만들 필요 없다.** 한 번에 한 디렉터만 돌기 때문에 맵끼리 공유해도 된다.
@@ -300,7 +308,7 @@ Room2 는 마지막 것을 쓴다.
 | `DustTeach` | `Complete When Any Tags` → `..._02_00X_CLEAR` 3개 |
 | `PhotoPrompt` | 그대로 (모드 태그라 맵 무관) |
 | `Photograph` | `Complete When All Tags` → `Evidence.Photographed.OBJ_02_00X` 3개 |
-| `Talk` | `Complete When All Tags` → `Evidence.StoryHeard.OBJ_02_00X` 3개 |
+| `CompleteFamilyPhoto` | `Remove On Enter` → `Runtime.Lock.Tablet`<br>`Complete When All Tags` → `Evidence.SentenceSolved.PHOTO_02_003` |
 | `Done` | 그대로 |
 
 두 번째 맵부터는 카메라·태블릿을 이미 배웠을 테니, `Locks On Start` 를 비우고
@@ -321,9 +329,7 @@ Room2 는 마지막 것을 쓴다.
 
 ```
 Door Interaction ▸ Unlock Requires Tags
-    Evidence.StoryHeard.OBJ_02_001
-    Evidence.StoryHeard.OBJ_02_002
-    Evidence.StoryHeard.OBJ_02_003
+    Evidence.SentenceSolved.PHOTO_02_003
 
 Gate Door ▸ Locked Label     = [열 수 없는 문]
 Gate Door ▸ Unlocked Label   = [F] 문 열기
@@ -332,6 +338,18 @@ Gate Door ▸ Opened Label     = (비움)
 Door Mesh                    = 문 메쉬
 Door ▸ Open Yaw Angle        = -90
 ```
+
+room3 튜토리얼 출구(`GateDoor_Exit`)는 `Locked Feedback Stages`를 위에서부터 평가해
+처음 완료되지 않은 단계의 문구를 `WBP_Check`에 표시한다.
+
+| 순서 | 완료 조건 | 잠긴 문 상호작용 문구 |
+|---|---|---|
+| 1 | 세 액자의 `Evidence.State.STATE_01_00*_CLEAR` | `[F]를 눌러 아직 조사하지 않은 액자를 살펴보자.` |
+| 2 | 세 액자의 `Evidence.Photographed.OBJ_01_00*` | `우클릭으로 카메라를 켜고, 아직 찍지 않은 액자를 촬영해 보자.` |
+| 3 | `Evidence.SentenceSolved.PHOTO_01_003` | `[TAB]으로 태블릿을 열고, 여동생 폴더의 가족 사진 추리를 완성해 보자.` |
+
+앞 단계가 남아 있으면 뒤 단계 태그가 일부 존재해도 앞 단계 문구를 우선한다.
+단계 배열이 비어 있는 기존 문은 `WBP_Check`에 작성된 기본 문구를 그대로 사용한다.
 
 **문의 피벗이 경첩 위치여야 한다.** 액터가 자기 피벗을 중심으로 돌기 때문에,
 피벗이 문 한가운데면 문이 가운데서 회전한다. 메쉬 피벗이 가운데라면
@@ -344,7 +362,7 @@ Door ▸ Open Yaw Angle        = -90
 
 DataTable 연결이 깨졌으면 `Balhwajeom.Investigation.ConfiguredDataValidation` 에서 먼저 잡힌다.
 `Room2TutorialFlowTest.cpp` 를 복사해 ID 만 바꾸면 레벨을 열지 않고도
-새 맵의 흐름 전체(먼지털기 → 촬영 → 대화 → 문 개방)를 검증할 수 있다.
+새 맵의 흐름 전체(먼지털기 → 촬영 → 사진 문장 완성 → 문 개방)를 검증할 수 있다.
 
 ### 새로운 종류의 잠금이 필요할 때만 C++
 

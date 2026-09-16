@@ -2,14 +2,18 @@
 
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/GameViewportSubsystem.h"
+#include "Blueprint/WidgetTree.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/TextBlock.h"
 #include "Components/WidgetComponent.h"
+#include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Interaction/DoorInteractionComponent.h"
 #include "Interaction/InspectionComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/PackageName.h"
+#include "Story/StoryStateSubsystem.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "UObject/UObjectIterator.h"
@@ -45,8 +49,8 @@ ABalhwajeomGateDoorActor::ABalhwajeomGateDoorActor()
 		ObjectLabelWidget->SetWidgetClass(ObjectLabelWidgetClass.Class);
 	}
 
-	// WBP_Check owns its authored text and layout. The actor only controls how long
-	// that finished widget stays visible after a locked interaction.
+	// WBP_Check owns its layout. Its message is refreshed from the ordered stage data
+	// every time a locked interaction is requested.
 	static ConstructorHelpers::FClassFinder<UUserWidget> LockedFeedbackClass(
 		TEXT("/Game/Balhwajeom/UI/HUD/WBP_Check"));
 	if (LockedFeedbackClass.Succeeded())
@@ -132,6 +136,7 @@ void ABalhwajeomGateDoorActor::HandleLockedInteractionRequested()
 		ViewportSubsystem->SetWidgetSlot(LockedFeedbackWidget, Slot);
 	}
 
+	ApplyLockedFeedbackMessage(ResolveLockedFeedbackMessage());
 	LockedFeedbackWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 	if (UWorld* World = GetWorld())
 	{
@@ -142,6 +147,111 @@ void ABalhwajeomGateDoorActor::HandleLockedInteractionRequested()
 			FMath::Max(0.1f, LockedFeedbackDisplayDuration),
 			false);
 	}
+}
+
+
+FText ABalhwajeomGateDoorActor::ResolveLockedFeedbackMessage() const
+{
+	if (LockedFeedbackStages.IsEmpty())
+	{
+		return FText::GetEmpty();
+	}
+
+	FGameplayTagContainer CurrentStateTags;
+	if (const UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (const UStoryStateSubsystem* StoryState =
+			GameInstance->GetSubsystem<UStoryStateSubsystem>())
+		{
+			CurrentStateTags = StoryState->GetCurrentStateTags();
+		}
+	}
+
+	return GateDoorLockedFeedback::ResolveFirstIncompleteMessage(
+		LockedFeedbackStages, CurrentStateTags);
+}
+
+
+void ABalhwajeomGateDoorActor::ApplyLockedFeedbackMessage(const FText& Message)
+{
+	if (!LockedFeedbackWidget || Message.IsEmptyOrWhitespace())
+	{
+		// No configured stages preserves the text authored in legacy WBP_Check assets.
+		return;
+	}
+
+	if (UFunction* SetMessageTextFunction =
+		LockedFeedbackWidget->FindFunction(TEXT("SetMessageText")))
+	{
+		struct FSetMessageTextParameters
+		{
+			FText NewText;
+		};
+
+		FSetMessageTextParameters Parameters{ Message };
+		LockedFeedbackWidget->ProcessEvent(SetMessageTextFunction, &Parameters);
+		return;
+	}
+
+	// The shipped WBP_Check predates SetMessageText and exposes its TextBlock as
+	// "Text". MessageText is also supported for a future, explicitly named widget.
+	static const FName CandidateNames[] = { TEXT("MessageText"), TEXT("Text") };
+	for (const FName CandidateName : CandidateNames)
+	{
+		UWidget* MessageTarget = LockedFeedbackWidget->GetWidgetFromName(CandidateName);
+		if (UTextBlock* MessageText = Cast<UTextBlock>(MessageTarget))
+		{
+			MessageText->SetText(Message);
+			return;
+		}
+
+		if (MessageTarget)
+		{
+			if (UFunction* SetTextFunction = MessageTarget->FindFunction(TEXT("SetText")))
+			{
+				struct FSetTextParameters
+				{
+					FText InText;
+				};
+
+				FSetTextParameters Parameters{ Message };
+				MessageTarget->ProcessEvent(SetTextFunction, &Parameters);
+				return;
+			}
+		}
+	}
+
+	// Legacy WBP_Check currently has a single generated TextBlock name. Resolve that
+	// sole text target without coupling runtime code to the generated numeric suffix.
+	if (LockedFeedbackWidget->WidgetTree)
+	{
+		TArray<UWidget*> AllWidgets;
+		LockedFeedbackWidget->WidgetTree->GetAllWidgets(AllWidgets);
+		UTextBlock* SoleTextBlock = nullptr;
+		for (UWidget* Widget : AllWidgets)
+		{
+			if (UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
+			{
+				if (SoleTextBlock)
+				{
+					SoleTextBlock = nullptr;
+					break;
+				}
+				SoleTextBlock = TextBlock;
+			}
+		}
+		if (SoleTextBlock)
+		{
+			SoleTextBlock->SetText(Message);
+			return;
+		}
+	}
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("%s: WBP_Check has no unambiguous message text target."),
+		*GetName());
 }
 
 

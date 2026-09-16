@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "GameplayTagContainer.h"
+#include "Interaction/GateDoorLockedFeedback.h"
 #include "Interaction/PlayerInteractionTypes.h"
 #include "BalhwajeomGateDoorActor.generated.h"
 
@@ -45,6 +46,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Gate Door")
 	UStaticMeshComponent* GetDoorMesh() const { return DoorMesh; }
 
+	const TArray<FGateDoorLockedFeedbackStage>& GetLockedFeedbackStages() const
+	{
+		return LockedFeedbackStages;
+	}
+
 	/** Label for the current lock/open state. Exposed so tests do not need a widget. */
 	UFUNCTION(BlueprintPure, Category = "Gate Door")
 	FText ResolveCurrentLabel() const;
@@ -70,6 +76,8 @@ protected:
 	void HideLockedFeedback();
 
 	TSubclassOf<UUserWidget> ResolveLockedFeedbackWidgetClass() const;
+	FText ResolveLockedFeedbackMessage() const;
+	void ApplyLockedFeedbackMessage(const FText& Message);
 	void ApplyInspectionDistanceState(EPlayerInspectionDistanceState DistanceState);
 	void SetInspectionLabel(const FText& LabelText, bool bVisible);
 	void RefreshLabelForLockState();
@@ -106,6 +114,10 @@ protected:
 	/** Full-screen feedback shown when this locked door is interacted with. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback")
 	TSubclassOf<UUserWidget> LockedFeedbackWidgetClass;
+
+	/** Ordered guidance. The first entry whose required tags are incomplete is shown. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback")
+	TArray<FGateDoorLockedFeedbackStage> LockedFeedbackStages;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback",
 		meta = (ClampMin = "0.1", UIMin = "0.1", Units = "s"))

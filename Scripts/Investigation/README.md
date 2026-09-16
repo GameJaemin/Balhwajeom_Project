@@ -1,6 +1,6 @@
 # Investigation prototype data
 
-이 폴더의 CSV는 `Content/Balhwajeom/Data/Investigation` DataTable 8종(DT_Characters, DT_EvidenceDefinitions, DT_EvidenceStates, DT_KeywordChoices, DT_KeywordDocuments, DT_Photos, DT_Sentences, DT_Words)의 재임포트 원본이다.
+이 폴더의 CSV는 `Content/Balhwajeom/Data/Investigation` DataTable 9종(DT_Characters, DT_EvidenceDefinitions, DT_EvidenceStates, DT_KeywordChoices, DT_KeywordDocuments, DT_Photos, DT_Sentences, DT_TutorialOverlay, DT_Words)의 재임포트 원본이다.
 
 - Row Name과 내부 ID는 항상 동일하게 유지한다.
 - `DT_Photos.GrantedWordIDs`는 단순 `FName` 배열이므로 `(WORD_A,WORD_B)` 형식을 쓴다.
@@ -11,3 +11,4 @@
 - `PhotoSentenceID`가 비어 있으면 스토리 사진이다.
 - `PreferredFocusDistance`, `FocusDistanceTolerance`, `bScaleFocusDistanceWithZoom`은 기본값을 사용할 때 CSV 헤더에서 생략한다.
 - `CaptureBlockedLabel`은 현재 상태가 촬영 불가일 때 카메라 보조 라벨에 표시할 행동 안내다. 비우면 공통 촬영 불필요 문구가 표시된다.
+- `DT_TutorialOverlay`는 `Scripts/Tutorial/CreateTutorialOverlayDataTable.py`가 생성하고 이 폴더로 CSV를 다시 내보낸다. 조건과 이미지가 확정되기 전에는 `RequiredTags`와 `Images`를 비워 둔다.
