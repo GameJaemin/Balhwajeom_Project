@@ -56,6 +56,7 @@ void UBalhwajeomTabletComponent::EndPlay(const EEndPlayReason::Type EndPlayReaso
 	if (TabletWidget)
 	{
 		TabletWidget->OnTabletCloseAnimationFinished.RemoveAll(this);
+		TabletWidget->OnStatementSolved.RemoveAll(this);
 		TabletWidget->RemoveFromParent();
 		TabletWidget = nullptr;
 	}
@@ -295,6 +296,18 @@ void UBalhwajeomTabletComponent::SetTabletInteractionEnabled(bool bEnabled)
 	}
 }
 
+void UBalhwajeomTabletComponent::SetTabletToggleLocked(bool bLocked)
+{
+	// Deliberately just the gate ToggleTablet() checks -- unlike SetTabletInteractionEnabled(false),
+	// this never force-closes an already-open tablet.
+	bTabletInteractionEnabled = !bLocked;
+}
+
+void UBalhwajeomTabletComponent::HandleStatementSolved()
+{
+	OnStatementSolved.Broadcast();
+}
+
 void UBalhwajeomTabletComponent::RequestOpenTabletToStatement()
 {
 	if (bTabletOpen && TabletWidget)
@@ -401,6 +414,7 @@ void UBalhwajeomTabletComponent::OpenTabletNow()
 			TabletWidget->OnTabletCloseAnimationFinished.AddUObject(
 				this,
 				&ThisClass::HandleTabletCloseAnimationFinished);
+			TabletWidget->OnStatementSolved.AddUObject(this, &ThisClass::HandleStatementSolved);
 		}
 	}
 

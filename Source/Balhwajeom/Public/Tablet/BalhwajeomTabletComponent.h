@@ -15,6 +15,7 @@ class UInputMappingContext;
 class USoundBase;
 
 DECLARE_MULTICAST_DELEGATE(FOnBalhwajeomTabletClosed);
+DECLARE_MULTICAST_DELEGATE(FOnBalhwajeomTabletStatementSolved);
 
 /**
  * Reusable local-player tablet controller.
@@ -34,6 +35,11 @@ public:
 	/** Fired after the close animation has finished and tablet input has been restored. */
 	FOnBalhwajeomTabletClosed OnTabletClosed;
 
+	/** Relays UBalhwajeomTabletWidget::OnStatementSolved -- fired the moment any Statement-type
+	 * sentence is submitted and validated correct, whether or not every character's statement is
+	 * solved yet. The listener is responsible for checking that itself. */
+	FOnBalhwajeomTabletStatementSolved OnStatementSolved;
+
 	UFUNCTION(BlueprintCallable, Category = "Tablet")
 	void ToggleTablet();
 
@@ -50,9 +56,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Tablet")
 	bool IsTabletOpen() const { return bTabletOpen; }
 
-	/** Used by title/cinematic flows to prevent the tablet action from opening. */
+	/** Used by title/cinematic flows to prevent the tablet action from opening. If the tablet is
+	 * currently open, disabling this forcibly closes it -- see SetTabletToggleLocked for a version
+	 * that blocks only the open/close key without touching an already-open tablet. */
 	UFUNCTION(BlueprintCallable, Category = "Tablet")
 	void SetTabletInteractionEnabled(bool bEnabled);
+
+	/** Blocks the tablet open/close key (ToggleTablet) without forcibly closing an already-open
+	 * tablet, unlike SetTabletInteractionEnabled(false). Used to freeze player input during a
+	 * scripted moment -- e.g. the ending's post-statement pause -- while whatever the tablet is
+	 * already showing (the success animation) keeps playing undisturbed. */
+	UFUNCTION(BlueprintCallable, Category = "Tablet")
+	void SetTabletToggleLocked(bool bLocked);
 
 protected:
 	virtual void BeginPlay() override;
@@ -101,6 +116,7 @@ private:
 	void HandlePhotoCameraModeExited();
 	void HandlePhotoCameraTransitionFinished();
 	void HandleTabletCloseAnimationFinished();
+	void HandleStatementSolved();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UEnhancedInputComponent> TabletInputComponent;

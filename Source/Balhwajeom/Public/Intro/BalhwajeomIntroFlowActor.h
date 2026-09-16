@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "TimerManager.h"
 #include "BalhwajeomIntroFlowActor.generated.h"
 
 class ABalhwajeomGateDoorActor;
@@ -122,6 +123,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Timing", meta = (ClampMin = "0.0", Units = "s"))
 	float BGMFadeDuration = 0.8f;
 
+	/** Once every character's statement is solved, how long to hold on the tablet's success
+	 * animation (with input locked) before automatically starting the ending -- the player no
+	 * longer has to close the tablet themselves. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Timing", meta = (ClampMin = "0.0", Units = "s"))
+	float EndingAutoTriggerDelay = 5.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Audio", meta = (ClampMin = "0.0"))
 	float BGMVolume = 1.0f;
 
@@ -196,6 +203,9 @@ private:
 	void BeginGameplayTransition();
 	void EnterGameplayAtBlack();
 	void HandleTabletClosed();
+	void HandleStatementSolved();
+	bool AreAllStatementsSolved() const;
+	void TriggerEndingSequence();
 	void StartEndingCinematic();
 	bool StartEndingMediaCinematic();
 	void StartEndingSequenceCinematic();
@@ -225,4 +235,7 @@ private:
 
 	/** While set, movie audio is ducked in step with the fade overlay's opacity. */
 	bool bFadeCinematicAudioWithScreen = false;
+
+	/** Runs TriggerEndingSequence() after EndingAutoTriggerDelay once every statement is solved. */
+	FTimerHandle EndingAutoTriggerTimerHandle;
 };

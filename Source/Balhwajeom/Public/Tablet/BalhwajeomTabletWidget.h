@@ -590,6 +590,12 @@ public:
 
 	FSimpleMulticastDelegate OnTabletCloseAnimationFinished;
 
+	/** Fired the moment a Statement-type sentence (the folder's testimony) is explicitly submitted
+	 * and validated correct -- before the success flash/converge/reveal animation plays out. Does
+	 * NOT mean every statement across every character is solved; the ending decides that for
+	 * itself (see ABalhwajeomIntroFlowActor::HandleStatementSolved). */
+	FSimpleMulticastDelegate OnStatementSolved;
+
 	/** Plays the designer-authored TabletUpAnim using its authored duration. */
 	bool PlayTabletOpenAnimation();
 

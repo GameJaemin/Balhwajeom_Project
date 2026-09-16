@@ -118,7 +118,9 @@ void ABalhwajeomIntroFlowActor::EndPlay(const EEndPlayReason::Type EndPlayReason
 		: (PC ? PC->FindComponentByClass<UBalhwajeomTabletComponent>() : nullptr))
 	{
 		Tablet->OnTabletClosed.RemoveAll(this);
+		Tablet->OnStatementSolved.RemoveAll(this);
 	}
+	GetWorldTimerManager().ClearTimer(EndingAutoTriggerTimerHandle);
 	if (CinematicVideoWidget) CinematicVideoWidget->RemoveFromParent();
 	if (MainMenuWidget) MainMenuWidget->RemoveFromParent();
 	if (ScreenFadeWidget) ScreenFadeWidget->RemoveFromParent();
@@ -561,6 +563,8 @@ void ABalhwajeomIntroFlowActor::EnterGameplayAtBlack()
 	{
 		Tablet->OnTabletClosed.RemoveAll(this);
 		Tablet->OnTabletClosed.AddUObject(this, &ThisClass::HandleTabletClosed);
+		Tablet->OnStatementSolved.RemoveAll(this);
+		Tablet->OnStatementSolved.AddUObject(this, &ThisClass::HandleStatementSolved);
 		if (bOpenStatementAfterIntro)
 		{
 			Tablet->RequestOpenTabletToStatement();
@@ -575,19 +579,14 @@ void ABalhwajeomIntroFlowActor::EnterGameplayAtBlack()
 	ScreenFadeWidget->FadeFromBlack(TransitionFadeDuration);
 }
 
-void ABalhwajeomIntroFlowActor::HandleTabletClosed()
+bool ABalhwajeomIntroFlowActor::AreAllStatementsSolved() const
 {
-	if (State != EBalhwajeomIntroState::Gameplay || bEndingTriggered)
-	{
-		return;
-	}
-
 	UGameInstance* GameInstance = GetGameInstance();
 	UBalhwajeomInvestigationSubsystem* Investigation = GameInstance
 		? GameInstance->GetSubsystem<UBalhwajeomInvestigationSubsystem>() : nullptr;
 	if (!Investigation)
 	{
-		return;
+		return false;
 	}
 
 	bool bFoundStatement = false;
@@ -602,15 +601,63 @@ void ABalhwajeomIntroFlowActor::HandleTabletClosed()
 			bFoundStatement = true;
 			if (!Investigation->IsSentenceSolved(Statement.SentenceID))
 			{
-				return;
+				return false;
 			}
 		}
 	}
-	if (!bFoundStatement)
+	return bFoundStatement;
+}
+
+void ABalhwajeomIntroFlowActor::HandleTabletClosed()
+{
+	// Kept as a fallback for a tablet that gets closed by some other path after every statement is
+	// already solved -- HandleStatementSolved is what normally triggers the ending now, and the
+	// bEndingTriggered guard below makes this a no-op once it already has.
+	if (State != EBalhwajeomIntroState::Gameplay || bEndingTriggered || !AreAllStatementsSolved())
+	{
+		return;
+	}
+	TriggerEndingSequence();
+}
+
+void ABalhwajeomIntroFlowActor::HandleStatementSolved()
+{
+	if (State != EBalhwajeomIntroState::Gameplay || bEndingTriggered || !AreAllStatementsSolved())
 	{
 		return;
 	}
 
+	// Freeze input immediately -- the success animation already playing inside the (still open)
+	// tablet keeps running on its own Tick, unaffected by this -- then let the player see it for
+	// EndingAutoTriggerDelay before the ending actually starts.
+	bEndingTriggered = true;
+	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+	UBalhwajeomTabletComponent* Tablet = Pawn
+		? Pawn->FindComponentByClass<UBalhwajeomTabletComponent>()
+		: (PC ? PC->FindComponentByClass<UBalhwajeomTabletComponent>() : nullptr);
+	if (Tablet)
+	{
+		// Not SetTabletInteractionEnabled(false): that forcibly closes an open tablet, which would
+		// cut the success animation off before the player ever sees it.
+		Tablet->SetTabletToggleLocked(true);
+	}
+	if (PC)
+	{
+		PC->SetIgnoreMoveInput(true);
+		PC->SetIgnoreLookInput(true);
+	}
+
+	GetWorldTimerManager().SetTimer(
+		EndingAutoTriggerTimerHandle,
+		this,
+		&ThisClass::TriggerEndingSequence,
+		EndingAutoTriggerDelay,
+		false);
+}
+
+void ABalhwajeomIntroFlowActor::TriggerEndingSequence()
+{
 	bEndingTriggered = true;
 	State = EBalhwajeomIntroState::TransitionToEnding;
 	if (BGMAudioComponent && BGMAudioComponent->IsPlaying())

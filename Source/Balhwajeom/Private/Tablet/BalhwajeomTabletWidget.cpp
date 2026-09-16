@@ -1871,6 +1871,10 @@ void UBalhwajeomTabletWidget::ValidateActivePuzzle(const bool bExplicitStatement
 		RefreshFolderContents();
 		PlayPuzzleSuccessTransition(
 			Result, Sentence.SentenceTemplate, Sentence.SentenceType == ESentenceType::PhotoAnalysis);
+		if (Sentence.SentenceType == ESentenceType::Statement)
+		{
+			OnStatementSolved.Broadcast();
+		}
 	}
 	else if (TXT_PuzzleFeedback)
 	{
