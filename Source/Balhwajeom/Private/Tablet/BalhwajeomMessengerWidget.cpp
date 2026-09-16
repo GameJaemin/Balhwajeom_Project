@@ -3,6 +3,7 @@
 #include "Components/Button.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
+#include "Engine/Texture2D.h"
 
 namespace
 {
@@ -34,6 +35,27 @@ namespace
 		if (RoomID == SisterRoomID) return 116.0f;
 		if (RoomID == BrotherRoomID) return 174.0f;
 		return 0.0f;
+	}
+
+	/** Per-room chat background art. Paths are literal here (rather than shared constants) because
+	 * TabletWidgetBlueprintLibrary's equivalents live in the editor-only BalhwajeomEditor module,
+	 * which this runtime module cannot depend on. */
+	UTexture2D* RoomBackgroundTexture(const FString& RoomID)
+	{
+		const TCHAR* Path = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/Messenger_talk_dad.Messenger_talk_dad");
+		if (RoomID == MotherRoomID)
+		{
+			Path = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/Messenger_talk_mom.Messenger_talk_mom");
+		}
+		else if (RoomID == SisterRoomID)
+		{
+			Path = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/Messenger_talk_sis.Messenger_talk_sis");
+		}
+		else if (RoomID == BrotherRoomID)
+		{
+			Path = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/Messenger_talk_bro.Messenger_talk_bro");
+		}
+		return LoadObject<UTexture2D>(nullptr, Path);
 	}
 }
 
@@ -123,6 +145,13 @@ void UBalhwajeomMessengerWidget::RefreshSelection()
 	if (TXT_CurrentRoomName)
 	{
 		TXT_CurrentRoomName->SetText(RoomDisplayName(CurrentRoomID));
+	}
+	if (IMG_ChatBackground)
+	{
+		if (UTexture2D* Background = RoomBackgroundTexture(CurrentRoomID))
+		{
+			IMG_ChatBackground->SetBrushFromTexture(Background, true);
+		}
 	}
 }
 
