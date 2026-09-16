@@ -101,6 +101,18 @@ bool UBalhwajeomInteractionModalWidget::Present(
 	return true;
 }
 
+FReply UBalhwajeomInteractionModalWidget::NativeOnPreviewMouseButtonDown(
+	const FGeometry& InGeometry,
+	const FPointerEvent& InMouseEvent)
+{
+	// A display-only modal owns the whole viewport. Consume left/right/middle clicks
+	// before an image or empty child panel can steal keyboard focus; otherwise the
+	// first F after clicking outside the artwork is spent restoring focus instead of
+	// closing the modal.
+	SetKeyboardFocus();
+	return FReply::Handled();
+}
+
 FReply UBalhwajeomInteractionModalWidget::NativeOnKeyDown(
 	const FGeometry& InGeometry,
 	const FKeyEvent& InKeyEvent)

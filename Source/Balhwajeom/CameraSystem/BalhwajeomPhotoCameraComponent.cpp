@@ -640,6 +640,13 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 		return;
 	}
 
+	// Entry alignment can move the attached camera in world space. Capture its authored
+	// transform first so leaving photo mode always puts it back at the character's eyes.
+	SavedFirstPersonRelativeTransform = PhotoCamera->GetRelativeTransform();
+	SavedFirstPersonFieldOfView = PhotoCamera->FieldOfView;
+	SavedPhotoPostProcessSettings = PhotoCamera->PostProcessSettings;
+	SavedPostProcessBlendWeight = PhotoCamera->PostProcessBlendWeight;
+
 	APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
 	if (PlayerController)
 	{
@@ -650,35 +657,59 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 		FRotator OutgoingViewRotation;
 		PlayerController->GetPlayerViewPoint(OutgoingViewLocation, OutgoingViewRotation);
 
-		// Aim the first-person camera at the world point under the third-person screen center.
-		// The cameras have different origins, so copying only their rotation causes parallax and
-		// pushes the object sideways on entry.
+		// Keep the first-person camera on the outgoing center sight line. Moving the camera
+		// laterally and retaining the outgoing rotation preserves both the center framing and
+		// the front-facing angle of an object. Rotating from the character's head toward the
+		// center hit instead keeps the object centered but makes a square frame look skewed.
 		const FVector OutgoingViewDirection = OutgoingViewRotation.Vector();
-		FVector CenterTarget = OutgoingViewLocation + OutgoingViewDirection * WORLD_MAX;
-		bool bFoundCenterTarget = false;
-		if (UWorld* World = GetWorld())
-		{
-			FCollisionQueryParams QueryParams(
-				SCENE_QUERY_STAT(PhotoCameraModeCenterHandoff), true, GetOwner());
-			QueryParams.bTraceComplex = true;
-			FHitResult CenterHit;
-			if (World->LineTraceSingleByChannel(
-				CenterHit,
-				OutgoingViewLocation,
-				CenterTarget,
-				ECC_Visibility,
-				QueryParams))
-			{
-				CenterTarget = CenterHit.ImpactPoint;
-				bFoundCenterTarget = true;
-			}
-		}
+		const FVector DefaultPhotoViewLocation = PhotoCamera->GetComponentLocation();
+		const float DistanceAlongCenterRay = FVector::DotProduct(
+			DefaultPhotoViewLocation - OutgoingViewLocation,
+			OutgoingViewDirection);
+		const FVector AlignedPhotoViewLocation =
+			OutgoingViewLocation + OutgoingViewDirection * DistanceAlongCenterRay;
+		const float RequiredAlignmentOffset = FVector::Distance(
+			DefaultPhotoViewLocation,
+			AlignedPhotoViewLocation);
+		const bool bCanPreserveOutgoingView =
+			RequiredAlignmentOffset <= FMath::Max(MaximumEntryViewAlignmentOffset, 0.0f);
 
-		const FVector PhotoViewDirection = CenterTarget - PhotoCamera->GetComponentLocation();
-		PlayerController->SetControlRotation(
-			!bFoundCenterTarget || PhotoViewDirection.IsNearlyZero()
-				? OutgoingViewRotation
-				: PhotoViewDirection.Rotation());
+		if (bCanPreserveOutgoingView)
+		{
+			PhotoCamera->SetWorldLocation(AlignedPhotoViewLocation);
+			PlayerController->SetControlRotation(OutgoingViewRotation);
+		}
+		else
+		{
+			// A fixed/remote exploration camera can have a sight line nowhere near the pawn.
+			// In that case, keep the photo camera at the player and use the prior center-target
+			// convergence behavior rather than teleporting it across the level.
+			FVector CenterTarget = OutgoingViewLocation + OutgoingViewDirection * WORLD_MAX;
+			bool bFoundCenterTarget = false;
+			if (UWorld* World = GetWorld())
+			{
+				FCollisionQueryParams QueryParams(
+					SCENE_QUERY_STAT(PhotoCameraModeCenterHandoff), true, GetOwner());
+				QueryParams.bTraceComplex = true;
+				FHitResult CenterHit;
+				if (World->LineTraceSingleByChannel(
+					CenterHit,
+					OutgoingViewLocation,
+					CenterTarget,
+					ECC_Visibility,
+					QueryParams))
+				{
+					CenterTarget = CenterHit.ImpactPoint;
+					bFoundCenterTarget = true;
+				}
+			}
+
+			const FVector PhotoViewDirection = CenterTarget - PhotoCamera->GetComponentLocation();
+			PlayerController->SetControlRotation(
+				!bFoundCenterTarget || PhotoViewDirection.IsNearlyZero()
+					? OutgoingViewRotation
+					: PhotoViewDirection.Rotation());
+		}
 	}
 
 	bIsInCameraMode = true;
@@ -696,10 +727,6 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 		}
 	}
 	SetWorldInspectionLabelsSuppressed(true);
-	SavedFirstPersonRelativeTransform = PhotoCamera->GetRelativeTransform();
-	SavedFirstPersonFieldOfView = PhotoCamera->FieldOfView;
-	SavedPhotoPostProcessSettings = PhotoCamera->PostProcessSettings;
-	SavedPostProcessBlendWeight = PhotoCamera->PostProcessBlendWeight;
 	NormalCamera->SetActive(false);
 	PhotoCamera->SetActive(true);
 
