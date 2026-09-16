@@ -13,33 +13,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-struct FIntroFlowActorTestAccessor
-{
-	static void SetResetPhotosOnStart(
-		ABalhwajeomIntroFlowActor* IntroFlow,
-		bool bEnabled)
-	{
-		IntroFlow->bResetInvestigationPhotosOnStart = bEnabled;
-	}
-
-	static void PrepareTitleScreen(ABalhwajeomIntroFlowActor* IntroFlow)
-	{
-		IntroFlow->State = EBalhwajeomIntroState::Title;
-		IntroFlow->ScreenFadeWidget =
-			NewObject<UBalhwajeomScreenFadeWidget>(IntroFlow);
-	}
-
-	static void RequestStart(ABalhwajeomIntroFlowActor* IntroFlow)
-	{
-		IntroFlow->HandleStartRequested();
-	}
-
-	static EBalhwajeomIntroState GetState(
-		const ABalhwajeomIntroFlowActor* IntroFlow)
-	{
-		return IntroFlow->State;
-	}
-};
+#include "IntroFlowActorTestTypes.h"
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
