@@ -64,11 +64,17 @@ ABalhwajeomCameraPlayerController::ABalhwajeomCameraPlayerController()
 		TEXT("/Game/Balhwajeom/UI/JE/IMG/Room/tab_button.tab_button"));
 	static ConstructorHelpers::FObjectFinder<UTexture2D> TabletClickedTextureFinder(
 		TEXT("/Game/Balhwajeom/UI/JE/IMG/Room/tab_button_click.tab_button_click"));
+	static ConstructorHelpers::FObjectFinder<UTexture2D> InteractionReticleDotTextureFinder(
+		TEXT("/Game/Balhwajeom/UI/HUD/Textures/T_Interact_Dot.T_Interact_Dot"));
+	static ConstructorHelpers::FObjectFinder<UTexture2D> InteractionReticleMagnifierTextureFinder(
+		TEXT("/Game/Balhwajeom/UI/HUD/Textures/T_Interact_Magnifier.T_Interact_Magnifier"));
 
 	CameraButtonIdleTexture = CameraIdleTextureFinder.Object;
 	CameraButtonClickedTexture = CameraClickedTextureFinder.Object;
 	TabletButtonIdleTexture = TabletIdleTextureFinder.Object;
 	TabletButtonClickedTexture = TabletClickedTextureFinder.Object;
+	InteractionReticleDotTexture = InteractionReticleDotTextureFinder.Object;
+	InteractionReticleMagnifierTexture = InteractionReticleMagnifierTextureFinder.Object;
 }
 
 void ABalhwajeomCameraPlayerController::BeginPlay()
@@ -651,6 +657,8 @@ void ABalhwajeomCameraPlayerController::EnsureInteractionPrompt()
 			InteractionPromptWidget->GetWidgetFromName(InteractionPromptFadeTargetName);
 		InteractionPromptTextWidget = Cast<UTextBlock>(
 			InteractionPromptWidget->GetWidgetFromName(InteractionPromptTextWidgetName));
+		InteractionReticleWidget = Cast<UImage>(
+			InteractionPromptWidget->GetWidgetFromName(InteractionReticleWidgetName));
 		// Older prompt widgets named their text TextBlock_50. Keep this
 		// fallback so an older BP_OrbitViewPlayerController CDO that inherited the
 		// previous, incorrect "Text" default still resolves the real text widget.
@@ -662,6 +670,13 @@ void ABalhwajeomCameraPlayerController::EnsureInteractionPrompt()
 		if (!InteractionPromptTextWidget)
 		{
 			InteractionPromptTextWidget = Cast<UTextBlock>(InteractionPromptFadeTarget);
+		}
+		// Keep compatibility with the current WBP_Interact asset while allowing the
+		// designer-facing widget name to be migrated to InteractionReticle.
+		if (!InteractionReticleWidget)
+		{
+			InteractionReticleWidget = Cast<UImage>(
+				InteractionPromptWidget->GetWidgetFromName(TEXT("Image_108")));
 		}
 		if (InteractionPromptTextWidget)
 		{
@@ -682,6 +697,8 @@ void ABalhwajeomCameraPlayerController::EnsureInteractionPrompt()
 				*GetName(),
 				*InteractionPromptFadeTargetName.ToString());
 		}
+		bInteractionReticleStateInitialized = false;
+		RefreshInteractionReticle(false);
 		InteractionPromptWidget->AddToViewport(10);
 	}
 }
@@ -797,6 +814,34 @@ void ABalhwajeomCameraPlayerController::RefreshInteractionPromptText(
 	}
 }
 
+void ABalhwajeomCameraPlayerController::RefreshInteractionReticle(
+	bool bHasValidInteractionTarget)
+{
+	if (!InteractionReticleWidget)
+	{
+		return;
+	}
+
+	UTexture2D* DesiredTexture = bHasValidInteractionTarget
+		? InteractionReticleMagnifierTexture.Get()
+		: InteractionReticleDotTexture.Get();
+	if (!DesiredTexture)
+	{
+		return;
+	}
+
+	if (bInteractionReticleStateInitialized &&
+		bInteractionReticleShowsInteractable == bHasValidInteractionTarget &&
+		InteractionReticleWidget->GetBrush().GetResourceObject() == DesiredTexture)
+	{
+		return;
+	}
+
+	InteractionReticleWidget->SetBrushFromTexture(DesiredTexture, false);
+	bInteractionReticleStateInitialized = true;
+	bInteractionReticleShowsInteractable = bHasValidInteractionTarget;
+}
+
 bool ABalhwajeomCameraPlayerController::IsInteractionPromptSuppressedByTablet() const
 {
 	const UBalhwajeomTabletComponent* TabletComponent =
@@ -874,6 +919,7 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 		InteractionPromptWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 	const bool bShouldShow = ShouldShowInteractionPrompt();
+	RefreshInteractionReticle(bShouldShow);
 	RefreshInteractionPromptText(bShouldShow);
 	const float TargetOpacity = bShouldShow ? 1.0f : 0.0f;
 	InteractionPromptAlpha = FMath::FInterpTo(

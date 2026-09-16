@@ -3,8 +3,7 @@
 #include "Components/AudioComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/WidgetComponent.h"
-#include "Engine/AssetManager.h"
-#include "Engine/StreamableManager.h"
+#include "Investigation/BalhwajeomInvestigationSettings.h"
 #include "PhotoWorldStoryWidget.h"
 #include "Sound/SoundBase.h"
 #include "TimerManager.h"
@@ -185,6 +184,17 @@ void APhotoWorldStoryActor::StartStory(
 	}
 
 	StoryCueSound = InCueSound;
+	if (!StoryCueSound.IsNull() && !StoryCueSound.LoadSynchronous())
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("%s failed to load its character Sound Cue; text will continue silently."),
+			*GetName());
+	}
+	const UBalhwajeomInvestigationSettings* Settings =
+		GetDefault<UBalhwajeomInvestigationSettings>();
+	CurrentCharactersPerSecond = FMath::Max(
+		Settings ? Settings->WorldStoryCharactersPerSecond : 20.0f,
+		1.0f);
 	LastCueDurationSeconds = InLastCueDurationSeconds >= 0.1f
 		? InLastCueDurationSeconds
 		: FMath::Max(DefaultLastCueDuration, 0.1f);
@@ -208,43 +218,11 @@ void APhotoWorldStoryActor::StartStory(
 	StoryStartTimeSeconds = GetWorld()->GetTimeSeconds();
 	ScheduleNextCue();
 
-	if (!StoryCueSound.IsNull() && !StoryCueSound.Get())
-	{
-		CueSoundLoadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
-			StoryCueSound.ToSoftObjectPath(),
-			FStreamableDelegate::CreateUObject(this, &APhotoWorldStoryActor::HandleCueSoundLoaded));
-		if (!CueSoundLoadHandle.IsValid())
-		{
-			HandleCueSoundLoaded();
-		}
-	}
 }
 
-void APhotoWorldStoryActor::HandleCueSoundLoaded()
+void APhotoWorldStoryActor::PlayCharacterSound(const TCHAR Character)
 {
-	CueSoundLoadHandle.Reset();
-	if (IsActorBeingDestroyed() || bFinishing)
-	{
-		return;
-	}
-	if (StoryCueSound.Get())
-	{
-		// If the first caption appeared before its async sound was ready, play it now.
-		PlayCueSound(CurrentCueIndex);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("%s failed to load its Story Cue Sound; timed captions will continue."),
-			*GetName());
-	}
-}
-
-void APhotoWorldStoryActor::PlayCueSound(const int32 CueIndex)
-{
-	if (!StoryCues.IsValidIndex(CueIndex) ||
-		StoryCues[CueIndex].Text.IsEmptyOrWhitespace() ||
-		!StoryAudioComponent)
+	if (FChar::IsWhitespace(Character) || !StoryAudioComponent)
 	{
 		return;
 	}
@@ -255,8 +233,21 @@ void APhotoWorldStoryActor::PlayCueSound(const int32 CueIndex)
 		return;
 	}
 	StoryAudioComponent->SetSound(Sound);
-	// Play restarts the one-shot when a new sentence replaces the previous one.
+	// A Sound Cue can randomize between several short waves. Restarting it for every
+	// visible character evaluates that graph again and keeps sound events 1:1 with text.
+	StoryAudioComponent->Stop();
 	StoryAudioComponent->Play();
+}
+
+float APhotoWorldStoryActor::CalculateTypingDuration(
+	const int32 TotalCharacterCount,
+	const float CharactersPerSecond)
+{
+	if (TotalCharacterCount <= 1 || CharactersPerSecond <= KINDA_SMALL_NUMBER)
+	{
+		return 0.0f;
+	}
+	return static_cast<float>(TotalCharacterCount - 1) / CharactersPerSecond;
 }
 
 void APhotoWorldStoryActor::ApplyCue(int32 CueIndex)
@@ -266,8 +257,36 @@ void APhotoWorldStoryActor::ApplyCue(int32 CueIndex)
 		return;
 	}
 
-	SetStoryWidgetsText(StoryCues[CueIndex].Text);
-	PlayCueSound(CueIndex);
+	GetWorldTimerManager().ClearTimer(TypewriterTimer);
+	CurrentCueFullString = StoryCues[CueIndex].Text.ToString();
+	VisibleCharacterCount = 0;
+	SetStoryWidgetsText(FText::GetEmpty());
+	RevealNextCharacter();
+}
+
+void APhotoWorldStoryActor::RevealNextCharacter()
+{
+	if (VisibleCharacterCount >= CurrentCueFullString.Len())
+	{
+		GetWorldTimerManager().ClearTimer(TypewriterTimer);
+		return;
+	}
+
+	const TCHAR RevealedCharacter = CurrentCueFullString[VisibleCharacterCount];
+	++VisibleCharacterCount;
+	SetStoryWidgetsText(FText::FromString(
+		CurrentCueFullString.Left(VisibleCharacterCount)));
+	PlayCharacterSound(RevealedCharacter);
+
+	if (VisibleCharacterCount < CurrentCueFullString.Len())
+	{
+		GetWorldTimerManager().SetTimer(
+			TypewriterTimer,
+			this,
+			&APhotoWorldStoryActor::RevealNextCharacter,
+			1.0f / CurrentCharactersPerSecond,
+			false);
+	}
 }
 
 void APhotoWorldStoryActor::ScheduleNextCue()
@@ -276,9 +295,12 @@ void APhotoWorldStoryActor::ScheduleNextCue()
 	const int32 NextCueIndex = CurrentCueIndex + 1;
 	if (!StoryCues.IsValidIndex(NextCueIndex))
 	{
+		const FPhotoStoryCue& FinalCue = StoryCues[CurrentCueIndex];
+		const float TypingDuration = CalculateTypingDuration(
+			FinalCue.Text.ToString().Len(), CurrentCharactersPerSecond);
 		GetWorldTimerManager().SetTimer(
 			CueTimer, this, &APhotoWorldStoryActor::FinishStory,
-			FMath::Max(LastCueDurationSeconds, 0.1f), false);
+			TypingDuration + FMath::Max(LastCueDurationSeconds, 0.1f), false);
 		return;
 	}
 
@@ -308,6 +330,7 @@ void APhotoWorldStoryActor::StopStory()
 
 	bFinishing = true;
 	GetWorldTimerManager().ClearTimer(CueTimer);
+	GetWorldTimerManager().ClearTimer(TypewriterTimer);
 	if (StoryAudioComponent && StoryAudioComponent->IsPlaying())
 	{
 		StoryAudioComponent->Stop();
@@ -373,6 +396,7 @@ void APhotoWorldStoryActor::FinishStory()
 	}
 	bFinishing = true;
 	GetWorldTimerManager().ClearTimer(CueTimer);
+	GetWorldTimerManager().ClearTimer(TypewriterTimer);
 
 	if (FadeOutDuration <= KINDA_SMALL_NUMBER)
 	{
@@ -400,13 +424,9 @@ void APhotoWorldStoryActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	bFinishing = true;
 	GetWorldTimerManager().ClearTimer(CueTimer);
+	GetWorldTimerManager().ClearTimer(TypewriterTimer);
 	GetWorldTimerManager().ClearTimer(FadeTimer);
 	GetWorldTimerManager().ClearTimer(ScaleTimer);
-	if (CueSoundLoadHandle.IsValid())
-	{
-		CueSoundLoadHandle->CancelHandle();
-		CueSoundLoadHandle.Reset();
-	}
 	if (StoryAudioComponent)
 	{
 		StoryAudioComponent->Stop();

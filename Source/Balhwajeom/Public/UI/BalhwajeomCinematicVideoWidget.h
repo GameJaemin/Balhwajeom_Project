@@ -20,6 +20,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Cinematic Video")
 	void SetMediaTexture(UMediaTexture* MediaTexture);
 
+	/**
+	 * Shows or hides BTN_Skip. The intro controller disables it the moment a skip is accepted so the
+	 * control does not linger on screen while the fade-out plays over the still-visible movie.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Cinematic Video")
+	void SetSkipEnabled(bool bEnabled);
+
 	/** Broadcast when the viewer clicks BTN_Skip, if present in the WBP. */
 	UPROPERTY(BlueprintAssignable, Category = "Cinematic Video")
 	FCinematicSkipRequestedSignature OnSkipRequested;

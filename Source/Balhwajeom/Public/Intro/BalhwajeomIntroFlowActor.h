@@ -143,6 +143,9 @@ private:
 	void HandleFadeFromBlackFinished();
 
 	UFUNCTION()
+	void HandleFadeProgress(float Opacity);
+
+	UFUNCTION()
 	void HandleSequenceFinished();
 
 	UFUNCTION()
@@ -160,6 +163,9 @@ private:
 	/** Bound to BGMTriggerDoor's OnDoorFullyOpened; switches the currently playing track to BGM_Sound. */
 	UFUNCTION()
 	void HandleBGMTriggerDoorOpened();
+
+	/** Scales the movie audio without touching the picture, so a skip can mute while the fade runs. */
+	void SetCinematicAudioVolume(float Volume);
 
 	void SetGameplayEnabled(bool bEnabled);
 	void ResetInvestigationPhotosIfRequested();
@@ -195,4 +201,7 @@ private:
 
 	EBalhwajeomIntroState State = EBalhwajeomIntroState::Boot;
 	bool bEndingTriggered = false;
+
+	/** While set, movie audio is ducked in step with the fade overlay's opacity. */
+	bool bFadeCinematicAudioWithScreen = false;
 };
