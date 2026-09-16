@@ -11,6 +11,8 @@ UDoorInteractionComponent::UDoorInteractionComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
+	InteractionPromptText = NSLOCTEXT(
+		"BalhwajeomInteraction", "OpenDoorPrompt", "문 열기");
 }
 
 

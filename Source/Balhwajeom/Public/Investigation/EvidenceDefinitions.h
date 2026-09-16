@@ -63,6 +63,14 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction", meta = (MultiLine = "true"))
 	FText InteractionText;
 
+	/**
+	 * Short action shown next to the interaction key while this state is focused.
+	 * Enter only the action (for example "먼지 털기"); WBP_Interact adds "[ F ]".
+	 * Empty preserves the prompt widget's authored default text.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
+	FText InteractionPromptText;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
 	FName KeywordDocumentID = NAME_None;
 

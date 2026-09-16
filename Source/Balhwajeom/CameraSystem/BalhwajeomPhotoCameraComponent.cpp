@@ -15,6 +15,7 @@
 #include "Engine/Texture2D.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
 #include "ImageUtils.h"
@@ -647,6 +648,23 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 	SavedPhotoPostProcessSettings = PhotoCamera->PostProcessSettings;
 	SavedPostProcessBlendWeight = PhotoCamera->PostProcessBlendWeight;
 
+	// A first-person view must rotate with control yaw. Leaving orient-to-movement
+	// enabled makes A/D rotate the capsule, which swings an attached eye camera
+	// sideways and feels like non-linear acceleration.
+	if (ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner()))
+	{
+		bSavedUseControllerRotationYaw = OwnerCharacter->bUseControllerRotationYaw;
+		if (UCharacterMovementComponent* Movement = OwnerCharacter->GetCharacterMovement())
+		{
+			bSavedOrientRotationToMovement = Movement->bOrientRotationToMovement;
+			bSavedUseControllerDesiredRotation = Movement->bUseControllerDesiredRotation;
+			Movement->bOrientRotationToMovement = false;
+			Movement->bUseControllerDesiredRotation = false;
+		}
+		OwnerCharacter->bUseControllerRotationYaw = true;
+		bHasSavedFirstPersonMovementMode = true;
+	}
+
 	APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
 	if (PlayerController)
 	{
@@ -657,59 +675,35 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 		FRotator OutgoingViewRotation;
 		PlayerController->GetPlayerViewPoint(OutgoingViewLocation, OutgoingViewRotation);
 
-		// Keep the first-person camera on the outgoing center sight line. Moving the camera
-		// laterally and retaining the outgoing rotation preserves both the center framing and
-		// the front-facing angle of an object. Rotating from the character's head toward the
-		// center hit instead keeps the object centered but makes a square frame look skewed.
+		// Aim the eye camera at the world point under the outgoing screen centre. Never move
+		// the attached camera in world space: a lateral attachment offset rotates around the
+		// capsule while walking/turning and makes ordinary WASD movement feel unstable.
 		const FVector OutgoingViewDirection = OutgoingViewRotation.Vector();
-		const FVector DefaultPhotoViewLocation = PhotoCamera->GetComponentLocation();
-		const float DistanceAlongCenterRay = FVector::DotProduct(
-			DefaultPhotoViewLocation - OutgoingViewLocation,
-			OutgoingViewDirection);
-		const FVector AlignedPhotoViewLocation =
-			OutgoingViewLocation + OutgoingViewDirection * DistanceAlongCenterRay;
-		const float RequiredAlignmentOffset = FVector::Distance(
-			DefaultPhotoViewLocation,
-			AlignedPhotoViewLocation);
-		const bool bCanPreserveOutgoingView =
-			RequiredAlignmentOffset <= FMath::Max(MaximumEntryViewAlignmentOffset, 0.0f);
-
-		if (bCanPreserveOutgoingView)
+		FVector CenterTarget = OutgoingViewLocation + OutgoingViewDirection * WORLD_MAX;
+		bool bFoundCenterTarget = false;
+		if (UWorld* World = GetWorld())
 		{
-			PhotoCamera->SetWorldLocation(AlignedPhotoViewLocation);
-			PlayerController->SetControlRotation(OutgoingViewRotation);
-		}
-		else
-		{
-			// A fixed/remote exploration camera can have a sight line nowhere near the pawn.
-			// In that case, keep the photo camera at the player and use the prior center-target
-			// convergence behavior rather than teleporting it across the level.
-			FVector CenterTarget = OutgoingViewLocation + OutgoingViewDirection * WORLD_MAX;
-			bool bFoundCenterTarget = false;
-			if (UWorld* World = GetWorld())
+			FCollisionQueryParams QueryParams(
+				SCENE_QUERY_STAT(PhotoCameraModeCenterHandoff), true, GetOwner());
+			QueryParams.bTraceComplex = true;
+			FHitResult CenterHit;
+			if (World->LineTraceSingleByChannel(
+				CenterHit,
+				OutgoingViewLocation,
+				CenterTarget,
+				ECC_Visibility,
+				QueryParams))
 			{
-				FCollisionQueryParams QueryParams(
-					SCENE_QUERY_STAT(PhotoCameraModeCenterHandoff), true, GetOwner());
-				QueryParams.bTraceComplex = true;
-				FHitResult CenterHit;
-				if (World->LineTraceSingleByChannel(
-					CenterHit,
-					OutgoingViewLocation,
-					CenterTarget,
-					ECC_Visibility,
-					QueryParams))
-				{
-					CenterTarget = CenterHit.ImpactPoint;
-					bFoundCenterTarget = true;
-				}
+				CenterTarget = CenterHit.ImpactPoint;
+				bFoundCenterTarget = true;
 			}
-
-			const FVector PhotoViewDirection = CenterTarget - PhotoCamera->GetComponentLocation();
-			PlayerController->SetControlRotation(
-				!bFoundCenterTarget || PhotoViewDirection.IsNearlyZero()
-					? OutgoingViewRotation
-					: PhotoViewDirection.Rotation());
 		}
+
+		const FVector PhotoViewDirection = CenterTarget - PhotoCamera->GetComponentLocation();
+		PlayerController->SetControlRotation(
+			!bFoundCenterTarget || PhotoViewDirection.IsNearlyZero()
+				? OutgoingViewRotation
+				: PhotoViewDirection.Rotation());
 	}
 
 	bIsInCameraMode = true;
@@ -777,6 +771,18 @@ void UBalhwajeomPhotoCameraComponent::ExitCameraMode()
 		PlayerController->SetControlRotation(SavedExplorationControlRotation);
 	}
 	bHasSavedExplorationControlRotation = false;
+
+	if (ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
+		OwnerCharacter && bHasSavedFirstPersonMovementMode)
+	{
+		OwnerCharacter->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+		if (UCharacterMovementComponent* Movement = OwnerCharacter->GetCharacterMovement())
+		{
+			Movement->bOrientRotationToMovement = bSavedOrientRotationToMovement;
+			Movement->bUseControllerDesiredRotation = bSavedUseControllerDesiredRotation;
+		}
+	}
+	bHasSavedFirstPersonMovementMode = false;
 
 	if (PhotoCamera)
 	{
