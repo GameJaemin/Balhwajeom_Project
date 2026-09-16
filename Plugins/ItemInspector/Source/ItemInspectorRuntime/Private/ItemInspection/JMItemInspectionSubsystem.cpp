@@ -8,6 +8,7 @@
 #include "Core/ItemInspectorSettings.h"
 #include "Core/JMGameplayLog.h"
 #include "Engine/GameInstance.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -306,6 +307,26 @@ void UJMItemInspectionSubsystem::ResetPreviewRotation()
 	}
 }
 
+FIntPoint UJMItemInspectionSubsystem::CalculateAspectMatchedRenderTargetSize(
+	FIntPoint ViewportSize,
+	FIntPoint MaximumRenderTargetSize)
+{
+	const FIntPoint SafeMaximumSize(
+		FMath::Max(MaximumRenderTargetSize.X, 64),
+		FMath::Max(MaximumRenderTargetSize.Y, 64));
+	if (ViewportSize.X <= 0 || ViewportSize.Y <= 0)
+	{
+		return SafeMaximumSize;
+	}
+
+	const float Scale = FMath::Min(
+		static_cast<float>(SafeMaximumSize.X) / static_cast<float>(ViewportSize.X),
+		static_cast<float>(SafeMaximumSize.Y) / static_cast<float>(ViewportSize.Y));
+	return FIntPoint(
+		FMath::Clamp(FMath::RoundToInt(static_cast<float>(ViewportSize.X) * Scale), 1, SafeMaximumSize.X),
+		FMath::Clamp(FMath::RoundToInt(static_cast<float>(ViewportSize.Y) * Scale), 1, SafeMaximumSize.Y));
+}
+
 bool UJMItemInspectionSubsystem::CreateInspectionWidget(const FJMItemInspectionRequest& Request)
 {
 	ULocalPlayer* LocalPlayer = GetLocalPlayer();
@@ -405,9 +426,17 @@ bool UJMItemInspectionSubsystem::CreatePreviewResources(const FJMItemInspectionR
 	}
 
 	const UItemInspectorSettings* Settings = UItemInspectorSettings::Get();
-	const FIntPoint RenderTargetSize = Settings
+	const FIntPoint MaximumRenderTargetSize = Settings
 		? FIntPoint(FMath::Max(Settings->DefaultRenderTargetSize.X, 64), FMath::Max(Settings->DefaultRenderTargetSize.Y, 64))
 		: FIntPoint(1024, 1024);
+	FVector2D ViewportSize = FVector2D(MaximumRenderTargetSize);
+	if (UGameViewportClient* GameViewport = World->GetGameViewport())
+	{
+		GameViewport->GetViewportSize(ViewportSize);
+	}
+	const FIntPoint RenderTargetSize = CalculateAspectMatchedRenderTargetSize(
+		FIntPoint(FMath::RoundToInt(ViewportSize.X), FMath::RoundToInt(ViewportSize.Y)),
+		MaximumRenderTargetSize);
 
 	CurrentPreviewRenderTarget = NewObject<UTextureRenderTarget2D>(this, TEXT("JMItemInspectionPreviewRenderTarget"));
 	if (!CurrentPreviewRenderTarget)

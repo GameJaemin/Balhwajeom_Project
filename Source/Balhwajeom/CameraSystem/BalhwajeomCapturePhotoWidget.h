@@ -7,6 +7,7 @@
 class UBorder;
 class UCanvasPanel;
 class UImage;
+class URetainerBox;
 class UTextBlock;
 class UTexture2D;
 class UVerticalBox;
@@ -15,8 +16,8 @@ class UFont;
 class UWidget;
 
 /**
- * Runtime behaviour for WBP_CapturePhoto.  Layout and sizing stay in the Widget
- * Blueprint; this class only supplies capture data and the fly-to-TAB motion.
+ * Runtime behaviour for WBP_CapturePhoto. Layout and sizing stay in the Widget
+ * Blueprint; this class supplies capture data and the AE-authored presentation motion.
  */
 UCLASS(Abstract, Blueprintable)
 class BALHWAJEOM_API UBalhwajeomCapturePhotoWidget : public UUserWidget
@@ -30,15 +31,15 @@ public:
 		const TArray<FText>& GrantedKeywords,
 		bool bIsAnalysisSentence);
 
-	void ApplyFlyToTab(float LinearAlpha);
-	bool IsFlightReady() const { return bAnimationOriginsCached; }
+	void ApplyPresentationTimeline(float LinearAlpha);
+	bool IsPresentationReady() const { return bPresentationReady; }
 	void ResetPresentation();
 
-	float GetHoldDuration() const { return HoldDuration; }
-	float GetFlyDuration() const;
+	float GetAnimationDuration() const;
+	float GetEntryCompletionTime() const;
+	float GetExitStartTime() const { return ExitStartTime; }
 
 protected:
-	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UImage> CapturedPhotoImage;
 
@@ -55,6 +56,10 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UCanvasPanel> CardRoot;
 
+	/** Flattens the card background, captured photo, and sentence before animation. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<URetainerBox> CardComposite;
+
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> CardBackground;
 
@@ -64,33 +69,52 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UBorder> ScreenDimmer;
 
-	/** Designer-authored destination marker inside WBP_CapturePhoto. */
-	UPROPERTY(Transient)
-	TObjectPtr<UWidget> TabFlyTarget;
+	/** Extended presentation timeline: 93 frames at 60 fps. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
+		meta = (ClampMin = "0.01", Units = "s"))
+	float AnimationDuration = 1.55f;
 
-	/** Time the full-size photo information remains readable. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Timing",
-		meta = (DisplayName = "Photo Info Display Duration", ClampMin = "0.0", UIMin = "0.0", UIMax = "10.0", Units = "s",
-			ToolTip = "How long the full-size captured photo, sentence, and keywords remain on screen before flying to TAB."))
-	float HoldDuration = 1.0f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
+		meta = (ClampMin = "0.01", Units = "s"))
+	float CardEntryDuration = 0.4166667f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Timing",
-		meta = (DisplayName = "Photo Fly To Tab Duration", ClampMin = "0.05", UIMin = "0.05", UIMax = "3.0", Units = "s",
-			ToolTip = "How long the captured image takes to shrink and move into the right-side TAB HUD."))
-	float FlyDuration = 0.45f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
+		meta = (ClampMin = "0.0", Units = "s"))
+	float FirstKeywordDelay = 0.0833333f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Timing",
-		meta = (DisplayName = "Keyword Follow Delay", ClampMin = "0.0", UIMin = "0.0", UIMax = "2.0", Units = "s",
-			ToolTip = "Delay after the photo reaches TAB before acquired keywords begin following it."))
-	float KeywordFollowDelay = 0.08f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
+		meta = (ClampMin = "0.0", Units = "s"))
+	float KeywordStagger = 0.1666667f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Timing",
-		meta = (DisplayName = "Keyword Fly To Tab Duration", ClampMin = "0.05", UIMin = "0.05", UIMax = "3.0", Units = "s",
-			ToolTip = "How long the acquired keyword list takes to follow the photo into TAB."))
-	float KeywordFlyDuration = 0.32f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
+		meta = (ClampMin = "0.01", Units = "s"))
+	float KeywordEntryDuration = 0.4166667f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Animation", meta = (ClampMin = "0.01", ClampMax = "1.0"))
-	float TabTargetScale = 0.12f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
+		meta = (ClampMin = "0.01", Units = "s"))
+	float KeywordFadeInDuration = 0.1666667f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
+		meta = (ClampMin = "0.0", Units = "s"))
+	float ExitStartTime = 1.1333333f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
+		meta = (ClampMin = "0.0", Units = "s"))
+	float FadeOutStartTime = 1.3833333f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation")
+	FVector2D EntryOffset = FVector2D(318.0f, 0.0f);
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation")
+	float EntryRotation = 90.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation")
+	FVector2D ExitOffset = FVector2D(0.0f, 360.0f);
+
+	/** Extra local-space distance beyond the bottom edge before the presentation ends. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|AE Animation",
+		meta = (ClampMin = "0.0"))
+	float ExitSafetyMargin = 32.0f;
 
 	/** Optional font asset used by every dynamically generated keyword label. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Keyword Style")
@@ -136,11 +160,15 @@ private:
 	friend class FCapturePhotoFlightTest;
 	friend class FCapturePhotoMultilineSentenceTest;
 #endif
-	void ApplyWidgetFly(UWidget* Widget, const FVector2D& LocalTravel, float Alpha);
+	static float CalculateExitDistance(
+		float ViewportHeight,
+		float ContentTop,
+		float MinimumDistance,
+		float SafetyMargin);
+	void UpdateResolvedExitDistance();
+	void ApplyEntryTransform(UWidget* Widget, float EntryAlpha);
 
 	bool bHasGrantedKeywords = false;
-	bool bAnimationOriginsCached = false;
-	int32 LayoutTicksRemaining = 2;
-	FVector2D PhotoLocalTravel = FVector2D::ZeroVector;
-	FVector2D KeywordLocalTravel = FVector2D::ZeroVector;
+	bool bPresentationReady = false;
+	float ResolvedExitDistanceY = 360.0f;
 };

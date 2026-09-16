@@ -22,6 +22,7 @@
 #include "Tutorial/BalhwajeomTutorialDirector.h"
 #include "Tutorial/BalhwajeomTutorialFocusWidget.h"
 #include "UI/BalhwajeomKeywordCounterWidget.h"
+#include "UI/BalhwajeomInteractionModalWidget.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -94,6 +95,12 @@ void ABalhwajeomCameraPlayerController::BeginPlay()
 
 void ABalhwajeomCameraPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (InteractionModalWidget)
+	{
+		InteractionModalWidget->OnCloseRequested.RemoveAll(this);
+		InteractionModalWidget->RemoveFromParent();
+		InteractionModalWidget = nullptr;
+	}
 	if (BoundHudStoryStateSubsystem)
 	{
 		BoundHudStoryStateSubsystem->OnStateTagAdded.RemoveDynamic(
@@ -129,6 +136,92 @@ void ABalhwajeomCameraPlayerController::EndPlay(const EEndPlayReason::Type EndPl
 	KeywordCounterWidget = nullptr;
 
 	Super::EndPlay(EndPlayReason);
+}
+
+bool ABalhwajeomCameraPlayerController::ShowInteractionModal(
+	TSubclassOf<UUserWidget> ContentWidgetClass,
+	const FText& DocumentText,
+	const TArray<FText>& NewlyGrantedKeywords)
+{
+	if (!IsLocalController() || !bGameplayPresentationEnabled ||
+		IsInteractionModalOpen() || !ContentWidgetClass)
+	{
+		return false;
+	}
+
+	UBalhwajeomInteractionModalWidget* Modal =
+		CreateWidget<UBalhwajeomInteractionModalWidget>(
+			this, UBalhwajeomInteractionModalWidget::StaticClass());
+	if (!Modal || !Modal->Present(
+		ContentWidgetClass, DocumentText, NewlyGrantedKeywords))
+	{
+		return false;
+	}
+
+	InteractionModalWidget = Modal;
+	InteractionModalWidget->OnCloseRequested.AddUObject(
+		this, &ThisClass::HandleInteractionModalCloseRequested);
+	InteractionModalWidget->AddToViewport(1300);
+
+	bInteractionModalChangedMoveIgnore = !IsMoveInputIgnored();
+	bInteractionModalChangedLookIgnore = !IsLookInputIgnored();
+	bInteractionModalPreviousMouseCursor = bShowMouseCursor;
+	if (bInteractionModalChangedMoveIgnore)
+	{
+		SetIgnoreMoveInput(true);
+	}
+	if (bInteractionModalChangedLookIgnore)
+	{
+		SetIgnoreLookInput(true);
+	}
+	bShowMouseCursor = true;
+
+	FInputModeUIOnly InputMode;
+	InputMode.SetWidgetToFocus(InteractionModalWidget->TakeWidget());
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(InputMode);
+	InteractionModalWidget->SetKeyboardFocus();
+	return true;
+}
+
+bool ABalhwajeomCameraPlayerController::IsInteractionModalOpen() const
+{
+	return IsValid(InteractionModalWidget) && InteractionModalWidget->IsInViewport();
+}
+
+void ABalhwajeomCameraPlayerController::CloseInteractionModal()
+{
+	if (!InteractionModalWidget)
+	{
+		return;
+	}
+
+	InteractionModalWidget->OnCloseRequested.RemoveAll(this);
+	InteractionModalWidget->RemoveFromParent();
+	InteractionModalWidget = nullptr;
+	if (bInteractionModalChangedMoveIgnore)
+	{
+		SetIgnoreMoveInput(false);
+	}
+	if (bInteractionModalChangedLookIgnore)
+	{
+		SetIgnoreLookInput(false);
+	}
+	bShowMouseCursor = bInteractionModalPreviousMouseCursor;
+	bInteractionModalChangedMoveIgnore = false;
+	bInteractionModalChangedLookIgnore = false;
+
+	if (bGameplayPresentationEnabled)
+	{
+		FInputModeGameOnly InputMode;
+		InputMode.SetConsumeCaptureMouseDown(false);
+		SetInputMode(InputMode);
+	}
+}
+
+void ABalhwajeomCameraPlayerController::HandleInteractionModalCloseRequested()
+{
+	CloseInteractionModal();
 }
 
 void ABalhwajeomCameraPlayerController::EnsurePlayerHUD()
@@ -664,6 +757,24 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 	{
 		return;
 	}
+
+	const EBalhwajeomTutorialHintTarget TutorialHintTarget =
+		ABalhwajeomTutorialDirector::GetTutorialHintTarget(this);
+	const bool bShouldBeBehindTutorialDim =
+		TutorialHintTarget == EBalhwajeomTutorialHintTarget::PhotoCameraIcon;
+	if (bInteractionPromptBehindTutorialDim != bShouldBeBehindTutorialDim)
+	{
+		// The tutorial dim is ZOrder 5. Put WB_Interact just below it only while
+		// the camera icon owns the player's attention, then restore its normal layer.
+		if (UGameViewportSubsystem* ViewportSubsystem = UGameViewportSubsystem::Get(GetWorld()))
+		{
+			FGameViewportWidgetSlot Slot = ViewportSubsystem->GetWidgetSlot(InteractionPromptWidget);
+			Slot.ZOrder = bShouldBeBehindTutorialDim ? 4 : 10;
+			ViewportSubsystem->SetWidgetSlot(InteractionPromptWidget, Slot);
+			bInteractionPromptBehindTutorialDim = bShouldBeBehindTutorialDim;
+		}
+	}
+
 	if (!bGameplayPresentationEnabled)
 	{
 		InteractionPromptWidget->SetVisibility(ESlateVisibility::Collapsed);
@@ -700,10 +811,16 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 
 	// A tutorial step can ask for the [F] prompt itself to pulse.
 	float DisplayOpacity = InteractionPromptAlpha;
-	if (ABalhwajeomTutorialDirector::GetTutorialHintTarget(this) ==
-		EBalhwajeomTutorialHintTarget::InteractPrompt)
+	if (TutorialHintTarget == EBalhwajeomTutorialHintTarget::InteractPrompt)
 	{
 		DisplayOpacity *= ABalhwajeomTutorialDirector::GetTutorialHighlightPulse(this);
+	}
+	else if (bShouldBeBehindTutorialDim)
+	{
+		// The dim is intentionally translucent, so a bright prompt can still show through
+		// even at the lower Z-order. Hide only the authored [F] text pixels while keeping
+		// its alpha and the rest of the interaction/input update alive.
+		DisplayOpacity = 0.0f;
 	}
 
 	if (!bShouldShow && InteractionPromptAlpha <= KINDA_SMALL_NUMBER)
@@ -719,7 +836,7 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 		return;
 	}
 
-	if (bShouldShow &&
+	if (bShouldShow && !bShouldBeBehindTutorialDim &&
 		InteractionPromptFadeTarget->GetVisibility() != ESlateVisibility::HitTestInvisible)
 	{
 		InteractionPromptFadeTarget->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -727,7 +844,7 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 
 	InteractionPromptFadeTarget->SetRenderOpacity(DisplayOpacity);
 
-	if (!bShouldShow && InteractionPromptAlpha <= 0.0f)
+	if (bShouldBeBehindTutorialDim || (!bShouldShow && InteractionPromptAlpha <= 0.0f))
 	{
 		InteractionPromptFadeTarget->SetVisibility(ESlateVisibility::Hidden);
 	}

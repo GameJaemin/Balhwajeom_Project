@@ -7,6 +7,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/Texture.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "ItemInspection/JMItemInspectionData.h"
 #include "ItemInspection/JMItemInspectionSurfaceWidgetBase.h"
@@ -98,6 +99,31 @@ void SetLightViewChannels(ULightComponent* LightComponent, bool bChannel0, bool 
 	LightComponent->ViewLightingChannels.bViewChannel3 = false;
 	LightComponent->ViewLightingChannels.bViewChannel4 = false;
 }
+
+void PreparePreviewTexturesForCapture(UStaticMeshComponent* PreviewMeshComponent)
+{
+	if (!PreviewMeshComponent)
+	{
+		return;
+	}
+
+	TArray<UTexture*> UsedTextures;
+	PreviewMeshComponent->GetUsedTextures(UsedTextures, EMaterialQualityLevel::High);
+	for (UTexture* Texture : UsedTextures)
+	{
+		if (!IsValid(Texture))
+		{
+			continue;
+		}
+
+		// SceneCapture renders only on demand. If it captures while a streamed texture
+		// still has a coarse mip resident, that blurry frame otherwise remains for the
+		// whole inspection session. Request the full source quality and wait once before
+		// the first capture; the timed residency expires after the preview is established.
+		Texture->SetForceMipLevelsToBeResident(5.0f);
+		Texture->WaitForStreaming();
+	}
+}
 }
 
 AJMItemInspectionPreviewActor::AJMItemInspectionPreviewActor()
@@ -147,6 +173,8 @@ AJMItemInspectionPreviewActor::AJMItemInspectionPreviewActor()
 	SceneCapture->ViewLightingChannels.bViewChannel1 = false;
 	SceneCapture->ViewLightingChannels.bViewChannel2 = true;
 	SceneCapture->FOVAngle = 45.0f;
+	SceneCapture->bOverride_CustomNearClippingPlane = true;
+	SceneCapture->CustomNearClippingPlane = 1.0f;
 
 	KeyLight = CreateDefaultSubobject<USpotLightComponent>(TEXT("KeyLight"));
 	KeyLight->SetupAttachment(SceneRoot);
@@ -234,6 +262,8 @@ bool AJMItemInspectionPreviewActor::ConfigurePreview(UJMItemInspectionData* Insp
 		SceneCapture->bCaptureEveryFrame = true;
 	}
 
+	PreparePreviewTexturesForCapture(PreviewMeshComponent);
+
 	ApplyViewSettings();
 	CapturePreview();
 	return true;
@@ -262,6 +292,7 @@ void AJMItemInspectionPreviewActor::RotatePreview(float ScreenDeltaX, float Scre
 
 	CurrentRotationQuat = (DeltaRotation * CurrentRotationQuat).GetNormalized();
 	PreviewPivot->SetRelativeRotation(CurrentRotationQuat);
+	ApplyCameraDistance();
 	CapturePreview();
 }
 
@@ -295,6 +326,7 @@ void AJMItemInspectionPreviewActor::ResetPreviewRotation()
 
 	CurrentRotationQuat = CurrentInspectionData->ViewSettings.InitialRotation.Quaternion();
 	PreviewPivot->SetRelativeRotation(CurrentRotationQuat);
+	ApplyCameraDistance();
 	CapturePreview();
 }
 
@@ -314,10 +346,10 @@ void AJMItemInspectionPreviewActor::BeginEnterTransition(const FJMItemInspection
 	}
 
 	const FJMItemInspectionViewSettings& ViewSettings = CurrentInspectionData->ViewSettings;
-	// Keep the same cursor-aligned angle sampled from the third-person camera.
-	// Rotating toward the authored inspection angle during the fly-in is what made
-	// the object visibly skew across the screen transition.
-	TransitionTargetRotation = Source.PreviewRelativeRotation.GetNormalized();
+	// The world actor rotation is only the entrance pose. The inspected item must
+	// settle at the Data Asset's authored rotation so level placement cannot change
+	// the final inspection view.
+	TransitionTargetRotation = ViewSettings.InitialRotation.Quaternion();
 	TransitionTargetOffset = ViewSettings.PreviewOffset;
 	TransitionTargetScale = FMath::Max(ViewSettings.PreviewScale, 0.01f);
 	TransitionTargetZoom = FMath::Clamp(
@@ -466,7 +498,13 @@ void AJMItemInspectionPreviewActor::ApplyViewSettings()
 	PreviewPivot->SetRelativeRotation(CurrentRotationQuat);
 
 	CurrentZoom = FMath::Clamp(ViewSettings.InitialZoom, FMath::Max(0.01f, FMath::Min(ViewSettings.MinZoom, ViewSettings.MaxZoom)), FMath::Max(ViewSettings.MinZoom, ViewSettings.MaxZoom));
-	BaseCameraDistance = CalculateCameraDistance(MeshBounds.SphereRadius * SafeScale, SceneCapture->FOVAngle);
+	const float AspectRatio = SceneCapture->TextureTarget && SceneCapture->TextureTarget->SizeY > 0
+		? static_cast<float>(SceneCapture->TextureTarget->SizeX) / static_cast<float>(SceneCapture->TextureTarget->SizeY)
+		: 1.0f;
+	BaseCameraDistance = CalculateCameraDistance(
+		MeshBounds.SphereRadius * SafeScale,
+		SceneCapture->FOVAngle,
+		AspectRatio);
 	ApplyLightingSettings(MeshBounds.SphereRadius * SafeScale);
 	ApplyCameraDistance();
 }
@@ -544,16 +582,73 @@ void AJMItemInspectionPreviewActor::ApplyCameraDistance()
 		return;
 	}
 
+	const float MinimumCameraDistance = CalculateMinimumCameraDistance();
 	const float SafeZoom = FMath::Max(CurrentZoom, 0.01f);
-	SceneCapture->SetRelativeLocation(FVector(-BaseCameraDistance / SafeZoom, 0.0f, 0.0f));
+	const float ActualCameraDistance = FMath::Max(BaseCameraDistance / SafeZoom, MinimumCameraDistance);
+	SceneCapture->SetRelativeLocation(FVector(-ActualCameraDistance, 0.0f, 0.0f));
 	SceneCapture->SetRelativeRotation(FRotator::ZeroRotator);
 }
 
-float AJMItemInspectionPreviewActor::CalculateCameraDistance(float BoundsRadius, float PreviewFOV) const
+float AJMItemInspectionPreviewActor::CalculateCameraDistance(
+	float BoundsRadius,
+	float PreviewFOV,
+	float AspectRatio) const
 {
 	const float SafeRadius = FMath::Max(BoundsRadius, 1.0f);
 	const float SafeFOV = FMath::Clamp(PreviewFOV, 5.0f, 170.0f);
-	const float HalfFOVRadians = FMath::DegreesToRadians(SafeFOV * 0.5f);
-	const float Distance = SafeRadius / FMath::Max(FMath::Tan(HalfFOVRadians), 0.01f);
+	const float HorizontalHalfFOV = FMath::DegreesToRadians(SafeFOV * 0.5f);
+	const float VerticalHalfFOV = FMath::Atan(
+		FMath::Tan(HorizontalHalfFOV) / FMath::Max(AspectRatio, 0.01f));
+	const float LimitingHalfFOV = FMath::Min(HorizontalHalfFOV, VerticalHalfFOV);
+	const float Distance = SafeRadius / FMath::Max(FMath::Sin(LimitingHalfFOV), 0.01f);
 	return FMath::Max(Distance * 1.15f, 20.0f);
+}
+
+float AJMItemInspectionPreviewActor::CalculateMinimumCameraDistance() const
+{
+	if (!PreviewMeshComponent || !PreviewMeshComponent->GetStaticMesh() || !SceneRoot || !SceneCapture)
+	{
+		return 1.0f;
+	}
+
+	const FBox LocalBounds = PreviewMeshComponent->GetStaticMesh()->GetBounds().GetBox();
+	const FTransform MeshToWorld = PreviewMeshComponent->GetComponentTransform();
+	const FTransform WorldToRoot = SceneRoot->GetComponentTransform().Inverse();
+	const float AspectRatio = SceneCapture->TextureTarget && SceneCapture->TextureTarget->SizeY > 0
+		? static_cast<float>(SceneCapture->TextureTarget->SizeX) / static_cast<float>(SceneCapture->TextureTarget->SizeY)
+		: 1.0f;
+	const float SafeFOV = FMath::Clamp(SceneCapture->FOVAngle, 5.0f, 170.0f);
+	const float HorizontalTangent = FMath::Max(
+		FMath::Tan(FMath::DegreesToRadians(SafeFOV * 0.5f)),
+		0.01f);
+	const float VerticalTangent = HorizontalTangent / FMath::Max(AspectRatio, 0.01f);
+	const float EffectiveNearClip = SceneCapture->bOverride_CustomNearClippingPlane
+		? SceneCapture->CustomNearClippingPlane
+		: GNearClippingPlane;
+	// Reserve five percent on each edge so rotating a long item never appears clipped.
+	constexpr float SafeFrameFraction = 0.90f;
+	constexpr float SurfaceClearance = 1.0f;
+	float MinimumDistance = 1.0f;
+
+	for (int32 CornerIndex = 0; CornerIndex < 8; ++CornerIndex)
+	{
+		const FVector LocalCorner(
+			(CornerIndex & 1) != 0 ? LocalBounds.Max.X : LocalBounds.Min.X,
+			(CornerIndex & 2) != 0 ? LocalBounds.Max.Y : LocalBounds.Min.Y,
+			(CornerIndex & 4) != 0 ? LocalBounds.Max.Z : LocalBounds.Min.Z);
+		const FVector RootSpaceCorner = WorldToRoot.TransformPosition(
+			MeshToWorld.TransformPosition(LocalCorner));
+
+		MinimumDistance = FMath::Max(
+			MinimumDistance,
+			EffectiveNearClip + SurfaceClearance - RootSpaceCorner.X);
+		MinimumDistance = FMath::Max(
+			MinimumDistance,
+			FMath::Abs(RootSpaceCorner.Y) / (HorizontalTangent * SafeFrameFraction) - RootSpaceCorner.X);
+		MinimumDistance = FMath::Max(
+			MinimumDistance,
+			FMath::Abs(RootSpaceCorner.Z) / (VerticalTangent * SafeFrameFraction) - RootSpaceCorner.X);
+	}
+
+	return MinimumDistance;
 }

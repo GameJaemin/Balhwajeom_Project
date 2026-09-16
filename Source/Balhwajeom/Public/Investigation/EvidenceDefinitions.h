@@ -8,6 +8,7 @@
 
 class UNiagaraSystem;
 class UStaticMesh;
+class UUserWidget;
 
 USTRUCT(BlueprintType)
 struct BALHWAJEOM_API FEvidenceDefinition : public FTableRowBase
@@ -64,6 +65,14 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
 	FName KeywordDocumentID = NAME_None;
+
+	/** Full-screen content opened when InteractionPresentation is ModalWidget. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
+	TSoftClassPtr<UUserWidget> InteractionWidgetClass;
+
+	/** Keywords granted once when this interaction successfully completes. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
+	TArray<FName> GrantedWordIDs;
 
 	/**
 	 * Static mesh shown while this state is active, i.e. the "object" the evidence turns into.

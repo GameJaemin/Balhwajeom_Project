@@ -58,6 +58,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "JM Gameplay|Item Inspection")
 	void ResetPreviewRotation();
 
+	/** Fits a render target inside the configured quality envelope while matching the viewport aspect ratio. */
+	static FIntPoint CalculateAspectMatchedRenderTargetSize(
+		FIntPoint ViewportSize,
+		FIntPoint MaximumRenderTargetSize);
+
 protected:
 	bool TickSessionHealth(float DeltaTime);
 	bool CreateInspectionWidget(const FJMItemInspectionRequest& Request);

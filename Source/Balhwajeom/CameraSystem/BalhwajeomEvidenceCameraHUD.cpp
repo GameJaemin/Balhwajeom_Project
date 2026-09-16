@@ -42,6 +42,13 @@ ABalhwajeomEvidenceCameraHUD::ABalhwajeomEvidenceCameraHUD()
 		CapturePhotoWidgetClass = CapturePhotoWidgetAsset.Class;
 	}
 
+	static ConstructorHelpers::FClassFinder<UUserWidget> CapturePhotoPromptWidgetAsset(
+		TEXT("/Game/Balhwajeom/UI/Camera/WBP_PhotoCheck"));
+	if (CapturePhotoPromptWidgetAsset.Succeeded())
+	{
+		CapturePhotoPromptWidgetClass = CapturePhotoPromptWidgetAsset.Class;
+	}
+
 	static ConstructorHelpers::FObjectFinder<UTexture2D> PhotoRequiredIconAsset(
 		TEXT("/Game/Balhwajeom/UI/Icons/T_EvidencePhotoRequired.T_EvidencePhotoRequired"));
 	if (PhotoRequiredIconAsset.Succeeded())
@@ -235,6 +242,11 @@ void ABalhwajeomEvidenceCameraHUD::EndPlay(const EEndPlayReason::Type EndPlayRea
 		CapturePhotoWidget->RemoveFromParent();
 	}
 	CapturePhotoWidget = nullptr;
+	if (CapturePhotoPromptWidget)
+	{
+		CapturePhotoPromptWidget->RemoveFromParent();
+	}
+	CapturePhotoPromptWidget = nullptr;
 
 	if (ViewfinderWidget)
 	{
@@ -435,6 +447,29 @@ bool ABalhwajeomEvidenceCameraHUD::EnsureCapturePhotoWidget()
 	return true;
 }
 
+bool ABalhwajeomEvidenceCameraHUD::EnsureCapturePhotoPromptWidget()
+{
+	if (CapturePhotoPromptWidget)
+	{
+		return true;
+	}
+	if (!PlayerOwner || !CapturePhotoPromptWidgetClass)
+	{
+		return false;
+	}
+
+	CapturePhotoPromptWidget = CreateWidget<UUserWidget>(
+		PlayerOwner, CapturePhotoPromptWidgetClass);
+	if (!CapturePhotoPromptWidget)
+	{
+		return false;
+	}
+	CapturePhotoPromptWidget->AddToViewport(251);
+	CapturePhotoPromptWidget->SetRenderOpacity(0.0f);
+	CapturePhotoPromptWidget->SetVisibility(ESlateVisibility::Collapsed);
+	return true;
+}
+
 void ABalhwajeomEvidenceCameraHUD::TriggerCapturePhotoPresentation(
 	UTexture2D* CapturedTexture,
 	const FText& SentenceText,
@@ -448,8 +483,20 @@ void ABalhwajeomEvidenceCameraHUD::TriggerCapturePhotoPresentation(
 
 	CapturePhotoWidget->PresentCapture(
 		CapturedTexture, SentenceText, GrantedKeywords, bIsAnalysisSentence);
-	EvidenceSavedAnimationStartTime = GetWorld()->GetTimeSeconds();
-	CapturePhotoLayoutWaitStartTime = EvidenceSavedAnimationStartTime;
+	EnsureCapturePhotoPromptWidget();
+	const double Now = GetWorld()->GetTimeSeconds();
+	CapturePhotoPresentationState.Start(
+		Now,
+		CapturePhotoWidget->GetEntryCompletionTime(),
+		CapturePhotoWidget->GetExitStartTime(),
+		CapturePhotoWidget->GetAnimationDuration(),
+		CapturePhotoPromptFadeDuration);
+	CapturePhotoLayoutWaitStartTime = Now;
+	if (CapturePhotoPromptWidget)
+	{
+		CapturePhotoPromptWidget->SetRenderOpacity(0.0f);
+		CapturePhotoPromptWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
 	if (PlayerOwner && !bCapturePhotoMovementLocked)
 	{
 		PlayerOwner->SetIgnoreMoveInput(true);
@@ -459,46 +506,81 @@ void ABalhwajeomEvidenceCameraHUD::TriggerCapturePhotoPresentation(
 
 void ABalhwajeomEvidenceCameraHUD::UpdateCapturePhotoPresentation()
 {
-	if (!CapturePhotoWidget || !GetWorld() || EvidenceSavedAnimationStartTime < 0.0f)
+	if (!CapturePhotoWidget || !GetWorld() || !CapturePhotoPresentationState.IsActive())
 	{
 		return;
 	}
+	const double Now = GetWorld()->GetTimeSeconds();
 
-	// Do not start the hold/flight clock until fresh Slate geometry is ready.
-	if (!CapturePhotoWidget->IsFlightReady())
+	if (!CapturePhotoWidget->IsPresentationReady())
 	{
-		// A missing/collapsed marker must never send the photo elsewhere or
-		// leave movement locked indefinitely. Cancel instead of guessing a target.
-		if (GetWorld()->GetTimeSeconds() - CapturePhotoLayoutWaitStartTime > 2.0f)
+		// A malformed presentation hierarchy must not leave movement locked indefinitely.
+		if (Now - CapturePhotoLayoutWaitStartTime > 2.0f)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Capture photo cancelled: check WBP_CapturePhoto TabFlyTarget and photo/keyword layout."));
+			UE_LOG(LogTemp, Warning, TEXT("Capture photo cancelled: check the WBP_CapturePhoto card, dimmer, and keyword hierarchy."));
 			FinishCapturePhotoPresentation();
 			return;
 		}
-		EvidenceSavedAnimationStartTime = GetWorld()->GetTimeSeconds();
+		CapturePhotoPresentationState.Start(
+			Now,
+			CapturePhotoWidget->GetEntryCompletionTime(),
+			CapturePhotoWidget->GetExitStartTime(),
+			CapturePhotoWidget->GetAnimationDuration(),
+			CapturePhotoPromptFadeDuration);
 		return;
 	}
-	const float Elapsed = GetWorld()->GetTimeSeconds() - EvidenceSavedAnimationStartTime;
-	const float HoldDuration = CapturePhotoWidget->GetHoldDuration();
-	if (Elapsed < HoldDuration)
-	{
-		return;
-	}
-	const float FlyDuration = FMath::Max(CapturePhotoWidget->GetFlyDuration(), KINDA_SMALL_NUMBER);
-	const float FlyAlpha = FMath::Clamp((Elapsed - HoldDuration) / FlyDuration, 0.0f, 1.0f);
-	CapturePhotoWidget->ApplyFlyToTab(FlyAlpha);
-	if (FlyAlpha >= 1.0f)
+	CapturePhotoPresentationState.Update(Now);
+	const float AnimationDuration = FMath::Max(
+		CapturePhotoWidget->GetAnimationDuration(), KINDA_SMALL_NUMBER);
+	const float TimelineAlpha = FMath::Clamp(
+		CapturePhotoPresentationState.GetTimelineTime(Now) / AnimationDuration,
+		0.0f,
+		1.0f);
+	CapturePhotoWidget->ApplyPresentationTimeline(TimelineAlpha);
+	UpdateCapturePhotoPrompt(Now);
+	if (CapturePhotoPresentationState.GetPhase() ==
+		ECapturePhotoPresentationPhase::Completed)
 	{
 		FinishCapturePhotoPresentation();
 	}
 }
 
+void ABalhwajeomEvidenceCameraHUD::UpdateCapturePhotoPrompt(const double Now)
+{
+	if (!CapturePhotoPromptWidget)
+	{
+		return;
+	}
+
+	const ECapturePhotoPresentationPhase Phase = CapturePhotoPresentationState.GetPhase();
+	const float Opacity = CapturePhotoPresentationState.GetPromptOpacity(Now);
+	const bool bPromptPhase =
+		Phase == ECapturePhotoPresentationPhase::AwaitingConfirmation ||
+		Phase == ECapturePhotoPresentationPhase::Exiting;
+	CapturePhotoPromptWidget->SetRenderOpacity(Opacity);
+	CapturePhotoPromptWidget->SetVisibility(
+		bPromptPhase && (Phase != ECapturePhotoPresentationPhase::Exiting || Opacity > 0.0f)
+			? ESlateVisibility::HitTestInvisible
+			: ESlateVisibility::Collapsed);
+}
+
+bool ABalhwajeomEvidenceCameraHUD::TryConfirmCapturePhotoPresentation()
+{
+	return GetWorld() &&
+		CapturePhotoPresentationState.TryConfirm(GetWorld()->GetTimeSeconds());
+}
+
 void ABalhwajeomEvidenceCameraHUD::FinishCapturePhotoPresentation()
 {
-	EvidenceSavedAnimationStartTime = -1.0f;
+	CapturePhotoPresentationState.Reset();
 	if (CapturePhotoWidget)
 	{
 		CapturePhotoWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	if (CapturePhotoPromptWidget)
+	{
+		CapturePhotoPromptWidget->SetRenderOpacity(0.0f);
+		CapturePhotoPromptWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	if (PlayerOwner && bCapturePhotoMovementLocked)
 	{

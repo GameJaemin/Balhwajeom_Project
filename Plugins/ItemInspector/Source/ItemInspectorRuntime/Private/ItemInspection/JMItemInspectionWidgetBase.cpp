@@ -47,6 +47,7 @@ void UJMItemInspectionWidgetBase::NativeConstruct()
 	SetVisibility(ESlateVisibility::Visible);
 
 	BuildDefaultWidgetTreeIfNeeded();
+	ConfigurePreviewLayout();
 	ResolveSimpleTransitionLayers();
 
 	if (CloseButton)
@@ -152,6 +153,7 @@ void UJMItemInspectionWidgetBase::SetInspectionData(UJMItemInspectionData* InIns
 {
 	InspectionData = InInspectionData;
 	BuildDefaultWidgetTreeIfNeeded();
+	ConfigurePreviewLayout();
 	ApplyInspectionDataToWidgets();
 }
 
@@ -332,13 +334,18 @@ void UJMItemInspectionWidgetBase::SetPreviewInputEnabled(bool bEnabled)
 
 bool UJMItemInspectionWidgetBase::GetPreviewViewportRect(FVector2D& OutCenter, FVector2D& OutSize) const
 {
-	if (!PreviewPanel)
+	if (!PreviewImage && !PreviewPanel)
 	{
 		return false;
 	}
 
-	const FGeometry& Geometry = PreviewPanel->GetCachedGeometry();
-	const FVector2D LocalSize = Geometry.GetLocalSize();
+	const FGeometry* Geometry = PreviewImage ? &PreviewImage->GetCachedGeometry() : nullptr;
+	FVector2D LocalSize = Geometry ? Geometry->GetLocalSize() : FVector2D::ZeroVector;
+	if ((!Geometry || LocalSize.X <= 1.0f || LocalSize.Y <= 1.0f) && PreviewPanel)
+	{
+		Geometry = &PreviewPanel->GetCachedGeometry();
+		LocalSize = Geometry->GetLocalSize();
+	}
 	if (LocalSize.X <= 1.0f || LocalSize.Y <= 1.0f)
 	{
 		return false;
@@ -346,10 +353,10 @@ bool UJMItemInspectionWidgetBase::GetPreviewViewportRect(FVector2D& OutCenter, F
 
 	FVector2D PixelTopLeft;
 	FVector2D ViewportTopLeft;
-	USlateBlueprintLibrary::AbsoluteToViewport(this, Geometry.LocalToAbsolute(FVector2D::ZeroVector), PixelTopLeft, ViewportTopLeft);
+	USlateBlueprintLibrary::AbsoluteToViewport(this, Geometry->LocalToAbsolute(FVector2D::ZeroVector), PixelTopLeft, ViewportTopLeft);
 	FVector2D PixelBottomRight;
 	FVector2D ViewportBottomRight;
-	USlateBlueprintLibrary::AbsoluteToViewport(this, Geometry.LocalToAbsolute(LocalSize), PixelBottomRight, ViewportBottomRight);
+	USlateBlueprintLibrary::AbsoluteToViewport(this, Geometry->LocalToAbsolute(LocalSize), PixelBottomRight, ViewportBottomRight);
 
 	OutSize = ViewportBottomRight - ViewportTopLeft;
 	OutCenter = ViewportTopLeft + (OutSize * 0.5f);
@@ -390,20 +397,89 @@ void UJMItemInspectionWidgetBase::BuildDefaultWidgetTreeIfNeeded()
 	ContentSlot->SetZOrder(0);
 
 	USizeBox* PreviewSizeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("PreviewSizeBox"));
-	PreviewSizeBox->SetWidthOverride(720.0f);
-	PreviewSizeBox->SetHeightOverride(720.0f);
 	UScaleBoxSlot* ScaleSlot = CastChecked<UScaleBoxSlot>(Content->AddChild(PreviewSizeBox));
-	ScaleSlot->SetHorizontalAlignment(HAlign_Center);
-	ScaleSlot->SetVerticalAlignment(VAlign_Center);
+	ScaleSlot->SetHorizontalAlignment(HAlign_Fill);
+	ScaleSlot->SetVerticalAlignment(VAlign_Fill);
 
 	PreviewPanel = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("PreviewPanel"));
 	PreviewPanel->SetBrushColor(FLinearColor::Transparent);
 	PreviewPanel->SetPadding(FMargin(0.0f));
 	PreviewSizeBox->AddChild(PreviewPanel);
+	UScaleBox* PreviewAspectBox = WidgetTree->ConstructWidget<UScaleBox>(
+		UScaleBox::StaticClass(),
+		TEXT("PreviewAspectBox"));
+	PreviewAspectBox->SetStretch(EStretch::ScaleToFit);
+	PreviewAspectBox->SetStretchDirection(EStretchDirection::Both);
+	PreviewPanel->SetContent(PreviewAspectBox);
 	PreviewImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("PreviewImage"));
-	PreviewPanel->SetContent(PreviewImage);
+	PreviewAspectBox->AddChild(PreviewImage);
 	ApplyInspectionDataToWidgets();
 	SetPreviewTexture(nullptr);
+}
+
+void UJMItemInspectionWidgetBase::ConfigurePreviewLayout()
+{
+	if (!WidgetTree)
+	{
+		return;
+	}
+	if (UScaleBox* ContentScaleBox = Cast<UScaleBox>(WidgetTree->FindWidget(TEXT("ContentRow"))))
+	{
+		ContentScaleBox->SetStretchDirection(EStretchDirection::Both);
+	}
+
+	if (USizeBox* PreviewSizeBox = Cast<USizeBox>(WidgetTree->FindWidget(TEXT("PreviewSizeBox"))))
+	{
+		PreviewSizeBox->ClearWidthOverride();
+		PreviewSizeBox->ClearHeightOverride();
+		PreviewSizeBox->SetClipping(EWidgetClipping::Inherit);
+
+		if (UScaleBoxSlot* ScaleSlot = Cast<UScaleBoxSlot>(PreviewSizeBox->Slot))
+		{
+			ScaleSlot->SetHorizontalAlignment(HAlign_Fill);
+			ScaleSlot->SetVerticalAlignment(VAlign_Fill);
+			if (UScaleBox* ParentScaleBox = Cast<UScaleBox>(PreviewSizeBox->GetParent()))
+			{
+				ParentScaleBox->SetStretchDirection(EStretchDirection::Both);
+			}
+		}
+		else if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(PreviewSizeBox->Slot))
+		{
+			CanvasSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+			CanvasSlot->SetOffsets(FMargin(0.0f));
+			CanvasSlot->SetAlignment(FVector2D::ZeroVector);
+		}
+		else if (UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>(PreviewSizeBox->Slot))
+		{
+			OverlaySlot->SetHorizontalAlignment(HAlign_Fill);
+			OverlaySlot->SetVerticalAlignment(VAlign_Fill);
+		}
+	}
+
+	if (PreviewPanel)
+	{
+		PreviewPanel->SetClipping(EWidgetClipping::Inherit);
+	}
+	if (PreviewImage)
+	{
+		UScaleBox* PreviewAspectBox = Cast<UScaleBox>(PreviewImage->GetParent());
+		if (!PreviewAspectBox && PreviewPanel && PreviewPanel->GetContent() == PreviewImage)
+		{
+			PreviewImage->RemoveFromParent();
+			PreviewAspectBox = WidgetTree->ConstructWidget<UScaleBox>(
+				UScaleBox::StaticClass(),
+				TEXT("PreviewAspectBox"));
+			PreviewPanel->SetContent(PreviewAspectBox);
+			PreviewAspectBox->AddChild(PreviewImage);
+		}
+		if (PreviewAspectBox)
+		{
+			PreviewAspectBox->SetStretch(EStretch::ScaleToFit);
+			PreviewAspectBox->SetStretchDirection(EStretchDirection::Both);
+			PreviewAspectBox->SetClipping(EWidgetClipping::Inherit);
+		}
+		PreviewImage->SetClipping(EWidgetClipping::Inherit);
+	}
 }
 
 void UJMItemInspectionWidgetBase::ApplyInspectionDataToWidgets()

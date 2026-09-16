@@ -1,7 +1,19 @@
 #include "StoryStateSubsystemTestTypes.h"
 
 #include "Engine/GameInstance.h"
+#include "Investigation/BalhwajeomInvestigationSettings.h"
 #include "Story/StoryStateSubsystem.h"
+#include "Story/StoryStateTags.h"
+#include "Templates/UnrealTemplate.h"
+
+
+struct FStoryStateSubsystemTestAccessor
+{
+	static void EvaluateChapter01PhaseProgress(UStoryStateSubsystem* Subsystem)
+	{
+		Subsystem->EvaluateChapter01PhaseProgress();
+	}
+};
 
 
 void UStoryStateSubsystemTestObserver::HandleStateTagAdded(
@@ -71,6 +83,50 @@ bool FStoryStateInitialStateTest::RunTest(const FString& Parameters)
 		TEXT("A new subsystem should have no active state tags"),
 		Fixture.Subsystem->GetCurrentStateTags().IsEmpty()
 	);
+
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FStoryStateDisabledChapter01PhaseProgressionTest,
+	"Balhwajeom.StoryState.Progression.Chapter01Disabled",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter)
+
+
+bool FStoryStateDisabledChapter01PhaseProgressionTest::RunTest(
+	const FString& Parameters)
+{
+	const StoryStateSubsystemTests::FFixture Fixture;
+	UBalhwajeomInvestigationSettings* Settings =
+		GetMutableDefault<UBalhwajeomInvestigationSettings>();
+	if (!TestNotNull(TEXT("Mutable investigation settings should exist"), Settings))
+	{
+		return false;
+	}
+
+	TGuardValue<bool> DisablePhaseSystem(
+		Settings->bEnableChapter01PhaseSystem, false);
+	const FGameplayTag Phase01Sentence = FGameplayTag::RequestGameplayTag(
+		TEXT("Evidence.SentenceSolved.PHOTO_01_005"), false);
+	if (!TestTrue(TEXT("Phase 01 sentence tag should be registered"),
+		Phase01Sentence.IsValid()))
+	{
+		return false;
+	}
+
+	Fixture.Subsystem->AddStateTag(Phase01Sentence);
+	FStoryStateSubsystemTestAccessor::EvaluateChapter01PhaseProgress(
+		Fixture.Subsystem);
+
+	TestTrue(
+		TEXT("Disabling phase progression should preserve normal sentence tags"),
+		Fixture.Subsystem->HasStateTagExact(Phase01Sentence));
+	TestFalse(
+		TEXT("Disabling phase progression should suppress phase completion tags"),
+		Fixture.Subsystem->HasStateTagExact(
+			BalhwajeomGameplayTags::Story_Chapter_01_Phase_01_Completed));
 
 	return true;
 }
