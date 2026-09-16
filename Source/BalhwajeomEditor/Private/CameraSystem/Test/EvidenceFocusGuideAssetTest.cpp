@@ -9,6 +9,8 @@
 #include "Components/Image.h"
 #include "Components/PanelWidget.h"
 #include "Components/Widget.h"
+#include "Engine/DataTable.h"
+#include "Investigation/EvidenceDefinitions.h"
 #include "UObject/UnrealType.h"
 #include "WidgetBlueprint.h"
 
@@ -40,10 +42,15 @@ bool FEvidenceFocusGuideAssetTest::RunTest(const FString& Parameters)
 		TEXT("/Script/MultiShadowText.MultiShadowTextWidget"));
 	const UWidget* LabelText =
 		FocusGuideBlueprint->WidgetTree->FindWidget(TEXT("LabelText"));
+	const UWidget* SubLabelText =
+		FocusGuideBlueprint->WidgetTree->FindWidget(TEXT("LabelText_sub"));
 	TestNotNull(TEXT("Multi Shadow Text widget class should load"), MultiShadowTextClass);
 	TestTrue(
 		TEXT("WBP_EvidenceFocusGuide LabelText should use Multi Shadow Text"),
 		LabelText && MultiShadowTextClass && LabelText->IsA(MultiShadowTextClass));
+	TestTrue(
+		TEXT("WBP_EvidenceFocusGuide LabelText_sub should use Multi Shadow Text"),
+		SubLabelText && MultiShadowTextClass && SubLabelText->IsA(MultiShadowTextClass));
 	TestNotNull(
 		TEXT("WBP_EvidenceFocusGuide should provide SetLabelText"),
 		FocusGuideBlueprint->GeneratedClass->FindFunctionByName(TEXT("SetLabelText")));
@@ -66,6 +73,56 @@ bool FEvidenceFocusGuideAssetTest::RunTest(const FString& Parameters)
 		ConfiguredClass,
 		static_cast<const UObject*>(FocusGuideBlueprint->GeneratedClass));
 
+	return true;
+}
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FEvidenceCaptureBlockedLabelsDataTest,
+	"Balhwajeom.Camera.Evidence.FocusGuide.CaptureBlockedLabelsData",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::EngineFilter
+)
+
+
+bool FEvidenceCaptureBlockedLabelsDataTest::RunTest(const FString& Parameters)
+{
+	const UDataTable* EvidenceStates = LoadObject<UDataTable>(
+		nullptr,
+		TEXT("/Game/Balhwajeom/Data/Investigation/DT_EvidenceStates.DT_EvidenceStates"));
+	if (!TestNotNull(TEXT("DT_EvidenceStates should load"), EvidenceStates))
+	{
+		return false;
+	}
+
+	struct FExpectedLabel
+	{
+		const TCHAR* StateID;
+		const TCHAR* Label;
+	};
+	static const FExpectedLabel ExpectedLabels[] =
+	{
+		{ TEXT("STATE_01_001_DUST"), TEXT("사진을 찍기 전에 먼지부터 털어 보자.") },
+		{ TEXT("STATE_01_002_DUST"), TEXT("사진을 찍기 전에 먼지부터 털어 보자.") },
+		{ TEXT("STATE_01_003_DUST"), TEXT("사진을 찍기 전에 먼지부터 털어 보자.") },
+		{ TEXT("STATE_01_004_CLOSED"), TEXT("일기장을 먼저 펼쳐 보자.") },
+		{ TEXT("STATE_01_005_FRONT"), TEXT("고데기를 뒤집어 반대편을 확인해 보자.") }
+	};
+
+	for (const FExpectedLabel& Expected : ExpectedLabels)
+	{
+		const FEvidenceStateDefinition* State =
+			EvidenceStates->FindRow<FEvidenceStateDefinition>(
+				FName(Expected.StateID),
+				TEXT("CaptureBlockedLabelsData"));
+		if (TestNotNull(Expected.StateID, State))
+		{
+			TestEqual(
+				*FString::Printf(TEXT("%s should use its authored capture guidance"), Expected.StateID),
+				State->CaptureBlockedLabel.ToString(),
+				FString(Expected.Label));
+		}
+	}
 	return true;
 }
 

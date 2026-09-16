@@ -9,6 +9,7 @@ class UImage;
 class UMediaPlayer;
 class UMediaSource;
 class UMediaTexture;
+class USoundBase;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FBalhwajeomStartRequested);
 
@@ -19,8 +20,14 @@ class BALHWAJEOM_API UBalhwajeomMainMenuWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	UBalhwajeomMainMenuWidget(const FObjectInitializer& ObjectInitializer);
+
 	UPROPERTY(BlueprintAssignable, Category = "Title")
 	FBalhwajeomStartRequested OnStartRequested;
+
+	/** Played the moment BTN_Start is clicked, before OnStartRequested fires. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Title")
+	TSoftObjectPtr<USoundBase> ButtonClickSound;
 
 	UFUNCTION(BlueprintCallable, Category = "Title")
 	void SetStartButtonEnabled(bool bEnabled);

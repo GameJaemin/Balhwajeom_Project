@@ -41,6 +41,7 @@ struct FBalhwajeomResolvedPhotoTarget
     bool bCanCapture = false;
     float MinimumFocusDistanceOffset = 0.0f;
     float MaximumFocusDistanceOffset = 0.0f;
+    float MinimumCaptureScreenOccupancyRatioOverride = -1.0f;
 };
 
 struct FBalhwajeomStrictFocusTarget
@@ -165,6 +166,10 @@ public:
     UFUNCTION(BlueprintPure, Category = "Photo Camera|Focus")
     AActor* GetDisplayedFocusTarget() const { return DisplayedFocusTarget.Get(); }
 
+    /** True when the displayed capture target is focused but below its required screen size. */
+    UFUNCTION(BlueprintPure, Category = "Photo Camera|Focus")
+    bool IsDisplayedFocusTargetTooSmallForCapture() const;
+
     UFUNCTION(BlueprintCallable, Category = "Evidence", meta = (DeprecatedFunction, DeprecationMessage = "Use BalhwajeomInvestigationSubsystem.RegisterCapturedPhoto."))
     bool AddEvidence(const FBalhwajeomEvidenceData& NewEvidence);
 
@@ -191,7 +196,13 @@ protected:
     bool GetEffectiveCameraView(FVector& OutLocation, FVector& OutForward) const;
     bool TraceViewportCenter(FHitResult& OutHit) const;
     bool IsViewportCenterOverTarget(const AActor* Target) const;
-    bool CalculateTargetFrameCoverage(const AActor* Target, float& OutCoverageRatio) const;
+    bool CalculateTargetScreenFrameMetrics(
+        const AActor* Target,
+        FBalhwajeomScreenFrameMetrics& OutMetrics) const;
+    bool IsTargetScreenOccupancySufficient(
+        const AActor* Target,
+        const FBalhwajeomCameraTargetInfo& TargetInfo,
+        FBalhwajeomScreenFrameMetrics* OutMetrics = nullptr) const;
     bool FindStrictFocusTarget(FBalhwajeomStrictFocusTarget& OutTarget) const;
     void ApplyFocusBlur(float DeltaTime, const FBalhwajeomFocusRegion& DesiredRegion);
     void InitializeFocusBlurMaterials();
@@ -239,6 +250,10 @@ protected:
     /** Global inclusive maximum camera-to-CameraFocusPoint distance for focus and capture. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Distance", meta = (ClampMin = "0.0", Units = "cm"))
     float MaximumFocusDistance = 1000.0f;
+
+    /** Minimum fraction of the viewport that a capture target's visible projected bounds must occupy. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Framing", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MinimumCaptureScreenOccupancyRatio = 0.04f;
 
     /** Half-width of the sharp region on either side of a focused target. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Blur", meta = (ClampMin = "0.0", Units = "cm"))

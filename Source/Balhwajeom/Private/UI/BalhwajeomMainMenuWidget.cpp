@@ -2,9 +2,18 @@
 
 #include "Components/Button.h"
 #include "Components/Image.h"
+#include "Kismet/GameplayStatics.h"
 #include "MediaPlayer.h"
 #include "MediaSource.h"
 #include "MediaTexture.h"
+#include "Sound/SoundBase.h"
+
+UBalhwajeomMainMenuWidget::UBalhwajeomMainMenuWidget(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	ButtonClickSound = TSoftObjectPtr<USoundBase>(
+		FSoftObjectPath(TEXT("/Game/Balhwajeom/Audio/SFX/Button.Button")));
+}
 
 void UBalhwajeomMainMenuWidget::NativeConstruct()
 {
@@ -55,6 +64,10 @@ void UBalhwajeomMainMenuWidget::HandleStartClicked()
 	if (BTN_Start)
 	{
 		BTN_Start->SetIsEnabled(false);
+	}
+	if (USoundBase* Sound = ButtonClickSound.LoadSynchronous())
+	{
+		UGameplayStatics::PlaySound2D(this, Sound);
 	}
 	OnStartRequested.Broadcast();
 }

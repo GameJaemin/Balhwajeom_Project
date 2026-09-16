@@ -358,6 +358,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus", meta = (Units = "cm"))
 	float MaximumFocusDistanceOffset = 0.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Focus", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
+	float MinimumCaptureScreenOccupancyRatioOverride = -1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Legacy", meta = (ClampMin = "1.0", DeprecatedProperty, DeprecationMessage = "Focus distance is now owned by the photo camera."))
 	float PreferredFocusDistanceAt1x = 70.0f;
 

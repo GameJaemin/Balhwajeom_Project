@@ -262,6 +262,12 @@ UBalhwajeomTabletWidget::UBalhwajeomTabletWidget(const FObjectInitializer& Objec
 		TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/WBP_TabletStatement.WBP_TabletStatement_C")));
 	PhotoDetailWidgetClass = TSoftClassPtr<UBalhwajeomTabletDetailWidget>(FSoftObjectPath(
 		TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletPhoto.WBP_TabletPhoto_C")));
+	KeywordDropSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(
+		TEXT("/Game/Balhwajeom/Audio/SFX/Sentence/keyword_drop.keyword_drop")));
+	SentenceCorrectSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(
+		TEXT("/Game/Balhwajeom/Audio/SFX/Sentence/Wave.Wave")));
+	SentenceErrorSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(
+		TEXT("/Game/Balhwajeom/Audio/SFX/Sentence/error.error")));
 }
 
 UBalhwajeomTabletPersonFolderWidget::UBalhwajeomTabletPersonFolderWidget(
@@ -1455,6 +1461,10 @@ void UBalhwajeomTabletWidget::HandleSentenceBlankDropped(
 		// Dropped back onto the same blank it came from -- nothing to do.
 		return;
 	}
+	if (USoundBase* Sound = KeywordDropSound.LoadSynchronous())
+	{
+		UGameplayStatics::PlaySound2D(this, Sound);
+	}
 	if (Sentence.SentenceType == ESentenceType::PhotoAnalysis)
 	{
 		SetPhotoPuzzleErrorStyle(false);
@@ -1544,6 +1554,10 @@ void UBalhwajeomTabletWidget::HandleSentenceBlankClicked(const int32 SlotIndex)
 	if (!Blank || !Blank->IsFilled())
 	{
 		return;
+	}
+	if (USoundBase* Sound = KeywordDropSound.LoadSynchronous())
+	{
+		UGameplayStatics::PlaySound2D(this, Sound);
 	}
 
 	ActiveSubmission.SubmittedWords.RemoveAll(
@@ -1875,9 +1889,21 @@ void UBalhwajeomTabletWidget::ValidateActivePuzzle(const bool bExplicitStatement
 		{
 			OnStatementSolved.Broadcast();
 		}
+		if (USoundBase* Sound = SentenceCorrectSound.LoadSynchronous())
+		{
+			UGameplayStatics::PlaySound2D(this, Sound);
+		}
 	}
-	else if (TXT_PuzzleFeedback)
+	else
 	{
+		if (USoundBase* Sound = SentenceErrorSound.LoadSynchronous())
+		{
+			UGameplayStatics::PlaySound2D(this, Sound);
+		}
+		if (!TXT_PuzzleFeedback)
+		{
+			return;
+		}
 		// A wrong-but-completed evidence photo surfaces its own declaration sentence's ResultText
 		// (see ValidateSentence) instead of the generic message.
 		TXT_PuzzleFeedback->SetText(

@@ -16,10 +16,61 @@ bool FBalhwajeomCameraFocusDataDefaultsTest::RunTest(const FString& Parameters)
 	const FEvidenceStateDefinition State;
 	TestEqual(TEXT("State minimum offset defaults to zero"), State.MinimumFocusDistanceOffset, 0.0f);
 	TestEqual(TEXT("State maximum offset defaults to zero"), State.MaximumFocusDistanceOffset, 0.0f);
+	TestEqual(TEXT("State screen occupancy override defaults to global fallback"),
+		State.MinimumCaptureScreenOccupancyRatioOverride, -1.0f);
 
 	const FBalhwajeomCameraTargetInfo TargetInfo;
 	TestEqual(TEXT("Target snapshot minimum offset defaults to zero"), TargetInfo.MinimumFocusDistanceOffset, 0.0f);
 	TestEqual(TEXT("Target snapshot maximum offset defaults to zero"), TargetInfo.MaximumFocusDistanceOffset, 0.0f);
+	TestEqual(TEXT("Target snapshot screen occupancy override defaults to global fallback"),
+		TargetInfo.MinimumCaptureScreenOccupancyRatioOverride, -1.0f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FBalhwajeomCameraScreenOccupancyTest,
+	"Balhwajeom.Camera.FocusModel.ScreenOccupancy",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FBalhwajeomCameraScreenOccupancyTest::RunTest(const FString& Parameters)
+{
+	FBalhwajeomScreenFrameMetrics Metrics;
+	TestTrue(TEXT("A valid projected rectangle produces screen metrics"),
+		FBalhwajeomCameraFocusModel::CalculateScreenFrameMetrics(
+			FVector2D(100.0, 100.0),
+			FVector2D(500.0, 300.0),
+			FVector2D(1000.0, 500.0),
+			Metrics));
+	TestTrue(TEXT("A fully visible target reports full visible fraction"),
+		FMath::IsNearlyEqual(Metrics.VisibleFraction, 1.0f));
+	TestTrue(TEXT("A 400x200 target in a 1000x500 viewport occupies sixteen percent"),
+		FMath::IsNearlyEqual(Metrics.ScreenOccupancyRatio, 0.16f));
+
+	TestTrue(TEXT("A partially clipped rectangle still produces screen metrics"),
+		FBalhwajeomCameraFocusModel::CalculateScreenFrameMetrics(
+			FVector2D(-100.0, 100.0),
+			FVector2D(300.0, 300.0),
+			FVector2D(1000.0, 500.0),
+			Metrics));
+	TestTrue(TEXT("Only three quarters of the clipped target remains visible"),
+		FMath::IsNearlyEqual(Metrics.VisibleFraction, 0.75f));
+	TestTrue(TEXT("Only visible pixels count toward screen occupancy"),
+		FMath::IsNearlyEqual(Metrics.ScreenOccupancyRatio, 0.12f));
+
+	float RequiredRatio = 0.0f;
+	TestFalse(TEXT("A target below the global four-percent threshold is too small"),
+		FBalhwajeomCameraFocusModel::IsScreenOccupancySufficient(
+			0.039f, 0.04f, -1.0f, RequiredRatio));
+	TestTrue(TEXT("A target exactly at the global threshold is accepted"),
+		FBalhwajeomCameraFocusModel::IsScreenOccupancySufficient(
+			0.04f, 0.04f, -1.0f, RequiredRatio));
+	TestTrue(TEXT("Negative override selects the global threshold"),
+		FMath::IsNearlyEqual(RequiredRatio, 0.04f));
+	TestFalse(TEXT("A non-negative per-state override replaces the global threshold"),
+		FBalhwajeomCameraFocusModel::IsScreenOccupancySufficient(
+			0.08f, 0.04f, 0.1f, RequiredRatio));
+	TestTrue(TEXT("The resolved requirement exposes the state override"),
+		FMath::IsNearlyEqual(RequiredRatio, 0.1f));
 	return true;
 }
 

@@ -10,3 +10,4 @@
 - 문장 슬롯은 구조체 배열이므로 `((SlotIndex=0,CorrectWordID=WORD_A),...)` 형식을 쓴다.
 - `PhotoSentenceID`가 비어 있으면 스토리 사진이다.
 - `PreferredFocusDistance`, `FocusDistanceTolerance`, `bScaleFocusDistanceWithZoom`은 기본값을 사용할 때 CSV 헤더에서 생략한다.
+- `CaptureBlockedLabel`은 현재 상태가 촬영 불가일 때 카메라 보조 라벨에 표시할 행동 안내다. 비우면 공통 촬영 불필요 문구가 표시된다.
