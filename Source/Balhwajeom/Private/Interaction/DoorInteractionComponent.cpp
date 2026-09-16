@@ -4,6 +4,8 @@
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "Story/StoryStateSubsystem.h"
 
 
@@ -81,11 +83,20 @@ bool UDoorInteractionComponent::RequestInteraction()
 
 	if (!IsUnlocked())
 	{
+		if (LockedInteractionSound)
+		{
+			UGameplayStatics::PlaySoundAtLocation(
+				this, LockedInteractionSound, GetOwner()->GetActorLocation());
+		}
 		OnLockedInteractionRequested.Broadcast();
 		return true;
 	}
 
 	AActor* DoorActor = GetOwner();
+	if (OpenSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, OpenSound, DoorActor->GetActorLocation());
+	}
 	if (OpenDuration <= KINDA_SMALL_NUMBER)
 	{
 		DoorActor->SetActorRotation(OpenRotation);

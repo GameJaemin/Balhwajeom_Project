@@ -5,6 +5,8 @@
 #include "GameplayTagContainer.h"
 #include "DoorInteractionComponent.generated.h"
 
+class USoundBase;
+
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDoorLockedInteractionRequested);
 
@@ -33,6 +35,14 @@ public:
 		meta = (ClampMin = "0.0", Units = "s")
 	)
 	float OpenDuration = 1.5f;
+
+	/** Played at the door when an interaction is attempted while it is locked. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door|Audio")
+	TObjectPtr<USoundBase> LockedInteractionSound;
+
+	/** Played once when opening starts, including doors with zero open duration. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door|Audio")
+	TObjectPtr<USoundBase> OpenSound;
 
 	/**
 	 * Story state condition that must hold before this door can be opened.
