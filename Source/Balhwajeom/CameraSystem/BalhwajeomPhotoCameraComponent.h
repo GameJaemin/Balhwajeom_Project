@@ -338,6 +338,15 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.1"))
     float CameraTransitionDuration = 0.5f;
 
+    /**
+     * Maximum distance the first-person camera may move onto the outgoing third-person
+     * center ray. This preserves the viewed angle as well as center framing for an
+     * over-the-shoulder camera without allowing a remote fixed camera to pull the photo
+     * camera away from the player.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.0", Units = "cm"))
+    float MaximumEntryViewAlignmentOffset = 150.0f;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Audio")
     TSoftObjectPtr<USoundBase> CameraEnterSound;
 

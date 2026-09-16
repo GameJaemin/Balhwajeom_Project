@@ -27,6 +27,9 @@ public:
 
 protected:
 	virtual void NativeOnInitialized() override;
+	virtual FReply NativeOnPreviewMouseButtonDown(
+		const FGeometry& InGeometry,
+		const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnKeyDown(
 		const FGeometry& InGeometry,
 		const FKeyEvent& InKeyEvent) override;
