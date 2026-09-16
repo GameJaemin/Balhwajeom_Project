@@ -19,6 +19,7 @@ class UScrollBox;
 class USizeBox;
 class UTextBlock;
 class UTexture2D;
+class UVerticalBox;
 class UWidget;
 class UFont;
 class UWrapBox;
@@ -45,6 +46,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPersonFolderTabRequested, i
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnTabletBlankDropped, int32, SlotIndex, FName, WordID, int32, OriginSlotIndex);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTabletPhotoSlotDropped, int32, SlotIndex, FName, PhotoID);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletPhotoSlotClicked, int32, SlotIndex);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletWordChipClicked, FName, WordID);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabletBlankClicked, int32, SlotIndex);
 
 /** Runtime-created photo entry shared by the folder grid and the statement tile. */
 UCLASS()
@@ -56,8 +59,29 @@ public:
 	/** Thumbnail is optional: the statement tile passes nullptr for a text-only tile. */
 	void Configure(FName InPhotoID, const FText& InLabel, UTexture2D* Thumbnail = nullptr);
 
+	/** Overrides ThumbnailWidth/ThumbnailHeight's shared Class Default for just this instance
+	 * (e.g. the folder's single, intentionally larger statement tile) -- every other tile of the
+	 * same WBP_TabletFileTile class keeps using the Class Default. Call before Configure() so the
+	 * override is already in effect the first time it sizes SB_Thumbnail. */
+	void SetThumbnailSizeOverride(float InWidth, float InHeight);
+
 	UPROPERTY()
 	FOnTabletPhotoSelected OnPhotoSelected;
+
+	/** Font for the filename label (TXT_Label) below the thumbnail. Null keeps the engine default typeface. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|File Tile")
+	TObjectPtr<UFont> LabelFont;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|File Tile", meta = (ClampMin = "8", ClampMax = "40"))
+	int32 LabelFontSize = 16;
+
+	/** Size of SB_Thumbnail/IMG_Thumbnail. The outer tile box (MakeFolderTileSlot) must be at
+	 * least this tall plus room for the label below it, or the label gets clipped. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|File Tile", meta = (ClampMin = "1.0"))
+	float ThumbnailWidth = 96.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|File Tile", meta = (ClampMin = "1.0"))
+	float ThumbnailHeight = 64.0f;
 
 private:
 	virtual void NativeOnInitialized() override;
@@ -67,9 +91,18 @@ private:
 	void HandleClicked();
 
 	FName PhotoID = NAME_None;
+	bool bHasThumbnailSizeOverride = false;
+	float ThumbnailWidthOverride = 0.0f;
+	float ThumbnailHeightOverride = 0.0f;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_File;
+
+	/** Holds SB_Thumbnail then TXT_Label (or SB_Label). Bound so Configure() can bottom-align it
+	 * within BTN_File, so the label lines up across tiles of different outer heights (e.g. the
+	 * folder's taller statement tile next to regular photo tiles). */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UVerticalBox> VB_FileLayout;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<USizeBox> SB_Thumbnail;
@@ -132,6 +165,13 @@ public:
 	void AddTile(UWidget* Tile);
 	void ClearTiles();
 	bool IsEmpty() const { return TileCount == 0; }
+
+	/** Font for the section title ("단서와 정보"/"증거 사진"/"추억 사진"). Null keeps the engine default typeface. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Folder Section")
+	TObjectPtr<UFont> TitleFont;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Folder Section", meta = (ClampMin = "8", ClampMax = "48"))
+	int32 TitleFontSize = 22;
 
 private:
 	virtual void NativeOnInitialized() override;
@@ -264,6 +304,22 @@ public:
 	void ClearFeedbackMessage();
 	void ClearFolderSections();
 	void AddFolderSection(UWidget* Section);
+	/** Re-checks whether SB_EvidencePhotos actually has anything to scroll and shows/hides
+	 * IMG_FolderScroll accordingly. Call after repopulating the folder's contents, since
+	 * OnUserScrolled only fires once the player actually drags the scrollbar. */
+	void RefreshScrollIndicator();
+
+	/** Only BTN_FolderSister's slot is used to show whichever family member's folder is actually
+	 * open (BTN_FolderMother/BTN_FolderBrother and every *Selected image are unused) -- these are
+	 * the three possible icons SetFolderHeader picks from by matching the folder name. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Folder Icon")
+	TObjectPtr<UTexture2D> SisterFolderIcon;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Folder Icon")
+	TObjectPtr<UTexture2D> MotherFolderIcon;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Folder Icon")
+	TObjectPtr<UTexture2D> BrotherFolderIcon;
 
 	UPROPERTY(BlueprintAssignable, Category = "Tablet|Folder")
 	FOnTabletPersonFolderBackRequested OnBackRequested;
@@ -347,8 +403,14 @@ public:
 		int32 InStatementFontSize = 14);
 	FName GetWordID() const { return WordID; }
 
+	/** Broadcast on a plain left-click (no drag detected), so a candidate keyword can be placed
+	 * into the puzzle's first empty blank with a single click instead of a drag. */
+	UPROPERTY()
+	FOnTabletWordChipClicked OnWordChipClicked;
+
 protected:
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
 	virtual void NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
@@ -389,13 +451,20 @@ public:
 	void SetEmpty();
 	void SetErrorStyle(bool bInError);
 	int32 GetSlotIndex() const { return SlotIndex; }
+	bool IsFilled() const { return !FilledWordID.IsNone(); }
 
 	UPROPERTY()
 	FOnTabletBlankDropped OnBlankDropped;
 
+	/** Broadcast on a plain left-click (no drag detected) while filled, so the placed keyword can
+	 * be removed with a single click instead of a drag. Never fires while empty. */
+	UPROPERTY()
+	FOnTabletBlankClicked OnBlankClicked;
+
 protected:
 	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
 
 private:
@@ -672,6 +741,17 @@ private:
 	UFUNCTION()
 	void HandleSentenceBlankDropped(int32 SlotIndex, FName WordID, int32 OriginSlotIndex);
 
+	/** Bound to a UBalhwajeomTabletWordChip's OnWordChipClicked; places the clicked keyword into the
+	 * active puzzle's first empty blank (lowest SlotIndex), same as dragging it there. No-op if every
+	 * blank is already filled or there is no active blank puzzle (e.g. the folder's plain word list). */
+	UFUNCTION()
+	void HandleWordChipClicked(FName WordID);
+
+	/** Bound to a UBalhwajeomTabletSentenceBlank's OnBlankClicked; clears that blank's word back out,
+	 * same as picking it up and dropping it nowhere. */
+	UFUNCTION()
+	void HandleSentenceBlankClicked(int32 SlotIndex);
+
 	/** Bound to a UBalhwajeomTabletPhotoSlot's OnPhotoSlotDropped; fills that photo evidence slot. */
 	UFUNCTION()
 	void HandlePhotoSlotDropped(int32 SlotIndex, FName PhotoID);
@@ -724,6 +804,13 @@ private:
 	/** Full folder page embedded in Page_PersonFolder. Its Designer controls all folder-screen geometry. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UBalhwajeomTabletPersonFolderWidget> WBP_PersonFolder;
+
+	/** Outer wrapper moved out of WidgetSwitcher_TabletPage to sit above it as its own overlay
+	 * layer, so the Home page underneath (its background art, messenger/internet icons, etc.)
+	 * stays visible/rendering around the folder instead of being switched away entirely. Shown
+	 * or hidden directly by SetTabletPage instead of a switcher index. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UWidget> Page_PersonFolder;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UOverlay> PopupLayer;

@@ -140,6 +140,9 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UWidget> InteractionPromptFadeTarget;
 
+	/** True while WB_Interact is drawn below the tutorial dim for the camera hint. */
+	bool bInteractionPromptBehindTutorialDim = false;
+
 	/** Larger values make the prompt reach its target opacity more quickly. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction", meta = (ClampMin = "0.1"))
 	float InteractionPromptFadeSpeed = 8.0f;

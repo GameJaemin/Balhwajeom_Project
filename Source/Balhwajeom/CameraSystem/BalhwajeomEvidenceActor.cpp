@@ -23,6 +23,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "GameFramework/PlayerController.h"
+#include "Investigation/BalhwajeomInvestigationSettings.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Story/StoryStateSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -752,7 +753,12 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID, bool bInit
 	{
 		EvidenceData.EvidenceID = ObjectID;
 		EvidenceData.EvidenceName = ObjectDefinition.ObjectName;
-		RequiredActivationTag = ObjectDefinition.RequiredActivationTag;
+		const UBalhwajeomInvestigationSettings* Settings =
+			GetDefault<UBalhwajeomInvestigationSettings>();
+		RequiredActivationTag = Settings
+			? Settings->ResolveChapter01RequiredActivationTag(
+				ObjectID, ObjectDefinition.RequiredActivationTag)
+			: ObjectDefinition.RequiredActivationTag;
 		ClearRequiredTag = ObjectDefinition.ClearRequiredTag;
 		GrantedTagOnClear = ObjectDefinition.GrantedTagOnClear;
 	}

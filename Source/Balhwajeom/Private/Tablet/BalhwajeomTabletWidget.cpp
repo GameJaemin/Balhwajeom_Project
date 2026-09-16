@@ -3,6 +3,7 @@
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/ButtonSlot.h"
+#include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
@@ -11,6 +12,7 @@
 #include "Components/OverlaySlot.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
+#include "Components/SizeBoxSlot.h"
 #include "Components/Spacer.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
@@ -33,9 +35,19 @@
 
 namespace
 {
+	// Page_PersonFolder was moved out of WidgetSwitcher_TabletPage into its own overlay layer above
+	// it (see UBalhwajeomTabletWidget::SetTabletPage), so it no longer occupies a switcher slot --
+	// every remaining page shifts down by one index, and PersonFolder itself never maps to one.
 	int32 ToPageIndex(const ETabletPage Page)
 	{
-		return static_cast<int32>(Page);
+		switch (Page)
+		{
+		case ETabletPage::Home: return 0;
+		case ETabletPage::Messenger: return 1;
+		case ETabletPage::Internet: return 2;
+		case ETabletPage::Memo: return 3;
+		default: return 0;
+		}
 	}
 
 	/** Strips a UButton's default gray chrome/padding so only its custom content shows. */
@@ -135,10 +147,32 @@ void UBalhwajeomTabletPersonFolderWidget::SetFolderHeader(
 	{
 		TXT_FolderTitle->SetText(FolderName);
 	}
+
+	// Only BTN_FolderSister's slot is used now to show whichever family member's folder is
+	// actually open; BTN_FolderMother/BTN_FolderBrother and every *Selected image are unused.
 	const FString Title = FolderName.ToString();
-	if (Title.Contains(TEXT("어머니"))) SetSelectedTab(1);
-	else if (Title.Contains(TEXT("형"))) SetSelectedTab(2);
-	else SetSelectedTab(0);
+	UTexture2D* ActiveFolderIcon = SisterFolderIcon;
+	if (Title.Contains(TEXT("어머니"))) ActiveFolderIcon = MotherFolderIcon;
+	else if (Title.Contains(TEXT("형"))) ActiveFolderIcon = BrotherFolderIcon;
+
+	if (IMG_FolderSisterIdle)
+	{
+		IMG_FolderSisterIdle->SetBrushFromTexture(ActiveFolderIcon, true);
+		IMG_FolderSisterIdle->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+	if (IMG_FolderSisterSelected)
+	{
+		IMG_FolderSisterSelected->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	if (BTN_FolderMother)
+	{
+		BTN_FolderMother->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	if (BTN_FolderBrother)
+	{
+		BTN_FolderBrother->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
 	ClearFeedbackMessage();
 	if (IMG_FolderTitleIcon)
 	{
@@ -176,32 +210,38 @@ void UBalhwajeomTabletPersonFolderWidget::SetSelectedTab(const int32 TabIndex)
 
 void UBalhwajeomTabletPersonFolderWidget::RefreshTabVisuals()
 {
+	// IMG_FolderSisterIdle/Selected are no longer driven by SelectedTabIndex -- SetFolderHeader
+	// sets IMG_FolderSisterIdle's texture directly and always leaves it visible/Selected
+	// collapsed, since only BTN_FolderSister's slot is used now. Mother/Brother stay untouched
+	// here too since their buttons are permanently hidden by SetFolderHeader.
 	auto ShowPair = [](UImage* Idle, UImage* Selected, const bool bSelected)
 	{
 		if (Idle) Idle->SetVisibility(bSelected ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 		if (Selected) Selected->SetVisibility(bSelected ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	};
-	ShowPair(IMG_FolderSisterIdle, IMG_FolderSisterSelected, SelectedTabIndex == 0);
 	ShowPair(IMG_FolderMotherIdle, IMG_FolderMotherSelected, SelectedTabIndex == 1);
 	ShowPair(IMG_FolderBrotherIdle, IMG_FolderBrotherSelected, SelectedTabIndex == 2);
 }
 
+// BTN_FolderSister/Mother/Brother no longer switch between family members' folders (only
+// BTN_FolderSister's slot/icon is used at all now, see SetFolderHeader) -- with just one real
+// character in the current data, switching to "mother"/"brother" had nowhere valid to resolve to
+// and fell back to whichever character sat at index 0 (sister), which looked like clicking those
+// icons "closed back to the sister folder" instead of actually closing. All three now just close
+// the folder like BTN_FolderClose.
 void UBalhwajeomTabletPersonFolderWidget::HandleSisterTabClicked()
 {
-	SetSelectedTab(0);
-	OnTabRequested.Broadcast(0);
+	HandleCloseClicked();
 }
 
 void UBalhwajeomTabletPersonFolderWidget::HandleMotherTabClicked()
 {
-	SetSelectedTab(1);
-	OnTabRequested.Broadcast(1);
+	HandleCloseClicked();
 }
 
 void UBalhwajeomTabletPersonFolderWidget::HandleBrotherTabClicked()
 {
-	SetSelectedTab(2);
-	OnTabRequested.Broadcast(2);
+	HandleCloseClicked();
 }
 
 void UBalhwajeomTabletPersonFolderWidget::HandleFolderScrolled(const float CurrentOffset)
@@ -211,11 +251,27 @@ void UBalhwajeomTabletPersonFolderWidget::HandleFolderScrolled(const float Curre
 		return;
 	}
 	const float EndOffset = SB_EvidencePhotos->GetScrollOffsetOfEnd();
+	// Nothing to scroll (all content already fits): hide the indicator instead of leaving a
+	// scrollbar stuck at the top for a folder the player can never actually scroll.
+	IMG_FolderScroll->SetVisibility(
+		EndOffset > KINDA_SMALL_NUMBER ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	const float Ratio = EndOffset > KINDA_SMALL_NUMBER
 		? FMath::Clamp(CurrentOffset / EndOffset, 0.0f, 1.0f)
 		: 0.0f;
 	// 620px visible track minus the authored 135px thumb.
-	IMG_FolderScroll->SetRenderTranslation(FVector2D(0.0f, Ratio * 485.0f));
+	IMG_FolderScroll->SetRenderTranslation(FVector2D(0.0f, Ratio * 285.0f));
+}
+
+void UBalhwajeomTabletPersonFolderWidget::RefreshScrollIndicator()
+{
+	if (!SB_EvidencePhotos)
+	{
+		return;
+	}
+	// Content was just repopulated (ClearFolderSections/AddFolderSection), which never fires
+	// SB_EvidencePhotos's own OnUserScrolled -- re-run the same visibility/position check with
+	// its current offset (0 right after a refresh) instead of waiting for the player to scroll.
+	HandleFolderScrolled(SB_EvidencePhotos->GetScrollOffset());
 }
 
 void UBalhwajeomTabletPersonFolderWidget::ClearFolderSections()
@@ -306,6 +362,13 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
 
+	// Existing generated assets created Page_PersonFolder without Is Variable, so BindWidgetOptional
+	// cannot populate the property. Resolve it by name to keep those assets usable without rebuilding.
+	if (!Page_PersonFolder && WidgetTree)
+	{
+		Page_PersonFolder = WidgetTree->FindWidget(TEXT("Page_PersonFolder"));
+	}
+
 	if (BTN_Messenger)
 	{
 		BTN_Messenger->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleMessengerClicked);
@@ -376,9 +439,36 @@ void UBalhwajeomTabletWidget::NativeOnInitialized()
 
 	CurrentPage = ETabletPage::Home;
 	PageHistory.Reset();
+
+	// Keep the folder in the same logical-screen canvas as the switcher. Some existing assets
+	// either keep it inside the switcher or attach it to Canvas_ViewportRoot with a 1x1 slot;
+	// both layouts make the folder invisible when opened.
+	if (Page_PersonFolder && WidgetSwitcher_TabletPage)
+	{
+		if (UCanvasPanel* ScreenLayers = Cast<UCanvasPanel>(WidgetSwitcher_TabletPage->GetParent()))
+		{
+			if (Page_PersonFolder->GetParent() != ScreenLayers)
+			{
+				Page_PersonFolder->RemoveFromParent();
+				ScreenLayers->AddChildToCanvas(Page_PersonFolder);
+			}
+
+			if (UCanvasPanelSlot* FolderSlot = Cast<UCanvasPanelSlot>(Page_PersonFolder->Slot))
+			{
+				FolderSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+				FolderSlot->SetOffsets(FMargin(0.0f));
+				FolderSlot->SetZOrder(5);
+			}
+		}
+	}
+
 	if (WidgetSwitcher_TabletPage)
 	{
 		WidgetSwitcher_TabletPage->SetActiveWidgetIndex(ToPageIndex(CurrentPage));
+	}
+	if (Page_PersonFolder)
+	{
+		Page_PersonFolder->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	HidePopup();
 	UpdateUnreadBadge();
@@ -399,22 +489,37 @@ void UBalhwajeomTabletWidget::SetUnreadMessageCount(const int32 NewCount)
 
 void UBalhwajeomTabletWidget::SetTabletPage(const ETabletPage NewPage, const bool bAddToHistory)
 {
-	if (NewPage == CurrentPage)
-	{
-		HidePopup();
-		return;
-	}
-
-	if (bAddToHistory)
+	// Do not return early for the currently selected page. A previous attempt may have changed
+	// CurrentPage while its optional widget binding was unresolved, leaving the visual collapsed.
+	const bool bPageChanged = NewPage != CurrentPage;
+	if (bPageChanged && bAddToHistory)
 	{
 		PageHistory.Add(CurrentPage);
 	}
 
 	CurrentPage = NewPage;
 	HidePopup();
-	if (WidgetSwitcher_TabletPage)
+
+	// Resolve by designer name on every navigation as a fallback for legacy WBP_Tablet assets
+	// whose Page_PersonFolder was created without Is Variable.
+	if (!Page_PersonFolder && WidgetTree)
 	{
-		WidgetSwitcher_TabletPage->SetActiveWidgetIndex(ToPageIndex(CurrentPage));
+		Page_PersonFolder = WidgetTree->FindWidget(TEXT("Page_PersonFolder"));
+	}
+
+	if (Page_PersonFolder)
+	{
+		Page_PersonFolder->SetVisibility(
+			NewPage == ETabletPage::PersonFolder ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
+
+	// PersonFolder now renders as an overlay above the switcher (Page_PersonFolder) instead of a
+	// switcher page of its own, so opening it leaves the switcher on whatever page was already
+	// active underneath (in practice always Home, since that's the only place a folder is opened
+	// from) -- only every other page actually drives the switcher.
+	if (WidgetSwitcher_TabletPage && NewPage != ETabletPage::PersonFolder)
+	{
+		WidgetSwitcher_TabletPage->SetActiveWidgetIndex(ToPageIndex(NewPage));
 	}
 }
 
@@ -513,15 +618,23 @@ UBalhwajeomInvestigationSubsystem* UBalhwajeomTabletWidget::GetInvestigationSubs
 
 namespace
 {
-	/** Wraps a runtime-created file tile at the shared ~170x170 size, clipped so a long label's
-	 * ellipsis-truncated text can never visually spill into the neighboring tile. */
-	USizeBox* MakeFolderTileSlot(UWidgetTree& WidgetTree, UWidget* Content)
+	/** Wraps a runtime-created file tile, clipped so a long label's ellipsis-truncated text can
+	 * never visually spill into the neighboring tile. Defaults match every regular photo/memo-
+	 * tile; the single folder statement tile passes a larger explicit size instead. */
+	USizeBox* MakeFolderTileSlot(UWidgetTree& WidgetTree, UWidget* Content, const float Width = 144.0f, const float Height = 140.0f)
 	{
 		USizeBox* EntrySize = WidgetTree.ConstructWidget<USizeBox>();
-		EntrySize->SetWidthOverride(152.0f);
-		EntrySize->SetHeightOverride(125.0f);
+		EntrySize->SetWidthOverride(Width);
+		EntrySize->SetHeightOverride(Height);
 		EntrySize->SetClipping(EWidgetClipping::ClipToBounds);
-		EntrySize->AddChild(Content);
+		// Content (the whole file tile) is usually shorter than this box, since the statement
+		// tile and regular photo tiles pass different Height here on purpose. Bottom-align it so
+		// the label at its bottom lines up across tiles once AddTile also bottom-aligns these
+		// outer boxes against each other in the section's wrap row.
+		if (USizeBoxSlot* ContentSlot = Cast<USizeBoxSlot>(EntrySize->AddChild(Content)))
+		{
+			ContentSlot->SetVerticalAlignment(VAlign_Bottom);
+		}
 		return EntrySize;
 	}
 }
@@ -624,9 +737,15 @@ void UBalhwajeomTabletWidget::RefreshFolderContents()
 		{
 			return;
 		}
+		// Larger than the shared Class Default thumbnail size so the folder's single statement
+		// file's thumbnail stands out too, not just its outer tile box below. Must be called
+		// before Configure() -- see SetThumbnailSizeOverride.
+		Entry->SetThumbnailSizeOverride(144.0f, 100.0f);
 		Entry->Configure(StatementID, Label, StatementFileIcon);
 		Entry->OnPhotoSelected.AddUniqueDynamic(this, &ThisClass::HandleStatementTileSelected);
-		StatementSection->AddTile(MakeFolderTileSlot(*WidgetTree, Entry));
+		// Larger than the regular 152x125 photo/memory tiles so the folder's single statement
+		// file stands out. Adjust these two numbers directly to resize just this tile.
+		StatementSection->AddTile(MakeFolderTileSlot(*WidgetTree, Entry, 144.0f, 140.0f));
 	}
 
 	for (const FName PhotoID : VisiblePhotoIDs)
@@ -679,6 +798,10 @@ void UBalhwajeomTabletWidget::RefreshFolderContents()
 				SB_EvidencePhotos->AddChild(Section);
 			}
 		}
+	}
+	if (WBP_PersonFolder)
+	{
+		WBP_PersonFolder->RefreshScrollIndicator();
 	}
 }
 
@@ -836,6 +959,7 @@ void UBalhwajeomTabletWidget::RefreshPuzzleControls()
 						true,
 						ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFont() : nullptr,
 						ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFontSize() : 14);
+					Chip->OnWordChipClicked.AddUniqueDynamic(this, &ThisClass::HandleWordChipClicked);
 					WB_PuzzleWords->AddChild(Chip);
 				}
 			}
@@ -876,6 +1000,7 @@ void UBalhwajeomTabletWidget::RefreshPuzzleControls()
 						true,
 						ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFont() : nullptr,
 						ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFontSize() : 14);
+					Chip->OnWordChipClicked.AddUniqueDynamic(this, &ThisClass::HandleWordChipClicked);
 					if (UWrapBoxSlot* ChipSlot = Cast<UWrapBoxSlot>(WB_PuzzleWords->AddChild(Chip)))
 					{
 						ChipSlot->SetVerticalAlignment(VAlign_Center);
@@ -1028,6 +1153,7 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 				StatementFont,
 				StatementFontSize);
 			Blank->OnBlankDropped.AddUniqueDynamic(this, &ThisClass::HandleSentenceBlankDropped);
+			Blank->OnBlankClicked.AddUniqueDynamic(this, &ThisClass::HandleSentenceBlankClicked);
 			ActiveBlanksBySlot.Add(BlankSlotIndex, Blank);
 			AddToCurrentLine(Blank);
 			++BlankSlotIndex;
@@ -1222,6 +1348,56 @@ void UBalhwajeomTabletWidget::HandleSentenceBlankDropped(
 	}
 
 	EvaluatePuzzleIfComplete();
+}
+
+void UBalhwajeomTabletWidget::HandleWordChipClicked(const FName WordID)
+{
+	if (WordID.IsNone() || ActiveBlanksBySlot.IsEmpty())
+	{
+		// No active blank puzzle to place it into (e.g. the folder's plain acquired-word list).
+		return;
+	}
+
+	// Same destination a drag would pick: the lowest-index blank that isn't already filled.
+	TArray<int32> SlotIndices;
+	ActiveBlanksBySlot.GetKeys(SlotIndices);
+	SlotIndices.Sort();
+	for (const int32 SlotIndex : SlotIndices)
+	{
+		const bool bSlotFilled = ActiveSubmission.SubmittedWords.ContainsByPredicate(
+			[SlotIndex](const FSubmittedWordSlot& Candidate) { return Candidate.SlotIndex == SlotIndex; });
+		if (!bSlotFilled)
+		{
+			HandleSentenceBlankDropped(SlotIndex, WordID, INDEX_NONE);
+			return;
+		}
+	}
+}
+
+void UBalhwajeomTabletWidget::HandleSentenceBlankClicked(const int32 SlotIndex)
+{
+	UBalhwajeomTabletSentenceBlank* Blank = ActiveBlanksBySlot.FindRef(SlotIndex);
+	if (!Blank || !Blank->IsFilled())
+	{
+		return;
+	}
+
+	ActiveSubmission.SubmittedWords.RemoveAll(
+		[SlotIndex](const FSubmittedWordSlot& Candidate) { return Candidate.SlotIndex == SlotIndex; });
+	Blank->SetEmpty();
+
+	if (TXT_PuzzleFeedback)
+	{
+		TXT_PuzzleFeedback->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	FSentenceDefinition Sentence;
+	if (Investigation && Investigation->GetSentenceDefinition(ActiveSentenceID, Sentence) &&
+		Sentence.SentenceType == ESentenceType::PhotoAnalysis)
+	{
+		SetPhotoPuzzleErrorStyle(false);
+	}
 }
 
 void UBalhwajeomTabletWidget::HandlePhotoSlotDropped(const int32 SlotIndex, const FName PhotoID)
@@ -1783,6 +1959,7 @@ void UBalhwajeomTabletWidget::RefreshAcquiredWordsDisplay()
 					true,
 					ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFont() : nullptr,
 					ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFontSize() : 14);
+				Chip->OnWordChipClicked.AddUniqueDynamic(this, &ThisClass::HandleWordChipClicked);
 				WB_PuzzleWords->AddChild(Chip);
 			}
 		}
@@ -1810,6 +1987,7 @@ void UBalhwajeomTabletWidget::RefreshAcquiredWordsDisplay()
 			continue;
 		}
 		Chip->Configure(Record.WordID, Word.DisplayWord);
+		Chip->OnWordChipClicked.AddUniqueDynamic(this, &ThisClass::HandleWordChipClicked);
 		if (UWrapBoxSlot* ChipSlot = Cast<UWrapBoxSlot>(WB_PuzzleWords->AddChild(Chip)))
 		{
 			ChipSlot->SetVerticalAlignment(VAlign_Center);
@@ -1936,18 +2114,30 @@ void UBalhwajeomTabletPhotoButton::BuildFallbackVisuals()
 	}
 	BTN_File = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("BTN_File"));
 	MakeButtonTransparent(BTN_File);
-	UVerticalBox* Layout = WidgetTree->ConstructWidget<UVerticalBox>();
+	VB_FileLayout = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("VB_FileLayout"));
 	SB_Thumbnail = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("SB_Thumbnail"));
-	SB_Thumbnail->SetWidthOverride(96.0f);
-	SB_Thumbnail->SetHeightOverride(64.0f);
+	SB_Thumbnail->SetWidthOverride(ThumbnailWidth);
+	SB_Thumbnail->SetHeightOverride(ThumbnailHeight);
 	IMG_Thumbnail = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("IMG_Thumbnail"));
 	SB_Thumbnail->AddChild(IMG_Thumbnail);
-	Layout->AddChildToVerticalBox(SB_Thumbnail);
+	VB_FileLayout->AddChildToVerticalBox(SB_Thumbnail);
 	TXT_Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TXT_Label"));
-	Layout->AddChildToVerticalBox(TXT_Label);
-	BTN_File->SetContent(Layout);
+	VB_FileLayout->AddChildToVerticalBox(TXT_Label);
+	BTN_File->SetContent(VB_FileLayout);
 	WidgetTree->RootWidget = BTN_File;
 	BTN_File->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleClicked);
+}
+
+void UBalhwajeomTabletPhotoButton::SetThumbnailSizeOverride(const float InWidth, const float InHeight)
+{
+	bHasThumbnailSizeOverride = true;
+	ThumbnailWidthOverride = InWidth;
+	ThumbnailHeightOverride = InHeight;
+	if (SB_Thumbnail)
+	{
+		SB_Thumbnail->SetWidthOverride(ThumbnailWidthOverride);
+		SB_Thumbnail->SetHeightOverride(ThumbnailHeightOverride);
+	}
 }
 
 void UBalhwajeomTabletPhotoButton::Configure(
@@ -1960,15 +2150,33 @@ void UBalhwajeomTabletPhotoButton::Configure(
 	{
 		BuildFallbackVisuals();
 	}
+	if (VB_FileLayout)
+	{
+		// Bottom-anchor the thumbnail+label stack within BTN_File instead of the default top
+		// anchor, so the label lines up across tiles whose outer box height differs (e.g. the
+		// folder's taller statement tile next to regular photo tiles bottom-aligned in the same
+		// wrap row -- see UBalhwajeomTabletFolderSection::AddTile).
+		if (UButtonSlot* LayoutSlot = Cast<UButtonSlot>(VB_FileLayout->Slot))
+		{
+			LayoutSlot->SetVerticalAlignment(VAlign_Bottom);
+		}
+	}
 	if (TXT_Label)
 	{
 		TXT_Label->SetText(InLabel);
 		TXT_Label->SetToolTipText(InLabel);
-		TXT_Label->SetJustification(ETextJustify::Left);
+		TXT_Label->SetJustification(ETextJustify::Center);
 		TXT_Label->SetMinDesiredWidth(0.0f);
 		TXT_Label->SetAutoWrapText(false);
 		TXT_Label->SetClipping(EWidgetClipping::ClipToBounds);
 		TXT_Label->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
+		FSlateFontInfo LabelFontInfo = TXT_Label->GetFont();
+		if (LabelFont)
+		{
+			LabelFontInfo.FontObject = LabelFont;
+		}
+		LabelFontInfo.Size = LabelFontSize;
+		TXT_Label->SetFont(LabelFontInfo);
 	}
 	if (BTN_File)
 	{
@@ -1982,6 +2190,12 @@ void UBalhwajeomTabletPhotoButton::Configure(
 	{
 		SB_Thumbnail->SetVisibility(
 			Thumbnail ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		// Applied here (not just in BuildFallbackVisuals) so it still takes effect when the WBP
+		// provides its own Designer-authored SB_Thumbnail instead of the C++ fallback layout.
+		// SetThumbnailSizeOverride (called before Configure for the folder's statement tile)
+		// takes priority over the shared Class Default.
+		SB_Thumbnail->SetWidthOverride(bHasThumbnailSizeOverride ? ThumbnailWidthOverride : ThumbnailWidth);
+		SB_Thumbnail->SetHeightOverride(bHasThumbnailSizeOverride ? ThumbnailHeightOverride : ThumbnailHeight);
 	}
 }
 
@@ -2087,15 +2301,17 @@ void UBalhwajeomTabletFolderSection::BuildFallbackVisuals()
 	ArrowFont.Size = 20;
 	ArrowText->SetFont(ArrowFont);
 	ArrowText->SetColorAndOpacity(FSlateColor(FLinearColor(0.91f, 0.86f, 0.78f, 1.0f)));
+	// UTextBlock defaults to a (1,1) drop shadow; every other text piece in this file clears it
+	// explicitly, but this one was missed.
+	ArrowText->SetShadowOffset(FVector2D::ZeroVector);
 	UHorizontalBoxSlot* ArrowSlot = HeaderRow->AddChildToHorizontalBox(ArrowText);
 	ArrowSlot->SetPadding(FMargin(0.0f, 0.0f, 10.0f, 0.0f));
 	ArrowSlot->SetVerticalAlignment(VAlign_Center);
 
 	TitleText = WidgetTree->ConstructWidget<UTextBlock>();
-	FSlateFontInfo TitleFont = TitleText->GetFont();
-	TitleFont.Size = 22;
-	TitleText->SetFont(TitleFont);
+	// Font/size applied in Configure() instead (also covers a Designer-authored TitleText).
 	TitleText->SetColorAndOpacity(FSlateColor(FLinearColor(0.91f, 0.86f, 0.78f, 1.0f)));
+	TitleText->SetShadowOffset(FVector2D::ZeroVector);
 	UHorizontalBoxSlot* TitleSlot = HeaderRow->AddChildToHorizontalBox(TitleText);
 	TitleSlot->SetVerticalAlignment(VAlign_Center);
 
@@ -2126,6 +2342,26 @@ void UBalhwajeomTabletFolderSection::Configure(const FText& InTitle, const bool 
 		BuildFallbackVisuals();
 	}
 
+	if (TitleText)
+	{
+		// Applied here (not just in BuildFallbackVisuals) so it still takes effect when the WBP
+		// provides its own Designer-authored TitleText instead of the C++ fallback layout. Same
+		// reasoning for the shadow below -- a Designer TitleText keeps whatever Shadow Offset it
+		// was authored with unless this clears it every time too.
+		FSlateFontInfo Font = TitleText->GetFont();
+		if (TitleFont)
+		{
+			Font.FontObject = TitleFont;
+		}
+		Font.Size = TitleFontSize;
+		TitleText->SetFont(Font);
+		TitleText->SetShadowOffset(FVector2D::ZeroVector);
+	}
+	if (ArrowText)
+	{
+		ArrowText->SetShadowOffset(FVector2D::ZeroVector);
+	}
+
 	ContentWrapBox->SetVisibility(bExpanded ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	RefreshHeaderText();
 }
@@ -2136,7 +2372,13 @@ void UBalhwajeomTabletFolderSection::AddTile(UWidget* Tile)
 	{
 		return;
 	}
-	ContentWrapBox->AddChild(Tile);
+	// The statement tile (144x100) and regular photo/memory tiles (144x81) sit in the same wrap
+	// row with different heights; bottom-align every tile so they share one baseline instead of
+	// the taller statement tile hanging lower than its row-mates.
+	if (UWrapBoxSlot* TileSlot = Cast<UWrapBoxSlot>(ContentWrapBox->AddChild(Tile)))
+	{
+		TileSlot->SetVerticalAlignment(VAlign_Bottom);
+	}
 	++TileCount;
 	RefreshHeaderText();
 }
@@ -2283,6 +2525,19 @@ FReply UBalhwajeomTabletWordChip::NativeOnMouseButtonDown(const FGeometry& InGeo
 		return FReply::Handled().DetectDrag(TakeWidget(), EKeys::LeftMouseButton);
 	}
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+FReply UBalhwajeomTabletWordChip::NativeOnMouseButtonUp(
+	const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// Only reached when NativeOnDragDetected never fired (a plain click, mouse never moved past the
+	// drag threshold) -- an actual drag's mouse-up is consumed by the drop target instead.
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		OnWordChipClicked.Broadcast(WordID);
+		return FReply::Handled();
+	}
+	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
 }
 
 void UBalhwajeomTabletWordChip::NativeOnDragDetected(
@@ -2459,6 +2714,19 @@ FReply UBalhwajeomTabletSentenceBlank::NativeOnMouseButtonDown(const FGeometry& 
 		return FReply::Handled().DetectDrag(TakeWidget(), EKeys::LeftMouseButton);
 	}
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+FReply UBalhwajeomTabletSentenceBlank::NativeOnMouseButtonUp(
+	const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// Only reached when NativeOnDragDetected never fired (a plain click) -- an actual drag's
+	// mouse-up is consumed by whichever blank it gets dropped on instead.
+	if (!FilledWordID.IsNone() && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		OnBlankClicked.Broadcast(SlotIndex);
+		return FReply::Handled();
+	}
+	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
 }
 
 void UBalhwajeomTabletSentenceBlank::NativeOnDragDetected(

@@ -7,6 +7,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/Texture.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "ItemInspection/JMItemInspectionData.h"
@@ -108,6 +109,8 @@ bool FJMItemInspectionPaperSurfaceWidgetTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Surface widget follows the same rotating pivot as the mesh"), SurfaceComponent->GetAttachParent(), PreviewPivot);
 	if (PreviewPivot)
 	{
+		const FRotator AuthoredInitialRotation(-18.0f, 61.0f, 7.0f);
+		PaperData->ViewSettings.InitialRotation = AuthoredInitialRotation;
 		FJMItemInspectionTransitionSource TransitionSource;
 		TransitionSource.bIsValid = true;
 		TransitionSource.bIsOnScreen = true;
@@ -124,10 +127,18 @@ bool FJMItemInspectionPaperSurfaceWidgetTest::RunTest(const FString& Parameters)
 		PreviewActor->UpdateEnterTransition(0.5f);
 		PreviewActor->CompleteEnterTransition();
 		TestTrue(
-			TEXT("Entrance transition preserves the sampled third-person source rotation"),
-			PreviewPivot->GetRelativeRotation().Quaternion().Equals(TransitionSource.PreviewRelativeRotation, KINDA_SMALL_NUMBER));
+			TEXT("Entrance transition commits the Data Asset initial rotation"),
+			PreviewPivot->GetRelativeRotation().Quaternion().Equals(AuthoredInitialRotation.Quaternion(), KINDA_SMALL_NUMBER));
 		if (PreviewMeshComponent)
 		{
+			TArray<UTexture*> UsedTextures;
+			PreviewMeshComponent->GetUsedTextures(UsedTextures, EMaterialQualityLevel::High);
+			for (const UTexture* Texture : UsedTextures)
+			{
+				TestTrue(
+					TEXT("Preview material textures request full mip residency before capture"),
+					Texture && Texture->ShouldMipLevelsBeForcedResident());
+			}
 			TestTrue(
 				TEXT("Entrance transition commits the Data Asset preview scale"),
 				PreviewMeshComponent->GetRelativeScale3D().Equals(FVector(PaperData->ViewSettings.PreviewScale), KINDA_SMALL_NUMBER));
@@ -140,6 +151,7 @@ bool FJMItemInspectionPaperSurfaceWidgetTest::RunTest(const FString& Parameters)
 				static_cast<float>(FMath::Abs(SceneCapture->GetRelativeLocation().X)));
 		}
 
+		PaperData->ViewSettings.InitialRotation = FRotator::ZeroRotator;
 		PreviewActor->ResetPreviewRotation();
 		PreviewActor->RotatePreview(30.0f, 0.0f);
 		const FQuat ExpectedYawRotation = FQuat(FVector::UpVector, FMath::DegreesToRadians(-10.5f));

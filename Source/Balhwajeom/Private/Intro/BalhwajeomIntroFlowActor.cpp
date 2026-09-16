@@ -2,6 +2,7 @@
 
 #include "CameraSystem/BalhwajeomCameraPlayerController.h"
 #include "Components/AudioComponent.h"
+#include "Interaction/BalhwajeomGateDoorActor.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Investigation/EvidenceDefinitions.h"
 #include "GameFramework/Pawn.h"
@@ -77,10 +78,14 @@ void ABalhwajeomIntroFlowActor::BeginPlay()
 	ScreenFadeWidget->AddToPlayerScreen(9999);
 
 	SetGameplayEnabled(false);
-	if (BGM)
+	if (USoundBase* const TitleTrack = Title_BGM ? Title_BGM.Get() : BGM.Get())
 	{
-		BGMAudioComponent->SetSound(BGM);
+		BGMAudioComponent->SetSound(TitleTrack);
 		BGMAudioComponent->FadeIn(BGMFadeDuration, BGMVolume);
+	}
+	if (BGMTriggerDoor)
+	{
+		BGMTriggerDoor->OnDoorFullyOpened.AddUniqueDynamic(this, &ThisClass::HandleBGMTriggerDoorOpened);
 	}
 	State = EBalhwajeomIntroState::Title;
 	ScreenFadeWidget->FadeFromBlack(InitialFadeDuration);
@@ -88,6 +93,7 @@ void ABalhwajeomIntroFlowActor::BeginPlay()
 
 void ABalhwajeomIntroFlowActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (BGMTriggerDoor) BGMTriggerDoor->OnDoorFullyOpened.RemoveAll(this);
 	if (SequencePlayer) SequencePlayer->OnFinished.RemoveAll(this);
 	if (IntroMediaPlayer)
 	{
@@ -127,6 +133,17 @@ void ABalhwajeomIntroFlowActor::HandleStartRequested()
 	State = EBalhwajeomIntroState::TransitionToCinematic;
 	if (BGMAudioComponent->IsPlaying()) BGMAudioComponent->FadeOut(BGMFadeDuration, 0.0f);
 	ScreenFadeWidget->FadeToBlack(TransitionFadeDuration);
+}
+
+void ABalhwajeomIntroFlowActor::HandleBGMTriggerDoorOpened()
+{
+	if (!BGM_Sound)
+	{
+		return;
+	}
+	BGMAudioComponent->Stop();
+	BGMAudioComponent->SetSound(BGM_Sound);
+	BGMAudioComponent->FadeIn(BGMFadeDuration, BGMVolume);
 }
 
 void ABalhwajeomIntroFlowActor::ResetInvestigationPhotosIfRequested()
