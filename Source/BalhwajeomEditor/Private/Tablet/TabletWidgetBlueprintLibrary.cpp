@@ -101,7 +101,6 @@ namespace TabletDesigner
 	const TCHAR* MessengerSisterPath = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/messenger_sis.messenger_sis");
 	const TCHAR* MessengerBrotherPath = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/messenger_bro.messenger_bro");
 	const TCHAR* MessengerSelectedPath = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/messenger_selected.messenger_selected");
-	const TCHAR* MessengerScrollPath = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/messenger_scroll.messenger_scroll");
 	const TCHAR* InternetAssetName = TEXT("WBP_Internet");
 	const TCHAR* InternetAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_Internet.WBP_Internet");
 	const TCHAR* InternetClassPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_Internet.WBP_Internet_C");
@@ -1227,10 +1226,6 @@ namespace TabletDesigner
 			CurrentRoomName->SetJustification(ETextJustify::Center);
 			CurrentRoomName->SetShadowOffset(FVector2D::ZeroVector);
 			Place(Root, CurrentRoomName, 337.0f, 82.0f, 293.0f, 32.0f, 4);
-
-			UImage* ScrollThumb = MakeTextureImage(TEXT("IMG_MessengerScroll"), MessengerScrollPath, false);
-			ScrollThumb->SetVisibility(ESlateVisibility::HitTestInvisible);
-			Place(Root, ScrollThumb, 639.0f, 279.0f, 9.0f, 135.0f, 4);
 
 			// messenger_BG already contains the close glyph. Keep an invisible button over it
 			// so the native tablet back-navigation event remains intact.
@@ -3850,7 +3845,7 @@ bool UTabletWidgetBlueprintLibrary::CreateIntroFlowAssets()
 		UButton* Start = Tree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("BTN_Start"));
 		Start->bIsVariable = true;
 		Menu->OnVariableAdded(Start->GetFName());
-		Start->SetBackgroundColor(FLinearColor(0.12f, 0.12f, 0.11f, 0.95f));
+		Start->SetBackgroundColor(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
 		UTextBlock* StartText = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TXT_Start"));
 		StartText->SetText(FText::FromString(TEXT("시작하기")));
 		StartText->SetJustification(ETextJustify::Center);
