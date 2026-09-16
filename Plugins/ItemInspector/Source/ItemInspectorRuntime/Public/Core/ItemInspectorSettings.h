@@ -31,7 +31,7 @@ public:
 	TSoftClassPtr<UJMItemInspectionWidgetBase> DefaultInspectorWidgetClass;
 
 	UPROPERTY(EditAnywhere, Config, Category = "Item Inspection")
-	FIntPoint DefaultRenderTargetSize = FIntPoint(1024, 1024);
+	FIntPoint DefaultRenderTargetSize = FIntPoint(1600, 1600);
 
 	UPROPERTY(EditAnywhere, Config, Category = "Item Inspection", meta = (ClampMin = "0.01"))
 	float DefaultRotationSensitivity = 0.35f;
