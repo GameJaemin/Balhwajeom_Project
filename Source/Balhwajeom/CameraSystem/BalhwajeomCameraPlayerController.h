@@ -10,6 +10,7 @@
 
 class UUserWidget;
 class UWidget;
+class UImage;
 class UTextBlock;
 class UTexture2D;
 class UBalhwajeomInvestigationSubsystem;
@@ -161,6 +162,19 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> InteractionPromptTextWidget;
 
+	/** Center-screen image that switches between the idle dot and interactable magnifier. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction")
+	FName InteractionReticleWidgetName = TEXT("InteractionReticle");
+
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> InteractionReticleWidget;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Interaction")
+	TObjectPtr<UTexture2D> InteractionReticleDotTexture;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Interaction")
+	TObjectPtr<UTexture2D> InteractionReticleMagnifierTexture;
+
 	/** Applied when a target supplies an action; {Action} is replaced at runtime. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction")
 	FText InteractionPromptFormat = NSLOCTEXT(
@@ -194,6 +208,7 @@ protected:
 private:
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FBedMemoryTestAccessor;
+	friend struct FInteractionReticleTestAccessor;
 #endif
 
 	void HandleMouseYaw(float Value);
@@ -216,6 +231,7 @@ private:
 	bool ShouldShowInteractionPrompt() const;
 	FText ResolveInteractionPromptActionText() const;
 	void RefreshInteractionPromptText(bool bHasValidInteractionTarget);
+	void RefreshInteractionReticle(bool bHasValidInteractionTarget);
 	bool IsInteractionPromptSuppressedByTablet() const;
 	bool IsInteractionPromptSuppressedByPhotoCamera() const;
 	void UpdateInteractionPrompt(float DeltaSeconds);
@@ -224,6 +240,8 @@ private:
 
 	/** Fade value of the [F] prompt before any tutorial blink is applied. */
 	float InteractionPromptAlpha = 0.0f;
+	bool bInteractionReticleStateInitialized = false;
+	bool bInteractionReticleShowsInteractable = false;
 	FText DefaultInteractionPromptText;
 	float BedMemoryHUDAlpha = 0.0f;
 	bool bBedMemoryHUDActive = false;
