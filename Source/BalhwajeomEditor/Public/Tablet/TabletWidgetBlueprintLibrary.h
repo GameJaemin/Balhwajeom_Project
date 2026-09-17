@@ -64,6 +64,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Inspection")
 	static bool ConfigureObjectLabelLayout();
 
+	/** Replaces WBP_Interact's prompt TextBlock with Multi Shadow Text while preserving its name and layout references. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Interaction")
+	static bool ConfigureInteractionPromptMultiShadowText();
+
 	/** Matches the focus guide's icon layout and copies WBP_ObjectLabel's Multi Shadow Text styling. */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Inspection")
 	static bool ConfigureEvidenceFocusGuideLayout();

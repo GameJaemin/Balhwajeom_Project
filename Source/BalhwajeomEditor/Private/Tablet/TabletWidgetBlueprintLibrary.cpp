@@ -75,6 +75,7 @@
 #include "MediaTexture.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
+#include "UObject/UnrealType.h"
 #include "WidgetBlueprint.h"
 #include "WidgetBlueprintFactory.h"
 
@@ -2688,6 +2689,131 @@ bool UTabletWidgetBlueprintLibrary::ConfigureObjectLabelLayout()
 		TEXT("OBJECT_LABEL_LAYOUT Result=%s LabelContainerX=%.1f"),
 		bSaved ? TEXT("Success") : TEXT("Failure"),
 		Position.X);
+	return bSaved;
+}
+
+bool UTabletWidgetBlueprintLibrary::ConfigureInteractionPromptMultiShadowText()
+{
+	static const TCHAR* InteractionPromptPath =
+		TEXT("/Game/Balhwajeom/UI/HUD/WBP_Interact.WBP_Interact");
+	static const FName PromptTextName(TEXT("TextBlock_50"));
+
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, InteractionPromptPath);
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("Interaction prompt conversion failed: WBP_Interact or its widget tree is missing."));
+		return false;
+	}
+
+	UWidget* ExistingWidget = Blueprint->WidgetTree->FindWidget(PromptTextName);
+	if (!ExistingWidget)
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("Interaction prompt conversion failed: widget '%s' is missing."),
+			*PromptTextName.ToString());
+		return false;
+	}
+
+	if (!ExistingWidget->IsA<UMultiShadowTextWidget>())
+	{
+		UTextBlock* ExistingTextBlock = Cast<UTextBlock>(ExistingWidget);
+		UPanelWidget* Parent = ExistingWidget->GetParent();
+		if (!ExistingTextBlock || !Parent)
+		{
+			UE_LOG(LogTemp, Error,
+				TEXT("Interaction prompt conversion failed: '%s' is not a replaceable TextBlock."),
+				*PromptTextName.ToString());
+			return false;
+		}
+
+		UMultiShadowTextWidget* Replacement =
+			Blueprint->WidgetTree->ConstructWidget<UMultiShadowTextWidget>(
+				UMultiShadowTextWidget::StaticClass(),
+				TEXT("InteractionPrompt_MultiShadowReplacement"));
+		Replacement->bIsVariable = ExistingTextBlock->bIsVariable;
+		Replacement->SetText(ExistingTextBlock->GetText());
+		Replacement->Font = ExistingTextBlock->GetFont();
+		Replacement->TextColor =
+			ExistingTextBlock->GetColorAndOpacity().GetSpecifiedColor();
+		if (const FByteProperty* JustificationProperty =
+			FindFProperty<FByteProperty>(
+				UTextLayoutWidget::StaticClass(), TEXT("Justification")))
+		{
+			Replacement->Justification = static_cast<ETextJustify::Type>(
+				JustificationProperty->GetPropertyValue_InContainer(ExistingTextBlock));
+		}
+		Replacement->bAutoWrapText = ExistingTextBlock->GetAutoWrapText();
+		Replacement->WrapTextAt = ExistingTextBlock->GetWrapTextAt();
+		Replacement->SetVisibility(ExistingTextBlock->GetVisibility());
+		Replacement->SetIsEnabled(ExistingTextBlock->GetIsEnabled());
+		Replacement->SetRenderOpacity(ExistingTextBlock->GetRenderOpacity());
+		Replacement->SetRenderTransform(ExistingTextBlock->GetRenderTransform());
+		Replacement->SetRenderTransformPivot(
+			ExistingTextBlock->GetRenderTransformPivot());
+		Replacement->SetClipping(ExistingTextBlock->GetClipping());
+
+		const FLinearColor ExistingShadowColor =
+			ExistingTextBlock->GetShadowColorAndOpacity();
+		if (ExistingShadowColor.A > KINDA_SMALL_NUMBER)
+		{
+			Replacement->ShadowLayers.Reset();
+			FMultiShadowLayer& PreservedShadow = Replacement->ShadowLayers.AddDefaulted_GetRef();
+			PreservedShadow.Offset = ExistingTextBlock->GetShadowOffset();
+			PreservedShadow.Blur = 0.0f;
+			PreservedShadow.Spread = 0.0f;
+			PreservedShadow.Color = FLinearColor(
+				ExistingShadowColor.R,
+				ExistingShadowColor.G,
+				ExistingShadowColor.B,
+				1.0f);
+			PreservedShadow.Opacity = ExistingShadowColor.A;
+		}
+
+		if (!Parent->ReplaceChild(ExistingTextBlock, Replacement))
+		{
+			UE_LOG(LogTemp, Error,
+				TEXT("Interaction prompt conversion failed: replacing '%s' in its parent failed."),
+				*PromptTextName.ToString());
+			return false;
+		}
+
+		const FName TrashName = MakeUniqueObjectName(
+			GetTransientPackage(),
+			ExistingTextBlock->GetClass(),
+			TEXT("TRASH_InteractionPromptText"));
+		ExistingTextBlock->Rename(
+			*TrashName.ToString(), GetTransientPackage(), REN_DontCreateRedirectors);
+		if (!Replacement->Rename(
+			*PromptTextName.ToString(), Blueprint->WidgetTree, REN_DontCreateRedirectors))
+		{
+			UE_LOG(LogTemp, Error,
+				TEXT("Interaction prompt conversion failed: preserving widget name '%s' failed."),
+				*PromptTextName.ToString());
+			return false;
+		}
+
+		FBlueprintEditorUtils::ReplaceVariableReferences(
+			Blueprint, PromptTextName, PromptTextName);
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+	}
+
+	UMultiShadowTextWidget* PromptText = Cast<UMultiShadowTextWidget>(
+		Blueprint->WidgetTree->FindWidget(PromptTextName));
+	if (!PromptText)
+	{
+		UE_LOG(LogTemp, Error,
+			TEXT("Interaction prompt conversion failed: replacement did not retain '%s'."),
+			*PromptTextName.ToString());
+		return false;
+	}
+
+	const bool bSaved = TabletDesigner::SaveAndCompile(Blueprint);
+	UE_LOG(LogTemp, Display,
+		TEXT("INTERACTION_PROMPT_MULTI_SHADOW Result=%s Widget=%s Asset=%s"),
+		bSaved ? TEXT("Success") : TEXT("Failure"),
+		*PromptTextName.ToString(),
+		InteractionPromptPath);
 	return bSaved;
 }
 

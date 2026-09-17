@@ -17,6 +17,7 @@
 #include "Interaction/PlayerInteractionComponent.h"
 #include "Interaction/WorldInteractable.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
+#include "MultiShadowText.h"
 #include "Story/StoryStateSubsystem.h"
 #include "Story/StoryStateTags.h"
 #include "Tutorial/BalhwajeomTutorialOverlayTriggers.h"
@@ -27,6 +28,47 @@
 #include "UI/BalhwajeomInteractionModalWidget.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
+
+namespace
+{
+	bool TryGetPromptText(const UWidget* Widget, FText& OutText)
+	{
+		if (const UMultiShadowTextWidget* MultiShadowText =
+			Cast<UMultiShadowTextWidget>(Widget))
+		{
+			OutText = MultiShadowText->Text;
+			return true;
+		}
+		if (const UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
+		{
+			OutText = TextBlock->GetText();
+			return true;
+		}
+		return false;
+	}
+
+	bool TrySetPromptText(UWidget* Widget, const FText& Text)
+	{
+		if (UMultiShadowTextWidget* MultiShadowText =
+			Cast<UMultiShadowTextWidget>(Widget))
+		{
+			if (!MultiShadowText->Text.EqualTo(Text))
+			{
+				MultiShadowText->SetText(Text);
+			}
+			return true;
+		}
+		if (UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
+		{
+			if (!TextBlock->GetText().EqualTo(Text))
+			{
+				TextBlock->SetText(Text);
+			}
+			return true;
+		}
+		return false;
+	}
+}
 
 ABalhwajeomCameraPlayerController::ABalhwajeomCameraPlayerController()
 {
@@ -656,8 +698,8 @@ void ABalhwajeomCameraPlayerController::EnsureInteractionPrompt()
 		InteractionPromptWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 		InteractionPromptFadeTarget =
 			InteractionPromptWidget->GetWidgetFromName(InteractionPromptFadeTargetName);
-		InteractionPromptTextWidget = Cast<UTextBlock>(
-			InteractionPromptWidget->GetWidgetFromName(InteractionPromptTextWidgetName));
+		InteractionPromptTextWidget =
+			InteractionPromptWidget->GetWidgetFromName(InteractionPromptTextWidgetName);
 		InteractionReticleWidget = Cast<UImage>(
 			InteractionPromptWidget->GetWidgetFromName(InteractionReticleWidgetName));
 		// Older prompt widgets named their text TextBlock_50. Keep this
@@ -670,7 +712,7 @@ void ABalhwajeomCameraPlayerController::EnsureInteractionPrompt()
 		}
 		if (!InteractionPromptTextWidget)
 		{
-			InteractionPromptTextWidget = Cast<UTextBlock>(InteractionPromptFadeTarget);
+			InteractionPromptTextWidget = InteractionPromptFadeTarget;
 		}
 		// Keep compatibility with the current WBP_Interact asset while allowing the
 		// designer-facing widget name to be migrated to InteractionReticle.
@@ -679,9 +721,16 @@ void ABalhwajeomCameraPlayerController::EnsureInteractionPrompt()
 			InteractionReticleWidget = Cast<UImage>(
 				InteractionPromptWidget->GetWidgetFromName(TEXT("Image_108")));
 		}
-		if (InteractionPromptTextWidget)
+		if (InteractionPromptTextWidget &&
+			!TryGetPromptText(InteractionPromptTextWidget, DefaultInteractionPromptText))
 		{
-			DefaultInteractionPromptText = InteractionPromptTextWidget->GetText();
+			UE_LOG(
+				LogTemp,
+				Warning,
+				TEXT("%s: interaction prompt text widget '%s' is neither TextBlock nor Multi Shadow Text."),
+				*GetName(),
+				*InteractionPromptTextWidgetName.ToString());
+			InteractionPromptTextWidget = nullptr;
 		}
 		if (InteractionPromptFadeTarget)
 		{
@@ -808,10 +857,7 @@ void ABalhwajeomCameraPlayerController::RefreshInteractionPromptText(
 		DesiredText = FText::Format(InteractionPromptFormat, Arguments);
 	}
 
-	if (!InteractionPromptTextWidget->GetText().EqualTo(DesiredText))
-	{
-		InteractionPromptTextWidget->SetText(DesiredText);
-	}
+	TrySetPromptText(InteractionPromptTextWidget, DesiredText);
 }
 
 void ABalhwajeomCameraPlayerController::RefreshInteractionReticle(
