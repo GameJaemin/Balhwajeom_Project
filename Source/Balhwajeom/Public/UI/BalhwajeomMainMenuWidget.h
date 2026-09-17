@@ -40,6 +40,7 @@ public:
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> BTN_Start;
@@ -58,11 +59,36 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Title|Media")
 	TObjectPtr<UMediaTexture> BackgroundMediaTexture;
 
+	/** BTN_Start's opacity while the cursor is away. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Title|Hover",
+		meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float StartIdleOpacity = 1.0f;
+
+	/** BTN_Start's opacity while it is hovered. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Title|Hover",
+		meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float StartHoverOpacity = 0.5f;
+
+	/** Seconds for a complete fade between the two. Zero snaps. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Title|Hover",
+		meta = (ClampMin = "0.0", Units = "s"))
+	float StartHoverFadeDuration = 0.18f;
+
 private:
 	UFUNCTION()
 	void HandleStartClicked();
 
 	void PlayBackgroundLoop();
 
+	/**
+	 * Makes every button state draw the Normal brush. The designer asset authored a
+	 * separate Hovered texture, and Slate swapping it on the hover edge is what read as
+	 * flickering; the eased opacity in NativeTick is the feedback now.
+	 */
+	void UnifyStartButtonStates();
+
 	bool bStartAccepted = false;
+
+	/** 0 while the cursor is away, 1 while hovered; eased before it becomes opacity. */
+	float StartHoverAlpha = 0.0f;
 };
