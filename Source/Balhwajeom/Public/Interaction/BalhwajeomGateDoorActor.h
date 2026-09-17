@@ -110,6 +110,16 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Text")
 	FText OpenedLabel;
 
+	/**
+	 * Put across the top of the screen the moment this door's story condition is met, e.g.
+	 * "문이 열리는 소리가 난 것 같다..". The player is usually somewhere else when a door
+	 * unlocks, so without a nudge the change goes unnoticed.
+	 *
+	 * Empty means no notification, which is what every door placed before this existed gets.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Text")
+	FText UnlockedNotificationText;
+
 	/** Local offset of the label from the door mesh's bounds centre. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Text")
 	FVector ObjectLabelOffset = FVector::ZeroVector;
@@ -150,6 +160,9 @@ private:
 
 	/** Guards OnDoorFullyOpened so it only ever fires once per door. */
 	bool bHasBroadcastDoorOpened = false;
+
+	/** Guards the unlock notification the same way, in case a condition flickers. */
+	bool bHasAnnouncedUnlock = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UUserWidget> LockedFeedbackWidget;

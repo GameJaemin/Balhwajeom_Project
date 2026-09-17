@@ -22,6 +22,9 @@
 #include "Story/StoryStateTags.h"
 #include "Tutorial/BalhwajeomTutorialOverlayTriggers.h"
 #include "Tutorial/BalhwajeomTutorialOverlayPresenter.h"
+#include "Investigation/BalhwajeomInvestigationProgressNotifier.h"
+#include "UI/BalhwajeomEmergencyEscapePresenter.h"
+#include "UI/BalhwajeomNotificationPresenter.h"
 #include "Tablet/BalhwajeomTabletComponent.h"
 #include "Tutorial/BalhwajeomTutorialDirector.h"
 #include "UI/BalhwajeomKeywordCounterWidget.h"
@@ -142,6 +145,49 @@ void ABalhwajeomCameraPlayerController::BeginPlay()
 	EnsureBedMemoryHUD();
 	EnsureInteractionPrompt();
 	EnsureTutorialOverlayPresenter();
+	EnsureNotificationPresenter();
+	EnsureEmergencyEscapePresenter();
+	EnsureInvestigationProgressNotifier();
+}
+
+void ABalhwajeomCameraPlayerController::EnsureInvestigationProgressNotifier()
+{
+	if (!IsLocalController() || FindComponentByClass<UBalhwajeomInvestigationProgressNotifier>())
+	{
+		return;
+	}
+
+	// Registered after the notification presenter above, so the banner it asks for exists by
+	// the time the last keyword lands.
+	UBalhwajeomInvestigationProgressNotifier* Notifier =
+		NewObject<UBalhwajeomInvestigationProgressNotifier>(this, TEXT("InvestigationProgressNotifier"));
+	Notifier->RegisterComponent();
+}
+
+void ABalhwajeomCameraPlayerController::EnsureNotificationPresenter()
+{
+	if (!IsLocalController() || FindComponentByClass<UBalhwajeomNotificationPresenter>())
+	{
+		return;
+	}
+
+	// Created rather than declared as a default subobject, for the same reason the tutorial
+	// overlay presenter is: a Blueprint controller saved before this existed still gets one.
+	UBalhwajeomNotificationPresenter* Presenter =
+		NewObject<UBalhwajeomNotificationPresenter>(this, TEXT("NotificationPresenter"));
+	Presenter->RegisterComponent();
+}
+
+void ABalhwajeomCameraPlayerController::EnsureEmergencyEscapePresenter()
+{
+	if (!IsLocalController() || FindComponentByClass<UBalhwajeomEmergencyEscapePresenter>())
+	{
+		return;
+	}
+
+	UBalhwajeomEmergencyEscapePresenter* Presenter =
+		NewObject<UBalhwajeomEmergencyEscapePresenter>(this, TEXT("EmergencyEscapePresenter"));
+	Presenter->RegisterComponent();
 }
 
 void ABalhwajeomCameraPlayerController::EnsureTutorialOverlayPresenter()
@@ -997,6 +1043,23 @@ void ABalhwajeomCameraPlayerController::SetupInputComponent()
 
 	check(InputComponent);
 	InputComponent->BindAxis(TEXT("Turn"), this, &ABalhwajeomCameraPlayerController::HandleMouseYaw);
+
+	// Bound on the controller rather than the pawn: a player wedged badly enough to need
+	// this may not be in a state where the pawn is still taking input.
+	InputComponent->BindAction(
+		TEXT("EmergencyEscape"),
+		IE_Pressed,
+		this,
+		&ABalhwajeomCameraPlayerController::HandleEmergencyEscapePressed);
+}
+
+void ABalhwajeomCameraPlayerController::HandleEmergencyEscapePressed()
+{
+	if (UBalhwajeomEmergencyEscapePresenter* Presenter =
+		FindComponentByClass<UBalhwajeomEmergencyEscapePresenter>())
+	{
+		Presenter->RequestEmergencyEscape();
+	}
 }
 
 void ABalhwajeomCameraPlayerController::HandleMouseYaw(float Value)
