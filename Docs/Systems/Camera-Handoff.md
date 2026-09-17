@@ -80,6 +80,33 @@ PIE에서는 먼저 FOV를 바꿔도 같은 실제 거리에서 초점 판정이
 
 ## 6. 주의 사항
 
+### 마우스 커서와 시점 회전 (건드리지 말 것)
+
+시점 회전(`Turn` / `LookUp` 축)은 **뷰포트가 마우스를 캡처하고 있을 때만** 상대 이동량을
+받는다. 그리고 뷰포트는 **커서가 보이는 동안에는 상시 캡처를 하지 않는다** — 버튼을 누르고
+있는 동안만 캡처한다.
+
+그래서 게임플레이 중에는 커서를 반드시 숨겨야 한다. **`bShowMouseCursor = true` 로 두면
+3인칭과 카메라 모드 양쪽에서 "좌클릭 드래그를 해야 회전되는" 상태가 된다.** 실제로 한 번
+그렇게 회귀했다.
+
+| 상황 | 커서 | 입력 모드 |
+|---|---|---|
+| 타이틀 / 메뉴 | 보임 | `UIOnly` |
+| **게임플레이 (3인칭 · 카메라 모드)** | **숨김** | `GameOnly` |
+| 태블릿 | 보임 | `GameAndUI` |
+| 상호작용 모달 | 보임 | `UIOnly` |
+| 튜토리얼 설명 오버레이 | 건드리지 않음 (아래 것을 그대로 둠) | 건드리지 않음 |
+
+커서를 숨기는 곳은 세 군데다.
+
+- `ABalhwajeomCameraPlayerController` 생성자
+- 같은 클래스 `BeginPlay()` 의 게임플레이 분기
+- `ABalhwajeomIntroFlowActor::SetGameplayEnabled(true)` — 타이틀에서 켠 커서를 되돌리는 곳
+
+`Balhwajeom.Camera.PlayerController.HidesCursorForMouseLook` 이 첫 번째를 검사한다.
+나머지 둘은 로컬 플레이어가 필요해서 테스트 월드로는 닿지 않으므로 주석으로만 못 박아 뒀다.
+
 ### 촬영 후 월드 스토리 연출
 
 촬영 파일 저장과 사진 등록이 모두 성공하면 `UBalhwajeomPhotoCameraComponent`가 `DT_Photos`의 `WorldStoryCues`와 `StoryVoice`를 읽어 `APhotoWorldStoryActor`를 생성한다.

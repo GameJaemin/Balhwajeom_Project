@@ -18,7 +18,9 @@
 #include "MovieSceneSequencePlaybackSettings.h"
 #include "Sound/SoundBase.h"
 #include "Story/StoryStateSubsystem.h"
+#include "Story/StoryStateTags.h"
 #include "Tablet/BalhwajeomTabletComponent.h"
+#include "Tutorial/BalhwajeomTutorialOverlayTriggers.h"
 #include "UI/BalhwajeomMainMenuWidget.h"
 #include "UI/BalhwajeomScreenFadeWidget.h"
 #include "UI/BalhwajeomCinematicVideoWidget.h"
@@ -212,6 +214,11 @@ void ABalhwajeomIntroFlowActor::HandleFadeFromBlackFinished()
 	if (State == EBalhwajeomIntroState::TransitionToGameplay)
 	{
 		State = EBalhwajeomIntroState::Gameplay;
+
+		// Announced here rather than in EnterGameplayAtBlack so the first tutorial screen
+		// arrives on a visible world, not over the tail of the fade from black.
+		BalhwajeomTutorialOverlayTriggers::Set(
+			this, BalhwajeomGameplayTags::Tutorial_Trigger_GameplayStarted);
 	}
 }
 
@@ -771,6 +778,8 @@ void ABalhwajeomIntroFlowActor::SetGameplayEnabled(bool bEnabled)
 	{
 		PC->ResetIgnoreMoveInput();
 		PC->ResetIgnoreLookInput();
+		// Gameplay needs the viewport holding the mouse, or looking around would only
+		// work while a button is held down.
 		PC->bShowMouseCursor = false;
 		PC->bEnableClickEvents = false;
 		PC->bEnableMouseOverEvents = false;
