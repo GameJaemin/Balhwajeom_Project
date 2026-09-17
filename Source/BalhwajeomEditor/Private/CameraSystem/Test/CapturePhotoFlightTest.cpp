@@ -6,7 +6,7 @@
 #include "Components/CanvasPanel.h"
 #include "Components/Image.h"
 #include "Components/RetainerBox.h"
-#include "Components/VerticalBox.h"
+#include "Components/HorizontalBox.h"
 #include "Editor.h"
 #include "Components/TextBlock.h"
 #include "Components/WrapBox.h"

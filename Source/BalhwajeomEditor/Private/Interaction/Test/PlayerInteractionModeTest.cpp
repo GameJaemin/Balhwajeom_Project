@@ -6,18 +6,17 @@
 #include "Interaction/InspectionComponent.h"
 #include "Interaction/PlayerInteractionComponent.h"
 #include "Story/StoryStateSubsystem.h"
-#include "Story/StoryStateTags.h"
-
-
-#if WITH_DEV_AUTOMATION_TESTS
-
-#include "Misc/AutomationTest.h"
 
 
 void UPlayerInteractionModeTestObserver::HandleInspectionDismissRequested()
 {
 	++DismissRequestCount;
 }
+
+
+#if WITH_DEV_AUTOMATION_TESTS
+
+#include "Misc/AutomationTest.h"
 
 
 namespace PlayerInteractionModeTests
@@ -115,7 +114,9 @@ bool FPlayerInteractionModalModeDismissTest::RunTest(
 	PlayerInteraction->SetFocusedInspection(Inspection);
 
 	StoryState->SetPlayerModeTag(
-		BalhwajeomGameplayTags::Runtime_Player_Mode_PhotoCamera
+		FGameplayTag::RequestGameplayTag(
+			TEXT("Runtime.Player.Mode.PhotoCamera")
+		)
 	);
 
 	TestNull(
@@ -129,7 +130,9 @@ bool FPlayerInteractionModalModeDismissTest::RunTest(
 	);
 
 	StoryState->SetPlayerModeTag(
-		BalhwajeomGameplayTags::Runtime_Player_Mode_Exploration
+		FGameplayTag::RequestGameplayTag(
+			TEXT("Runtime.Player.Mode.Exploration")
+		)
 	);
 	TestEqual(
 		TEXT("Exploration mode should not request another dismissal"),
@@ -139,7 +142,9 @@ bool FPlayerInteractionModalModeDismissTest::RunTest(
 
 	PlayerInteraction->SetFocusedInspection(Inspection);
 	StoryState->SetPlayerModeTag(
-		BalhwajeomGameplayTags::Runtime_Player_Mode_Tablet
+		FGameplayTag::RequestGameplayTag(
+			TEXT("Runtime.Player.Mode.Tablet")
+		)
 	);
 
 	TestNull(
