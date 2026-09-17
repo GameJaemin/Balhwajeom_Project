@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "BalhwajeomCapturePhotoMovementLock.h"
 #include "BalhwajeomCapturePhotoPresentationState.h"
 #include "GameFramework/HUD.h"
 #include "BalhwajeomEvidenceCameraHUD.generated.h"
@@ -12,6 +13,7 @@ class UMultiShadowTextWidget;
 class UTexture2D;
 class UUserWidget;
 class UBalhwajeomCapturePhotoWidget;
+class UBalhwajeomPhotoCameraComponent;
 class FCapturePhotoDismissInputProcessor;
 
 /** Minimal functional camera overlay for the MVP. */
@@ -85,7 +87,7 @@ protected:
 
 private:
 	/** Shows the viewfinder widget, or draws the fallback crosshair when none is set. */
-	void UpdateViewfinder();
+	void UpdateViewfinder(const UBalhwajeomPhotoCameraComponent* PhotoCamera);
 	bool EnsureViewfinderWidget();
 	void HideViewfinderWidget();
 
@@ -101,6 +103,7 @@ private:
 	/** Slate-level press interception, live only while the card owns the screen. */
 	void RegisterCapturePhotoDismissInput();
 	void UnregisterCapturePhotoDismissInput();
+	void ReleaseCapturePhotoMovementLock();
 	bool EnsureFocusGuideWidget();
 	void HideFocusGuideWidget();
 	void UpdateFocusGuideWidget(
@@ -152,7 +155,7 @@ private:
 	float CapturePhotoLayoutWaitStartTime = -1.0f;
 	FCapturePhotoPresentationState CapturePhotoPresentationState;
 	TSharedPtr<FCapturePhotoDismissInputProcessor> CapturePhotoDismissInputProcessor;
-	bool bCapturePhotoMovementLocked = false;
+	FCapturePhotoMovementLock CapturePhotoMovementLock;
 	bool bCaptureUIHiddenForScreenshot = false;
 	FVector2D DisplayedGuidePosition = FVector2D::ZeroVector;
 	FVector2D GuideTransitionStartPosition = FVector2D::ZeroVector;

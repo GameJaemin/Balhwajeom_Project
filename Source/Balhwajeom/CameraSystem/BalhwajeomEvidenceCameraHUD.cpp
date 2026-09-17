@@ -10,6 +10,7 @@
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
+#include "BalhwajeomCameraViewfinderWidget.h"
 #include "BalhwajeomPhotoCameraComponent.h"
 #include "BalhwajeomCameraPlayerController.h"
 #include "BalhwajeomEvidenceActor.h"
@@ -93,7 +94,7 @@ void ABalhwajeomEvidenceCameraHUD::DrawHUD()
 		return;
 	}
 
-	UpdateViewfinder();
+	UpdateViewfinder(PhotoCamera);
 
 	FVector2D GuidePosition;
 	bool bGuideCentered = false;
@@ -422,15 +423,31 @@ void ABalhwajeomEvidenceCameraHUD::HideViewfinderWidget()
 	if (ViewfinderWidget)
 	{
 		ViewfinderWidget->SetVisibility(ESlateVisibility::Collapsed);
+		// Raising the camera again starts the bar on the live zoom instead of easing
+		// over from wherever the previous trip left it.
+		if (UBalhwajeomCameraViewfinderWidget* Viewfinder =
+			Cast<UBalhwajeomCameraViewfinderWidget>(ViewfinderWidget))
+		{
+			Viewfinder->ResetZoomBar();
+		}
 	}
 }
 
 
-void ABalhwajeomEvidenceCameraHUD::UpdateViewfinder()
+void ABalhwajeomEvidenceCameraHUD::UpdateViewfinder(
+	const UBalhwajeomPhotoCameraComponent* PhotoCamera)
 {
 	if (EnsureViewfinderWidget())
 	{
 		ViewfinderWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (UBalhwajeomCameraViewfinderWidget* Viewfinder =
+			Cast<UBalhwajeomCameraViewfinderWidget>(ViewfinderWidget);
+			Viewfinder && PhotoCamera)
+		{
+			Viewfinder->ApplyZoomAlpha(
+				PhotoCamera->GetZoomAlpha(),
+				GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.0f);
+		}
 		return;
 	}
 
@@ -535,10 +552,9 @@ void ABalhwajeomEvidenceCameraHUD::TriggerCapturePhotoPresentation(
 		CapturePhotoPromptWidget->SetRenderOpacity(0.0f);
 		CapturePhotoPromptWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
-	if (PlayerOwner && !bCapturePhotoMovementLocked)
+	if (PlayerOwner && CapturePhotoMovementLock.Acquire())
 	{
 		PlayerOwner->SetIgnoreMoveInput(true);
-		bCapturePhotoMovementLocked = true;
 	}
 	RegisterCapturePhotoDismissInput();
 }
@@ -582,6 +598,11 @@ void ABalhwajeomEvidenceCameraHUD::UpdateCapturePhotoPresentation()
 	if (!IsCapturePhotoPresentationLockingCameraMode())
 	{
 		UnregisterCapturePhotoDismissInput();
+		// Movement comes back on the same boundary. Holding it until the card reports
+		// Completed tied walking to the tail of an animation that the camera exit now
+		// runs underneath, and anything that stops the card reaching Completed left the
+		// player unable to move at all.
+		ReleaseCapturePhotoMovementLock();
 	}
 	if (CapturePhotoPresentationState.GetPhase() ==
 		ECapturePhotoPresentationPhase::Completed)
@@ -611,9 +632,7 @@ void ABalhwajeomEvidenceCameraHUD::UpdateCapturePhotoPrompt(const double Now)
 
 bool ABalhwajeomEvidenceCameraHUD::IsCapturePhotoPresentationLockingCameraMode() const
 {
-	const ECapturePhotoPresentationPhase Phase = CapturePhotoPresentationState.GetPhase();
-	return Phase == ECapturePhotoPresentationPhase::Entering ||
-		Phase == ECapturePhotoPresentationPhase::AwaitingConfirmation;
+	return LocksCameraMode(CapturePhotoPresentationState.GetPhase());
 }
 
 bool ABalhwajeomEvidenceCameraHUD::HandleCapturePhotoDismissInput()
@@ -635,6 +654,22 @@ bool ABalhwajeomEvidenceCameraHUD::TryConfirmCapturePhotoPresentation()
 	return GetWorld() &&
 		CapturePhotoPresentationState.TryConfirm(GetWorld()->GetTimeSeconds());
 }
+
+void ABalhwajeomEvidenceCameraHUD::ReleaseCapturePhotoMovementLock()
+{
+	// The lock stays held when there is no controller to hand movement back to, so a
+	// later call can still balance the acquire instead of dropping it on the floor.
+	if (!PlayerOwner || !CapturePhotoMovementLock.IsLocked())
+	{
+		return;
+	}
+
+	if (CapturePhotoMovementLock.Release())
+	{
+		PlayerOwner->SetIgnoreMoveInput(false);
+	}
+}
+
 
 void ABalhwajeomEvidenceCameraHUD::RegisterCapturePhotoDismissInput()
 {
@@ -676,11 +711,7 @@ void ABalhwajeomEvidenceCameraHUD::FinishCapturePhotoPresentation()
 		CapturePhotoPromptWidget->SetRenderOpacity(0.0f);
 		CapturePhotoPromptWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
-	if (PlayerOwner && bCapturePhotoMovementLocked)
-	{
-		PlayerOwner->SetIgnoreMoveInput(false);
-	}
-	bCapturePhotoMovementLocked = false;
+	ReleaseCapturePhotoMovementLock();
 
 	// Photo keywords are already present in the subsystem at capture time. Reveal
 	// their new HUD count only now, when the card has visually arrived at TAB.

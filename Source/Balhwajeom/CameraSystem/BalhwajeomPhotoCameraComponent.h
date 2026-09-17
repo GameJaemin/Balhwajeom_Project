@@ -115,6 +115,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Photo Camera")
     void ZoomCamera(float Value);
 
+    /**
+     * Current zoom as 0..1, where 0 is the widest field of view and 1 the narrowest.
+     * Zoom has no state of its own; this reads it back off the camera.
+     */
+    UFUNCTION(BlueprintPure, Category = "Photo Camera|Zoom")
+    float GetZoomAlpha() const;
+
     UFUNCTION(BlueprintCallable, Category = "Photo Camera")
     void TakePhoto();
 
@@ -134,6 +141,14 @@ public:
 
     UFUNCTION(BlueprintPure, Category = "Photo Camera")
     bool IsInCameraMode() const { return bIsInCameraMode; }
+
+    /**
+     * True while at least one camera target within MaximumFocusDistance of the player
+     * could still be photographed. Also true when that cannot be evaluated, so an
+     * unanswerable question never lowers the camera by itself.
+     */
+    UFUNCTION(BlueprintPure, Category = "Photo Camera")
+    bool HasCapturableTargetRemaining() const;
 
     UFUNCTION(BlueprintPure, Category = "Photo Camera")
     bool IsCameraTransitioning() const { return bIsCameraTransitioning; }
@@ -214,6 +229,8 @@ protected:
     bool ResolveInvestigationTarget(
         const FBalhwajeomCameraTargetInfo& TargetInfo,
         FBalhwajeomResolvedPhotoTarget& OutTarget) const;
+    bool IsActorCapturableNow(AActor* Target, const FVector& SearchOrigin) const;
+    void UpdatePendingAutoExit();
     UBalhwajeomInvestigationSubsystem* GetInvestigationSubsystem() const;
     bool BeginInvestigationImageCapture(const FBalhwajeomResolvedPhotoTarget& Target);
     void HandleScreenshotCaptured(int32 Width, int32 Height, const TArray<FColor>& Colors);
@@ -239,9 +256,28 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
     bool bIsCameraTransitioning = false;
 
+    /**
+     * Set when a capture empties the world of photo targets, cleared once the camera is
+     * actually on its way down. The exit waits for the capture card to finish so the
+     * player is not dropped into the third-person view behind a full-screen overlay, and
+     * polling also lets it retry while a camera transition is already running.
+     */
+    bool bAutoExitAfterCapturePresentation = false;
+
     /** Enables the evidence focus and PhotoID capture flow. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus")
     bool bEnableEvidenceFocusSystem = true;
+
+    /**
+     * Lowers the camera once a finished capture leaves nothing else to photograph within
+     * MaximumFocusDistance of the player. Progression-locked evidence does not count as
+     * available, so this also fires when the current phase is cleared and the rest is
+     * still waiting to unlock. Only the far edge of the range is applied: an object the
+     * player is standing right next to keeps the camera up, because a single step back
+     * is enough to shoot it.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus")
+    bool bExitCameraWhenNoCapturableTargetsRemain = true;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Legacy", meta = (ClampMin = "100.0", DeprecatedProperty, DeprecationMessage = "The exact center ray now uses world range; MinimumFocusDistance and MaximumFocusDistance own eligibility."))
     float FocusTargetScanDistance = 5000.0f;

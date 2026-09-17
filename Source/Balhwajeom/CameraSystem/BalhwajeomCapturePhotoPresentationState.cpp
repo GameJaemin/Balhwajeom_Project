@@ -1,5 +1,12 @@
 #include "BalhwajeomCapturePhotoPresentationState.h"
 
+
+bool LocksCameraMode(const ECapturePhotoPresentationPhase Phase)
+{
+	return Phase == ECapturePhotoPresentationPhase::Entering ||
+		Phase == ECapturePhotoPresentationPhase::AwaitingConfirmation;
+}
+
 void FCapturePhotoPresentationState::Start(
 	const double Now,
 	const float InEntryCompletionTime,
