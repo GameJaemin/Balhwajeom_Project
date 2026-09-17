@@ -20,6 +20,7 @@
 #include "HAL/FileManager.h"
 #include "ImageUtils.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
+#include "Tutorial/BalhwajeomTutorialOverlayTriggers.h"
 #include "Investigation/EvidenceDefinitions.h"
 #include "Investigation/InvestigationRuntimeTypes.h"
 #include "Investigation/PhotoDefinitions.h"
@@ -829,6 +830,19 @@ void UBalhwajeomPhotoCameraComponent::ExitCameraMode()
 					BalhwajeomGameplayTags::Runtime_Player_Mode_Exploration
 				);
 			}
+		}
+	}
+
+	// Only a trip that produced a photo counts as having finished photographing; raising
+	// and lowering the camera without shooting teaches the player nothing to follow up on.
+	if (const UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem())
+	{
+		TArray<FCapturedPhotoRecord> CapturedPhotos;
+		Investigation->GetCapturedPhotos(CapturedPhotos);
+		if (!CapturedPhotos.IsEmpty())
+		{
+			BalhwajeomTutorialOverlayTriggers::Set(
+				this, BalhwajeomGameplayTags::Tutorial_Trigger_PhotoCaptureCompleted);
 		}
 	}
 	if (ActivePhotoWorldStory.IsValid())

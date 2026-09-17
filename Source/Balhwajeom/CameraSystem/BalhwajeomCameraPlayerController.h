@@ -51,6 +51,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "UI|Tutorial")
 	void EnsureTutorialFocusLayer();
 
+	/** Adds the tutorial overlay presenter on first run, for controllers that have none. */
+	void EnsureTutorialOverlayPresenter();
+
 	UFUNCTION(BlueprintPure, Category = "UI")
 	UUserWidget* GetPlayerHUD() const { return PlayerHUDWidget; }
 
@@ -240,6 +243,9 @@ private:
 
 	/** Fade value of the [F] prompt before any tutorial blink is applied. */
 	float InteractionPromptAlpha = 0.0f;
+
+	/** How much of the tutorial blink is currently mixed into the prompt, 0..1. */
+	float InteractionPromptPulseBlend = 0.0f;
 	bool bInteractionReticleStateInitialized = false;
 	bool bInteractionReticleShowsInteractable = false;
 	FText DefaultInteractionPromptText;

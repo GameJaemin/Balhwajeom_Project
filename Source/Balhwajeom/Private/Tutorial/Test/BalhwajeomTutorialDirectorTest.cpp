@@ -759,4 +759,74 @@ bool FTutorialHighlightPulseTest::RunTest(const FString& Parameters)
 }
 
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FTutorialDirectorHintGateTest,
+	"Balhwajeom.Tutorial.Director.HintGate",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FTutorialDirectorHintGateTest::RunTest(const FString& Parameters)
+{
+	using namespace TutorialDirectorTests;
+
+	FFixture Fixture;
+	UBalhwajeomTutorialFlow* Flow = NewObject<UBalhwajeomTutorialFlow>();
+	FBalhwajeomTutorialStep Gated;
+	Gated.StepID = TEXT("Gated");
+	Gated.HintTarget = EBalhwajeomTutorialHintTarget::PhotoCameraIcon;
+	Gated.DimMode = EBalhwajeomTutorialDimMode::Always;
+	Gated.HintRequiredTags.AddTag(StageOne());
+	Gated.CompleteWhenAllTags.AddTag(TriggerOne());
+	Flow->Steps.Add(Gated);
+
+	UStoryStateSubsystem* StoryState = Fixture.GetStoryState();
+	ABalhwajeomTutorialDirector* Director = Fixture.SpawnDirector(Flow);
+	if (!TestNotNull(TEXT("Story state subsystem should exist"), StoryState) ||
+		!TestNotNull(TEXT("Director should spawn"), Director))
+	{
+		return false;
+	}
+	Director->StartFlow();
+
+	// The step is running, but its explanation has not been read yet, so nothing points
+	// at anything and nothing is darkened.
+	TestEqual(
+		TEXT("A gated step points at nothing until its tag arrives"),
+		static_cast<int32>(ABalhwajeomTutorialDirector::GetTutorialHintTarget(Director)),
+		static_cast<int32>(EBalhwajeomTutorialHintTarget::None));
+	TestEqual(
+		TEXT("A gated step does not dim until its tag arrives"),
+		ABalhwajeomTutorialDirector::GetTutorialDimOpacity(Director),
+		0.0f);
+
+	StoryState->AddStateTag(StageOne());
+
+	TestEqual(
+		TEXT("The hint appears once the gate tag is held"),
+		static_cast<int32>(ABalhwajeomTutorialDirector::GetTutorialHintTarget(Director)),
+		static_cast<int32>(EBalhwajeomTutorialHintTarget::PhotoCameraIcon));
+
+	TestTrue(
+		TEXT("The gated step dims once its tag is held"),
+		ABalhwajeomTutorialDirector::GetTutorialDimOpacity(Director) > 0.0f);
+
+	// The gate is read live rather than latched on entry, so losing the tag hides the
+	// hint again instead of leaving it on for the rest of the step.
+	StoryState->RemoveStateTag(StageOne());
+	TestEqual(
+		TEXT("The hint hides again if the gate tag goes away"),
+		static_cast<int32>(ABalhwajeomTutorialDirector::GetTutorialHintTarget(Director)),
+		static_cast<int32>(EBalhwajeomTutorialHintTarget::None));
+
+	// An ungated step is unaffected, so flows authored before this gate existed keep
+	// behaving exactly as they did.
+	Flow->Steps[0].HintRequiredTags.Reset();
+	TestEqual(
+		TEXT("A step with no gate points at its target straight away"),
+		static_cast<int32>(ABalhwajeomTutorialDirector::GetTutorialHintTarget(Director)),
+		static_cast<int32>(EBalhwajeomTutorialHintTarget::PhotoCameraIcon));
+	return true;
+}
+
+
 #endif // WITH_DEV_AUTOMATION_TESTS

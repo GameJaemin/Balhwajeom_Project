@@ -1,5 +1,8 @@
 ﻿#include "Tablet/BalhwajeomTabletWidget.h"
 
+#include "Story/StoryStateTags.h"
+#include "Tutorial/BalhwajeomTutorialOverlayTriggers.h"
+
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/ButtonSlot.h"
@@ -618,6 +621,22 @@ void UBalhwajeomTabletWidget::SetTabletPage(const ETabletPage NewPage, const boo
 	if (WidgetSwitcher_TabletPage && NewPage != ETabletPage::PersonFolder)
 	{
 		WidgetSwitcher_TabletPage->SetActiveWidgetIndex(ToPageIndex(NewPage));
+	}
+
+	// Every route into and out of the sister's folder passes through here, so the tutorial
+	// trigger tracks the page itself rather than the one button that happens to open it.
+	static const FName SisterCharacterID(TEXT("CHARACTER_SISTER"));
+	const bool bSisterFolderOpen =
+		NewPage == ETabletPage::PersonFolder && ActiveCharacterID == SisterCharacterID;
+	if (bSisterFolderOpen)
+	{
+		BalhwajeomTutorialOverlayTriggers::Set(
+			this, BalhwajeomGameplayTags::Tutorial_Trigger_SisterFolderOpened);
+	}
+	else
+	{
+		BalhwajeomTutorialOverlayTriggers::Clear(
+			this, BalhwajeomGameplayTags::Tutorial_Trigger_SisterFolderOpened);
 	}
 }
 

@@ -119,14 +119,17 @@ void UBalhwajeomTutorialFocusWidget::MirrorHudIcon(
 	const TArray<FName>& SourceIconNames,
 	UImage* Highlight,
 	bool bShouldShow,
-	float PulseOpacity)
+	float PulseOpacity,
+	float FadeAlpha)
 {
 	if (!Highlight)
 	{
 		return;
 	}
 
-	UImage* SourceIcon = bShouldShow ? FindHudIcon(SourceIconNames) : nullptr;
+	// Still mirrored while fading out, so the highlight stays on its icon on the way down.
+	const bool bNeedsIcon = bShouldShow || FadeAlpha > KINDA_SMALL_NUMBER;
+	UImage* SourceIcon = bNeedsIcon ? FindHudIcon(SourceIconNames) : nullptr;
 
 	// A HUD icon that is hidden or has never been laid out has no meaningful rectangle,
 	// so there is nothing to raise above the dim.
@@ -150,8 +153,9 @@ void UBalhwajeomTutorialFocusWidget::MirrorHudIcon(
 	Highlight->SetColorAndOpacity(FLinearColor::White);
 
 	// Fading this copy in and out is what makes the HUD icon read as bright, then dark,
-	// then bright again: at zero the dimmed original shows through instead.
-	Highlight->SetRenderOpacity(PulseOpacity);
+	// then bright again: at zero the dimmed original shows through instead. FadeAlpha
+	// scales the whole blink so the highlight can also leave gradually.
+	Highlight->SetRenderOpacity(PulseOpacity * FadeAlpha);
 
 	UCanvasPanelSlot* HighlightSlot = Cast<UCanvasPanelSlot>(Highlight->Slot);
 	if (!HighlightSlot)
@@ -202,18 +206,34 @@ void UBalhwajeomTutorialFocusWidget::NativeTick(
 	// Timed by the director, so this icon and the [F] prompt blink on the same beat.
 	const float PulseOpacity = ABalhwajeomTutorialDirector::GetTutorialHighlightPulse(this);
 
+	const bool bWantsPhotoCamera =
+		HintTarget == EBalhwajeomTutorialHintTarget::PhotoCameraIcon;
+	const bool bWantsTablet = HintTarget == EBalhwajeomTutorialHintTarget::TabletIcon;
+	PhotoCameraHighlightAlpha = FMath::FInterpTo(
+		PhotoCameraHighlightAlpha,
+		bWantsPhotoCamera ? 1.0f : 0.0f,
+		InDeltaTime,
+		HighlightInterpolationSpeed);
+	TabletHighlightAlpha = FMath::FInterpTo(
+		TabletHighlightAlpha,
+		bWantsTablet ? 1.0f : 0.0f,
+		InDeltaTime,
+		HighlightInterpolationSpeed);
+
 	MirrorHudIcon(
 		MyGeometry,
 		PhotoCameraIconNames,
 		PhotoCameraHighlight,
-		HintTarget == EBalhwajeomTutorialHintTarget::PhotoCameraIcon,
-		PulseOpacity);
+		bWantsPhotoCamera,
+		PulseOpacity,
+		PhotoCameraHighlightAlpha);
 	MirrorHudIcon(
 		MyGeometry,
 		TabletIconNames,
 		TabletHighlight,
-		HintTarget == EBalhwajeomTutorialHintTarget::TabletIcon,
-		PulseOpacity);
+		bWantsTablet,
+		PulseOpacity,
+		TabletHighlightAlpha);
 
 	UpdateHintMessage(HintTarget);
 }

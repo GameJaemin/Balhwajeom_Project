@@ -53,16 +53,32 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial Focus", meta = (ClampMin = "0.1"))
 	float DimInterpolationSpeed = 8.0f;
 
+	/**
+	 * Interpolation speed of an icon highlight appearing and disappearing.
+	 *
+	 * A highlight that snapped away the instant its step completed read as a glitch:
+	 * right-clicking to raise the camera made the icon vanish mid-blink. Fading it out
+	 * lets the action and the hint end together.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tutorial Focus", meta = (ClampMin = "0.1"))
+	float HighlightInterpolationSpeed = 6.0f;
+
 private:
 	void BuildWidgetTree();
 
-	/** Copies the source HUD icon's brush and screen rectangle onto Highlight. */
+	/**
+	 * Copies the source HUD icon's brush and screen rectangle onto Highlight.
+	 *
+	 * FadeAlpha carries the appear/disappear ramp, so a highlight keeps tracking its icon
+	 * while fading out rather than being collapsed the moment it is no longer wanted.
+	 */
 	void MirrorHudIcon(
 		const FGeometry& MyGeometry,
 		const TArray<FName>& SourceIconNames,
 		UImage* Highlight,
 		bool bShouldShow,
-		float PulseOpacity);
+		float PulseOpacity,
+		float FadeAlpha);
 
 	UUserWidget* GetPlayerHUD() const;
 
@@ -87,6 +103,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UImage> TabletHighlight;
+
+	float PhotoCameraHighlightAlpha = 0.0f;
+	float TabletHighlightAlpha = 0.0f;
 
 	/** Built last so it draws above both highlights. */
 	UPROPERTY(Transient)

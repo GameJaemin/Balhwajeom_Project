@@ -106,6 +106,17 @@ struct BALHWAJEOM_API FBalhwajeomTutorialStep
 	EBalhwajeomTutorialHintTarget HintTarget = EBalhwajeomTutorialHintTarget::None;
 
 	/**
+	 * The step runs as usual, but its highlight and dim stay hidden until the story state
+	 * holds every one of these tags. Empty means present from the moment the step begins.
+	 *
+	 * This is what keeps the blinking icons from fighting the full-screen overlays: a step
+	 * waits for its own `Tutorial.Overlay.Seen.*` tag, so the player reads the explanation
+	 * first and only then sees the thing they are being pointed at.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Step|Presentation")
+	FGameplayTagContainer HintRequiredTags;
+
+	/**
 	 * Optional line shown next to HintTarget's highlighted icon, for example explaining a
 	 * key. Empty shows nothing, matching every existing step (icon-only, no text).
 	 */

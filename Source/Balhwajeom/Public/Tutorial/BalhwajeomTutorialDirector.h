@@ -80,6 +80,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Tutorial|Presentation")
 	float GetHighlightPulse() const;
 
+	/** False while a step's HintRequiredTags are not yet held, which hides its presentation. */
+	bool IsHintAllowed(const FBalhwajeomTutorialStep& Step) const;
+
 	/**
 	 * Pulse value at a point in time. Starts at the bright end, so a highlight announces
 	 * itself the instant its step begins.

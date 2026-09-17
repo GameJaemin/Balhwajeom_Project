@@ -15,6 +15,7 @@
 #include "Story/StoryStateSubsystem.h"
 #include "Story/StoryStateTags.h"
 #include "Tablet/BalhwajeomTabletWidget.h"
+#include "Tutorial/BalhwajeomTutorialOverlayTriggers.h"
 
 UBalhwajeomTabletComponent::UBalhwajeomTabletComponent()
 {
@@ -430,6 +431,13 @@ void UBalhwajeomTabletComponent::OpenTabletNow()
 			}
 		}
 	}
+
+	// Paired with the close below rather than left set forever: the intro already opens
+	// the tablet once, long before the tutorial asks the player to open it themselves.
+	BalhwajeomTutorialOverlayTriggers::Set(
+		this, BalhwajeomGameplayTags::Tutorial_Trigger_TabletOpened);
+	BalhwajeomTutorialOverlayTriggers::Clear(
+		this, BalhwajeomGameplayTags::Tutorial_Trigger_TabletClosed);
 	SetGameplayInputBlocked(true);
 
 	TabletWidget->SetVisibility(ESlateVisibility::Visible);
@@ -504,6 +512,13 @@ void UBalhwajeomTabletComponent::FinishCloseTablet()
 	bTabletOpen = false;
 	if (bWasTabletOpen)
 	{
+		BalhwajeomTutorialOverlayTriggers::Clear(
+			this, BalhwajeomGameplayTags::Tutorial_Trigger_TabletOpened);
+		BalhwajeomTutorialOverlayTriggers::Clear(
+			this, BalhwajeomGameplayTags::Tutorial_Trigger_SisterFolderOpened);
+		BalhwajeomTutorialOverlayTriggers::Set(
+			this, BalhwajeomGameplayTags::Tutorial_Trigger_TabletClosed);
+
 		if (UWorld* World = GetWorld())
 		{
 			if (UGameInstance* GameInstance = World->GetGameInstance())

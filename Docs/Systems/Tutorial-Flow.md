@@ -20,6 +20,12 @@
 | **CompleteFamilyPhoto** | 사진 세 장을 모두 찍으면 태블릿 잠금 해제 + **태블릿 아이콘 깜빡임** | TAB을 열고 `가족 사진`의 빈칸 문장 완성 |
 | **Done** | — | 문이 `[F] 문 열기`로 바뀐다 |
 
+> **연출이 두 겹이다.** 설명은 전부 전체화면 오버레이(2.5절)가 맡고,
+> 디렉터는 **"지금 이걸 눌러라"** 를 아이콘 깜빡임으로만 가리킨다.
+> 각 깜빡임은 자기 설명 오버레이를 읽은 뒤에야 시작한다 — 아래 표의 `Hint Required Tags`.
+> **화면 암전은 전 단계에서 껐다.** 오버레이가 이미 화면을 덮으며 어둡게 하는데
+> 그 아래에서 상시 암전까지 걸리니 방이 계속 어두워 보였다.
+
 > **화면에 설명 문구는 띄우지 않는다.** 안내는 두 가지뿐이다 —
 > 화면을 어둡게 해서 쓸 것만 남기고, **지금 눌러야 할 것을 밝기로 깜빡인다.**
 > 깜빡임 대상은 `Hint Target` 이 정한다: `InteractPrompt`(= `WBP_Interact` 의 `[F]`),
@@ -110,13 +116,158 @@ HUD 이미지 이름이 바뀌어도 하이라이트가 조용히 사라지지 �
 
 ---
 
+## 2.4 디렉터 연출과 오버레이의 경계
+
+`DA_TutorialFlow_Room2` 는 **7단계**다. 앞의 두 단계는 인트로 태블릿을 기다리는 용도라
+화면에 아무것도 그리지 않는다.
+
+| # | StepID | Hint Target | Hint Required Tags | 끝나는 조건 |
+|---|---|---|---|---|
+| 0 | (이름 없음) | — | — | 태블릿 모드 진입 |
+| 1 | `TabletIntro` | — | — | 탐색 모드 복귀 (5초 자동) |
+| 2 | `DustTeach` | `[F]` 프롬프트 | `Tutorial.Overlay.Seen.Interaction` | 액자 하나 먼지털기 |
+| 3 | `PhotoPrompt` | 카메라 아이콘 | `Tutorial.Overlay.Seen.PhotoCamera` | 카메라 모드 진입 |
+| 4 | `Photograph` | `[F]` 프롬프트 | `Tutorial.Overlay.Seen.MemoryObject` | 사진 3장 |
+| 5 | `CompleteFamilyPhoto` | 태블릿 아이콘 | `Tutorial.Overlay.Seen.Tablet` | 가족 사진 문장 완성 |
+| 6 | `Done` | — | — | — |
+
+**모든 단계의 `Dim Mode` 는 `Off`** 다. 암전 기능 자체는 남아 있으니 필요하면 데이터에서
+다시 켤 수 있다.
+
+`HintRequiredTags` 는 **단계의 진행이 아니라 표현만** 막는다. 단계는 평소처럼 돌고
+완료 조건도 그대로 평가되며, 아이콘 깜빡임과 암전만 태그가 찰 때까지 나오지 않는다.
+태그는 매 프레임 다시 읽으므로, 조건이 풀리면 하이라이트도 다시 사라진다.
+
+`TabletIntro` 는 원래 게임을 켜자마자 태블릿 아이콘을 깜빡이며 화면을 어둡게 했다.
+플레이어가 아직 아무 설명도 못 들은 시점이라 표현을 통째로 껐고, 단계 자체는
+인트로 태블릿을 기다리는 타이밍 역할로 남겼다.
+
+### 사라질 때 페이드
+
+하이라이트는 **꺼질 때 페이드 아웃한다.** 예전에는 단계가 끝나는 순간 툭 사라져서,
+우클릭으로 카메라를 드는 순간 아이콘이 깜빡이던 밝기 그대로 증발했다.
+
+| 대상 | 페이드 주체 |
+|---|---|
+| HUD 아이콘 하이라이트 | `UBalhwajeomTutorialFocusWidget::HighlightInterpolationSpeed` |
+| `[F]` 프롬프트 깜빡임 | `ABalhwajeomCameraPlayerController::InteractionPromptPulseBlend` |
+
+프롬프트 쪽은 깜빡임을 끄는 게 아니라 **깜빡임의 영향력을 0으로 줄인다.**
+그냥 껐다면 마지막 밝기에서 멈춰 프롬프트가 한 번 번쩍이며 사라졌을 것이다.
+
+### 설정 스크립트
+
+```text
+Scripts/Tutorial/ConfigureTutorialHintGates.py
+```
+
+멱등이라 다른 브랜치에서 플로우를 머지한 뒤 다시 돌리면 된다.
+`Balhwajeom.Tutorial.HintGateConfiguration` 이 7단계 전부를 검사한다.
+
+---
+
+## 2.5 전체화면 설명 오버레이
+
+암전·깜빡임과 **별개 시스템**이다. 디렉터가 "지금 뭘 누를지"를 밝기로 알려준다면,
+오버레이는 화면 전체를 덮고 **글로 설명한 뒤 아무 키나 눌러야 넘어간다.**
+
+| 에셋 | 역할 |
+|---|---|
+| `DT_TutorialOverlay` | 8개 화면. 조건 · 이미지 · 제목 · 설명 · 완료 태그 |
+| `WBP_TutorialOverlay` | 딤 + 블러 위에 이미지 / 제목 / 설명 / `아무 키나 눌러 계속` |
+| `UBalhwajeomTutorialOverlayPresenter` | 플레이어 컨트롤러에 붙는 컴포넌트. 언제 어떤 행을 띄울지 |
+
+### 언제 뜨는가
+
+`RequiredTags` 규칙은 하나다 — **이전 행의 `Tutorial.Overlay.Seen` 태그 + 자기 트리거.**
+이전 행을 조건에 넣는 이유는 순서 때문이다. 카메라 모드에서 나오지 않고 액자 3장을
+연달아 찍으면 `Evidence.Photographed.*` 3개가 3인칭 복귀보다 **먼저** 붙어서,
+이전 행 조건이 없으면 태블릿 안내가 회상 안내보다 앞서 뜬다.
+
+| 행 | 내용 | 트리거 |
+|---|---|---|
+| `OVL_01_001` | 진술서 | `Tutorial.Trigger.GameplayStarted` |
+| `OVL_01_002` | 이동과 시점 | `Tutorial.Trigger.TabletClosed` |
+| `OVL_01_003` | 상호작용 | `Tutorial.Trigger.InteractPromptShown` |
+| `OVL_01_004` | 카메라 | `Tutorial.Trigger.InteractCompleted` |
+| `OVL_01_005` | 회상 | `Tutorial.Trigger.PhotoCaptureCompleted` |
+| `OVL_01_006` | 태블릿 | `Evidence.Photographed.OBJ_01_001~003` |
+| `OVL_01_007` | 여동생 폴더 | `Tutorial.Trigger.TabletOpened` |
+| `OVL_01_008` | 사진 추리 | `Tutorial.Trigger.SisterFolderOpened` |
+
+`Tutorial.Trigger.*` 는 `StoryStateTags` 의 **네이티브 태그라 ini 등록이 필요 없다.**
+C++ 만 붙이는 태그라 ini 와 철자가 어긋날 자리를 만들지 않았다.
+
+`TabletOpened` / `TabletClosed` / `SisterFolderOpened` 는 **상태 태그**다. 나머지는 1회성.
+인트로가 `bOpenStatementAfterIntro` 로 태블릿을 **이미 한 번 열기 때문에**, 1회성이면
+007의 조건이 게임 시작 시점에 충족돼서 006을 닫자마자 엉뚱한 곳에서 떠버린다.
+
+001은 그 인트로 태블릿 **위에** 뜬다(진술서 설명이니 그게 맞다). 002는 그 태블릿을
+닫아야 뜬다 — `TabletClosed` 를 조건에 넣은 이유다. 안 그러면 이동 설명이 태블릿 위에 뜬다.
+
+### 태그를 붙이는 곳
+
+| 태그 | 위치 |
+|---|---|
+| `GameplayStarted` | `ABalhwajeomIntroFlowActor::HandleFadeFromBlackFinished()` |
+| `InteractPromptShown` | `ABalhwajeomCameraPlayerController::UpdateInteractionPrompt()` |
+| `InteractCompleted` | `ABalhwajeomCameraPlayerController::CloseInteractionModal()` |
+| `PhotoCaptureCompleted` | `UBalhwajeomPhotoCameraComponent` 카메라 모드 이탈, 촬영 1장 이상일 때만 |
+| `TabletOpened` / `TabletClosed` | `UBalhwajeomTabletComponent::OpenTabletNow()` / `FinishCloseTablet()` — 항상 둘 중 하나만 |
+| `SisterFolderOpened` | `UBalhwajeomTabletWidget::SetTabletPage()` |
+
+인트로 없이 레벨을 바로 PIE 로 켜면 `GameplayStarted` 를 붙일 액터가 없다.
+제시자가 첫 틱에 `ABalhwajeomIntroFlowActor` 가 없으면 **스스로 붙인다.**
+
+### 표시 방식
+
+```text
+조건 성립 → 입력 차단(즉시) → 0.5초 빈 화면 → 페이드 인 0.35초
+                                                  → 2초 입력 잠금 → 고정문구 등장 + 깜빡임
+                                                  → 아무 키 → 페이드 아웃 0.25초
+                                                                          ↓
+                                                        CompletionTag 기록 → 다음 큐 항목
+```
+
+**입력 차단과 화면 등장은 시점이 다르다.** 차단은 조건이 성립한 그 프레임에 걸리고
+(그래야 그 순간의 입력이 게임에 닿지 않는다), 화면은 `ShowDelaySeconds` 만큼 늦게
+나타나기 시작한다. 없으면 우클릭한 바로 그 프레임에 설명이 얼굴 앞에 붙어서,
+게임이 반응하는 게 아니라 끼어드는 것처럼 읽힌다.
+
+2초 입력 잠금은 **빈 화면 0.5초가 끝난 뒤부터** 센다. 그래야 플레이어가 기다리는
+2초가 실제로 읽을 수 있는 2초가 된다.
+
+- ZOrder **2000**. 상호작용 모달(1300)보다 위라 **태블릿 위에도 뜬다**
+- 잠금은 Slate `IInputProcessor` 로 건다. 뷰포트에 닿기 전에 삼키므로 **뒤에 열려 있는
+  태블릿 버튼도 눌리지 않는다.** 촬영 결과 카드와 같은 방식이고, "아무 키" 판정도
+  `BalhwajeomCapturePhotoDismissInput::ShouldDismissOnKey` 를 그대로 쓴다
+- 잠금 중에는 `아무 키나 눌러 계속` 을 **숨긴다.** 못 누르는 동안 깜빡이면 거짓말이다
+- **키를 떼는 이벤트는 삼키지 않는다.** 삼키면 게임은 그 키가 계속 눌려 있다고 믿는다 —
+  W 를 누른 채 오버레이가 뜨고 뒤에서 손을 떼면, 오버레이가 닫히는 순간 혼자 걸어간다
+- 열 때와 닫을 때 `FlushPressedKeys()` 를 부른다. 들어올 때는 붙잡고 있던 키를 놓은 것으로
+  정리하고, 나갈 때는 **오버레이를 닫은 그 키가 게임 입력으로 새어 들어가지 않게** 한다
+- 한 번에 하나만. 한 태그로 두 행이 동시에 자격을 얻으면 Row 순서대로 큐에 쌓인다
+
+### 이미지 추가
+
+`Scripts/Investigation/README.md` 참조. 원본은 저장소에 올리지 않고
+`Scripts/Tutorial/OverlayImages/` 에 두고 `ImportOverlayImage.py` 로
+`/Game/Balhwajeom/UI/Tutorial/Overlay` 에 임포트한 뒤, 생성 스크립트의 `ROWS` 에 적는다.
+
+### 알려진 한계
+
+`Tutorial.Overlay.Seen.*` 는 `UStoryStateSubsystem`(GameInstance) 에만 있다.
+**게임을 껐다 켜면 오버레이가 다시 나온다.** SaveGame 확장 시 함께 저장해야 한다.
+
+---
+
 ## 3. 구현된 것
 
 ### C++
 
 | 위치 | 내용 |
 |---|---|
-| `StoryStateTags` | 네이티브 태그 `Runtime.Lock` / `.PhotoCamera` / `.Tablet` — **ini 등록 불필요** |
+| `StoryStateTags` | 네이티브 태그 `Runtime.Lock` / `.PhotoCamera` / `.Tablet`, `Tutorial.Trigger.*` 6개 — **ini 등록 불필요** |
 | `UStoryStateSubsystem` | 상태 전이 시 `Evidence.State.<StateID>`, 사진 문장 완성 시 `Evidence.SentenceSolved.<PhotoID>`, 월드 스토리 재생 시 `Evidence.StoryPlayed.<StateID>` 와 `Evidence.StoryHeard.<ObjectID>` 발행 |
 | `UBalhwajeomPhotoCameraComponent` | `BlockedByTags` 잠금. 진입만 차단, **이탈은 항상 허용** |
 | `UBalhwajeomTabletComponent` | `BlockedByTags` 잠금 (`ToggleTablet` / `RequestOpenTablet` 양쪽) |
@@ -126,8 +277,11 @@ HUD 이미지 이름이 바뀌어도 하이라이트가 조용히 사라지지 �
 | `ABalhwajeomEvidenceCameraHUD` | `WBP_CAM` 뷰파인더 위젯 (ZOrder 50) |
 | `UBalhwajeomTutorialFocusWidget` | 암전 + **깜빡이는 아이콘 하이라이트**. 트리를 C++에서 만들므로 위젯 BP 불필요 |
 | `UBalhwajeomTutorialFlow` | 레벨당 1개 만드는 데이터 에셋 |
-| `ABalhwajeomTutorialDirector` | 플로우 실행기 |
+| `ABalhwajeomTutorialDirector` | 플로우 실행기. `IsHintAllowed()` 로 표현만 게이팅 |
 | `ABalhwajeomEvidenceActor` | 월드 스토리 재생 시 StoryPlayed 태그 발행 |
+| `UBalhwajeomTutorialOverlayPresenter` | `DT_TutorialOverlay` 를 읽어 오버레이를 띄우는 컨트롤러 컴포넌트 |
+| `BalhwajeomTutorialOverlayQueue` | 어떤 행이 지금 떠야 하는지 판정하는 순수 함수 |
+| `FTutorialOverlayInputProcessor` | 오버레이가 떠 있는 동안 모든 입력을 Slate 단계에서 삼킴 |
 
 ### 데이터
 

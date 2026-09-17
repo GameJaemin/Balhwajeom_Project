@@ -11,4 +11,8 @@
 - `PhotoSentenceID`가 비어 있으면 스토리 사진이다.
 - `PreferredFocusDistance`, `FocusDistanceTolerance`, `bScaleFocusDistanceWithZoom`은 기본값을 사용할 때 CSV 헤더에서 생략한다.
 - `CaptureBlockedLabel`은 현재 상태가 촬영 불가일 때 카메라 보조 라벨에 표시할 행동 안내다. 비우면 공통 촬영 불필요 문구가 표시된다.
-- `DT_TutorialOverlay`는 `Scripts/Tutorial/CreateTutorialOverlayDataTable.py`가 생성하고 이 폴더로 CSV를 다시 내보낸다. 조건과 이미지가 확정되기 전에는 `RequiredTags`와 `Images`를 비워 둔다.
+- `DT_TutorialOverlay`는 `Scripts/Tutorial/CreateTutorialOverlayDataTable.py`가 생성하고 이 폴더로 CSV를 다시 내보낸다. 조건이 확정되기 전에는 `RequiredTags`를 비워 둔다.
+- 튜토리얼 오버레이 이미지는 전부 `/Game/Balhwajeom/UI/Tutorial/Overlay`에 모은다. 원본 이미지는 저장소에 올리지 않고 `.uasset`만 추적한다.
+  1. `Scripts/Tutorial/OverlayImages/`(git ignore됨)에 `OVL_01_001_01.png`처럼 행 ID와 순번으로 이름을 붙여 원본을 넣는다.
+  2. `Scripts/Tutorial/ImportOverlayImage.py`를 실행하면 `T_<파일명>` 텍스처로 임포트된다.
+  3. `CreateTutorialOverlayDataTable.py`의 `ROWS`에 그 에셋 이름을 적고 다시 실행한다. 없는 에셋을 적으면 생성 단계에서 바로 실패한다.

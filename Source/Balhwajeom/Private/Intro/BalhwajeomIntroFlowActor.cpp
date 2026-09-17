@@ -18,7 +18,9 @@
 #include "MovieSceneSequencePlaybackSettings.h"
 #include "Sound/SoundBase.h"
 #include "Story/StoryStateSubsystem.h"
+#include "Story/StoryStateTags.h"
 #include "Tablet/BalhwajeomTabletComponent.h"
+#include "Tutorial/BalhwajeomTutorialOverlayTriggers.h"
 #include "UI/BalhwajeomMainMenuWidget.h"
 #include "UI/BalhwajeomScreenFadeWidget.h"
 #include "UI/BalhwajeomCinematicVideoWidget.h"
@@ -208,6 +210,11 @@ void ABalhwajeomIntroFlowActor::HandleFadeFromBlackFinished()
 	if (State == EBalhwajeomIntroState::TransitionToGameplay)
 	{
 		State = EBalhwajeomIntroState::Gameplay;
+
+		// Announced here rather than in EnterGameplayAtBlack so the first tutorial screen
+		// arrives on a visible world, not over the tail of the fade from black.
+		BalhwajeomTutorialOverlayTriggers::Set(
+			this, BalhwajeomGameplayTags::Tutorial_Trigger_GameplayStarted);
 	}
 }
 

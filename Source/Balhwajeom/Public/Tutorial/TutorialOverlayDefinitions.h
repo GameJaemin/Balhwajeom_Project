@@ -15,6 +15,10 @@ struct BALHWAJEOM_API FTutorialOverlayDefinition : public FTableRowBase
 {
 	GENERATED_BODY()
 
+	/** Kept identical to the Row Name, as in every other investigation DataTable. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Overlay")
+	FName OverlayID = NAME_None;
+
 	/** Every tag in this container must be present before the overlay may open. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Overlay|Condition")
 	FGameplayTagContainer RequiredTags;
@@ -22,6 +26,10 @@ struct BALHWAJEOM_API FTutorialOverlayDefinition : public FTableRowBase
 	/** Optional images shown by the overlay in authored order. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Overlay|Content")
 	TArray<TSoftObjectPtr<UTexture2D>> Images;
+
+	/** Single-line heading above the explanation. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Overlay|Content")
+	FText OverlayTitle;
 
 	/** Player-facing tutorial copy. Embedded newlines are preserved. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Overlay|Content",

@@ -19,6 +19,8 @@
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Story/StoryStateSubsystem.h"
 #include "Story/StoryStateTags.h"
+#include "Tutorial/BalhwajeomTutorialOverlayTriggers.h"
+#include "Tutorial/BalhwajeomTutorialOverlayPresenter.h"
 #include "Tablet/BalhwajeomTabletComponent.h"
 #include "Tutorial/BalhwajeomTutorialDirector.h"
 #include "Tutorial/BalhwajeomTutorialFocusWidget.h"
@@ -98,6 +100,23 @@ void ABalhwajeomCameraPlayerController::BeginPlay()
 	EnsureBedMemoryHUD();
 	EnsureTutorialFocusLayer();
 	EnsureInteractionPrompt();
+	EnsureTutorialOverlayPresenter();
+}
+
+void ABalhwajeomCameraPlayerController::EnsureTutorialOverlayPresenter()
+{
+	if (!IsLocalController() ||
+		FindComponentByClass<UBalhwajeomTutorialOverlayPresenter>())
+	{
+		return;
+	}
+
+	// Created rather than declared as a default subobject so a Blueprint controller that
+	// predates the tutorial overlays still gets one.
+	UBalhwajeomTutorialOverlayPresenter* Presenter =
+		NewObject<UBalhwajeomTutorialOverlayPresenter>(
+			this, TEXT("TutorialOverlayPresenter"));
+	Presenter->RegisterComponent();
 }
 
 void ABalhwajeomCameraPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -224,6 +243,11 @@ void ABalhwajeomCameraPlayerController::CloseInteractionModal()
 		InputMode.SetConsumeCaptureMouseDown(false);
 		SetInputMode(InputMode);
 	}
+
+	// The modal closing is the moment an F interaction is over and the player is back in
+	// third person, which is exactly what the tutorial waits for.
+	BalhwajeomTutorialOverlayTriggers::Set(
+		this, BalhwajeomGameplayTags::Tutorial_Trigger_InteractCompleted);
 }
 
 void ABalhwajeomCameraPlayerController::HandleInteractionModalCloseRequested()
@@ -919,6 +943,12 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 		InteractionPromptWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 	const bool bShouldShow = ShouldShowInteractionPrompt();
+	if (bShouldShow)
+	{
+		// The first time the player is close enough to something to be offered [F].
+		BalhwajeomTutorialOverlayTriggers::Set(
+			this, BalhwajeomGameplayTags::Tutorial_Trigger_InteractPromptShown);
+	}
 	RefreshInteractionReticle(bShouldShow);
 	RefreshInteractionPromptText(bShouldShow);
 	const float TargetOpacity = bShouldShow ? 1.0f : 0.0f;
@@ -928,13 +958,26 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 		DeltaSeconds,
 		InteractionPromptFadeSpeed);
 
-	// A tutorial step can ask for the [F] prompt itself to pulse.
+	// A tutorial step can ask for the [F] prompt itself to pulse. The pulse's influence is
+	// ramped rather than switched: pressing F ends the step, and a blink that stopped on
+	// whatever brightness it happened to be at would flash the prompt on its way out.
+	const bool bWantsPromptPulse =
+		TutorialHintTarget == EBalhwajeomTutorialHintTarget::InteractPrompt;
+	InteractionPromptPulseBlend = FMath::FInterpTo(
+		InteractionPromptPulseBlend,
+		bWantsPromptPulse ? 1.0f : 0.0f,
+		DeltaSeconds,
+		InteractionPromptFadeSpeed);
+
 	float DisplayOpacity = InteractionPromptAlpha;
-	if (TutorialHintTarget == EBalhwajeomTutorialHintTarget::InteractPrompt)
+	if (InteractionPromptPulseBlend > KINDA_SMALL_NUMBER)
 	{
-		DisplayOpacity *= ABalhwajeomTutorialDirector::GetTutorialHighlightPulse(this);
+		DisplayOpacity *= FMath::Lerp(
+			1.0f,
+			ABalhwajeomTutorialDirector::GetTutorialHighlightPulse(this),
+			InteractionPromptPulseBlend);
 	}
-	else if (bShouldBeBehindTutorialDim)
+	if (bShouldBeBehindTutorialDim)
 	{
 		// The dim is intentionally translucent, so a bright prompt can still show through
 		// even at the lower Z-order. Hide only the authored [F] text pixels while keeping

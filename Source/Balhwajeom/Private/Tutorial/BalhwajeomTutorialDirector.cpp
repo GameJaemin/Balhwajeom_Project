@@ -59,7 +59,7 @@ EBalhwajeomTutorialHintTarget ABalhwajeomTutorialDirector::GetTutorialHintTarget
 	// A mode that owns the whole screen also owns the icons, so stop highlighting them.
 	// The tablet's own open/close hint is the one exception: it stays visible in the
 	// tablet's screen margin, so Tablet mode should not suppress it.
-	if (!Step || Director->IsScreenOwnedByOtherMode(
+	if (!Step || !Director->IsHintAllowed(*Step) || Director->IsScreenOwnedByOtherMode(
 		Step->HintTarget != EBalhwajeomTutorialHintTarget::TabletIcon))
 	{
 		return EBalhwajeomTutorialHintTarget::None;
@@ -74,7 +74,7 @@ FText ABalhwajeomTutorialDirector::GetTutorialHintMessage(const UObject* WorldCo
 	const ABalhwajeomTutorialDirector* Director = GetTutorialDirector(WorldContextObject);
 	const FBalhwajeomTutorialStep* Step = Director ? Director->GetCurrentStepPtr() : nullptr;
 
-	if (!Step || Director->IsScreenOwnedByOtherMode(
+	if (!Step || !Director->IsHintAllowed(*Step) || Director->IsScreenOwnedByOtherMode(
 		Step->HintTarget != EBalhwajeomTutorialHintTarget::TabletIcon))
 	{
 		return FText::GetEmpty();
@@ -104,6 +104,21 @@ float ABalhwajeomTutorialDirector::CalculatePulseOpacity(
 	const float Phase = FMath::Cos(2.0f * UE_PI * PulsesPerSecond * ElapsedSeconds);
 
 	return FMath::Lerp(Low, High, 0.5f + 0.5f * Phase);
+}
+
+
+bool ABalhwajeomTutorialDirector::IsHintAllowed(const FBalhwajeomTutorialStep& Step) const
+{
+	if (Step.HintRequiredTags.IsEmpty())
+	{
+		return true;
+	}
+
+	const UStoryStateSubsystem* StoryState = GetStoryState();
+
+	// Fail closed: an unreachable story state means the gate cannot be confirmed, and a
+	// highlight shown too early is exactly what this gate exists to prevent.
+	return StoryState && StoryState->HasAllStateTags(Step.HintRequiredTags);
 }
 
 
@@ -534,7 +549,7 @@ bool ABalhwajeomTutorialDirector::IsScreenOwnedByOtherMode(bool bTabletModeCount
 float ABalhwajeomTutorialDirector::CalculateDimOpacity() const
 {
 	const FBalhwajeomTutorialStep* Step = GetCurrentStepPtr();
-	if (!Step || Step->DimMode == EBalhwajeomTutorialDimMode::Off)
+	if (!Step || Step->DimMode == EBalhwajeomTutorialDimMode::Off || !IsHintAllowed(*Step))
 	{
 		return 0.0f;
 	}

@@ -5,6 +5,7 @@
 #include "Engine/DataTable.h"
 #include "Engine/Texture2D.h"
 #include "GameplayTagContainer.h"
+#include "UObject/SoftObjectPtr.h"
 #include "UObject/UnrealType.h"
 
 
@@ -33,10 +34,14 @@ bool FTutorialOverlayDataTableTest::RunTest(const FString& Parameters)
 		RowStruct->GetFName(),
 		FName(TEXT("TutorialOverlayDefinition")));
 
+	const FNameProperty* OverlayIDProperty =
+		FindFProperty<FNameProperty>(RowStruct, TEXT("OverlayID"));
 	const FStructProperty* RequiredTagsProperty =
 		FindFProperty<FStructProperty>(RowStruct, TEXT("RequiredTags"));
 	const FArrayProperty* ImagesProperty =
 		FindFProperty<FArrayProperty>(RowStruct, TEXT("Images"));
+	const FTextProperty* OverlayTitleProperty =
+		FindFProperty<FTextProperty>(RowStruct, TEXT("OverlayTitle"));
 	const FTextProperty* OverlayTextProperty =
 		FindFProperty<FTextProperty>(RowStruct, TEXT("OverlayText"));
 	const FStructProperty* CompletionTagProperty =
@@ -52,26 +57,45 @@ bool FTutorialOverlayDataTableTest::RunTest(const FString& Parameters)
 	TestTrue(
 		TEXT("Images should be an array of soft Texture2D references"),
 		ImageInnerProperty && ImageInnerProperty->PropertyClass == UTexture2D::StaticClass());
+	TestNotNull(TEXT("OverlayID should be an FName property"), OverlayIDProperty);
+	TestNotNull(TEXT("OverlayTitle should be an FText property"), OverlayTitleProperty);
 	TestNotNull(TEXT("OverlayText should be an FText property"), OverlayTextProperty);
+
+	// The heading is one line; only the body is authored as multi-line.
+	TestFalse(TEXT("OverlayTitle should be a single-line field"),
+		OverlayTitleProperty &&
+			OverlayTitleProperty->HasMetaData(TEXT("MultiLine")));
+	TestTrue(TEXT("OverlayText should stay a multi-line field"),
+		OverlayTextProperty &&
+			OverlayTextProperty->GetMetaData(TEXT("MultiLine")) == TEXT("true"));
 	TestTrue(
 		TEXT("CompletionTag should be a GameplayTag"),
 		CompletionTagProperty &&
 			CompletionTagProperty->Struct == FGameplayTag::StaticStruct());
-	if (!RequiredTagsProperty || !ImagesProperty || !OverlayTextProperty ||
-		!CompletionTagProperty)
+	if (!OverlayIDProperty || !RequiredTagsProperty || !ImagesProperty ||
+		!OverlayTitleProperty || !OverlayTextProperty || !CompletionTagProperty)
 	{
 		return false;
 	}
 
+	// Every overlay image is managed in one folder, so the table never reaches into
+	// per-feature asset folders.
+	static const TCHAR* ImageFolder = TEXT("/Game/Balhwajeom/UI/Tutorial/Overlay/");
+
+	// Rows that already have art. The rest stay empty until their images are drawn.
+	const TMap<FName, int32> ExpectedImageCounts = { { TEXT("OVL_01_001"), 1 } };
+
+	// Ordered IDs, and the Row Name repeated in OverlayID exactly as the other
+	// investigation tables do it.
 	const TArray<TPair<FName, FName>> ExpectedRows = {
-		{ TEXT("StatementIntro"), TEXT("Tutorial.Overlay.Seen.StatementIntro") },
-		{ TEXT("MovementAndLook"), TEXT("Tutorial.Overlay.Seen.MovementAndLook") },
-		{ TEXT("Interaction"), TEXT("Tutorial.Overlay.Seen.Interaction") },
-		{ TEXT("PhotoCamera"), TEXT("Tutorial.Overlay.Seen.PhotoCamera") },
-		{ TEXT("MemoryObject"), TEXT("Tutorial.Overlay.Seen.MemoryObject") },
-		{ TEXT("Tablet"), TEXT("Tutorial.Overlay.Seen.Tablet") },
-		{ TEXT("SisterFolder"), TEXT("Tutorial.Overlay.Seen.SisterFolder") },
-		{ TEXT("PhotoSentencePuzzle"), TEXT("Tutorial.Overlay.Seen.PhotoSentencePuzzle") }
+		{ TEXT("OVL_01_001"), TEXT("Tutorial.Overlay.Seen.StatementIntro") },
+		{ TEXT("OVL_01_002"), TEXT("Tutorial.Overlay.Seen.MovementAndLook") },
+		{ TEXT("OVL_01_003"), TEXT("Tutorial.Overlay.Seen.Interaction") },
+		{ TEXT("OVL_01_004"), TEXT("Tutorial.Overlay.Seen.PhotoCamera") },
+		{ TEXT("OVL_01_005"), TEXT("Tutorial.Overlay.Seen.MemoryObject") },
+		{ TEXT("OVL_01_006"), TEXT("Tutorial.Overlay.Seen.Tablet") },
+		{ TEXT("OVL_01_007"), TEXT("Tutorial.Overlay.Seen.SisterFolder") },
+		{ TEXT("OVL_01_008"), TEXT("Tutorial.Overlay.Seen.PhotoSentencePuzzle") }
 	};
 
 	TestEqual(TEXT("DT_TutorialOverlay should contain eight rows"),
@@ -101,12 +125,31 @@ bool FTutorialOverlayDataTableTest::RunTest(const FString& Parameters)
 			CompletionTag ? CompletionTag->GetTagName() : NAME_None,
 			Expected.Value);
 
+		// What the conditions actually are, and that they chain in order, is covered by
+		// Balhwajeom.Tutorial.Overlay.RequiredTags.
 		const FGameplayTagContainer* RequiredTags =
 			RequiredTagsProperty->ContainerPtrToValuePtr<FGameplayTagContainer>(RowData);
 		TestTrue(
-			FString::Printf(TEXT("Row %s should remain inactive until conditions are authored"),
+			FString::Printf(TEXT("Row %s should have a trigger condition"),
 				*Expected.Key.ToString()),
-			RequiredTags && RequiredTags->IsEmpty());
+			RequiredTags && !RequiredTags->IsEmpty());
+
+		const FName* OverlayID = OverlayIDProperty->ContainerPtrToValuePtr<FName>(RowData);
+		TestEqual(
+			FString::Printf(TEXT("Row %s should repeat its Row Name in OverlayID"),
+				*Expected.Key.ToString()),
+			OverlayID ? *OverlayID : NAME_None,
+			Expected.Key);
+
+		const FText* OverlayTitle =
+			OverlayTitleProperty->ContainerPtrToValuePtr<FText>(RowData);
+		TestTrue(
+			FString::Printf(TEXT("Row %s should carry a heading"), *Expected.Key.ToString()),
+			OverlayTitle && !OverlayTitle->IsEmpty());
+		TestFalse(
+			FString::Printf(TEXT("Row %s heading should stay on one line"),
+				*Expected.Key.ToString()),
+			OverlayTitle && OverlayTitle->ToString().Contains(TEXT("\n")));
 
 		const FText* OverlayText =
 			OverlayTextProperty->ContainerPtrToValuePtr<FText>(RowData);
@@ -114,6 +157,33 @@ bool FTutorialOverlayDataTableTest::RunTest(const FString& Parameters)
 			FString::Printf(TEXT("Row %s should contain initial overlay copy"),
 				*Expected.Key.ToString()),
 			OverlayText && !OverlayText->IsEmpty());
+
+		const void* ImagesValue = ImagesProperty->ContainerPtrToValuePtr<void>(RowData);
+		FScriptArrayHelper Images(ImagesProperty, ImagesValue);
+		const int32 ExpectedImageCount =
+			ExpectedImageCounts.FindRef(Expected.Key);
+		TestEqual(
+			FString::Printf(TEXT("Row %s should carry its authored images"),
+				*Expected.Key.ToString()),
+			Images.Num(), ExpectedImageCount);
+
+		for (int32 ImageIndex = 0; ImageIndex < Images.Num(); ++ImageIndex)
+		{
+			const FSoftObjectPtr* Image = reinterpret_cast<const FSoftObjectPtr*>(
+				Images.GetRawPtr(ImageIndex));
+			const FString ImagePath = Image ? Image->ToSoftObjectPath().ToString() : FString();
+			TestTrue(
+				FString::Printf(TEXT("Row %s image %d should live in the shared folder"),
+					*Expected.Key.ToString(), ImageIndex),
+				ImagePath.StartsWith(ImageFolder));
+
+			// A soft reference that no longer resolves would show as a blank overlay
+			// rather than as any kind of error at runtime.
+			TestNotNull(
+				FString::Printf(TEXT("Row %s image %d should resolve"),
+					*Expected.Key.ToString(), ImageIndex),
+				Image ? LoadObject<UTexture2D>(nullptr, *ImagePath) : nullptr);
+		}
 	}
 
 	return true;
