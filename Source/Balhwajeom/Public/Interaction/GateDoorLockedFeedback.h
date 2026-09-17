@@ -28,4 +28,15 @@ namespace GateDoorLockedFeedback
 	BALHWAJEOM_API FText ResolveFirstIncompleteMessage(
 		const TArray<FGateDoorLockedFeedbackStage>& Stages,
 		const FGameplayTagContainer& CurrentStateTags);
+
+	/**
+	 * Render opacity of a message that fades in, holds fully opaque, then fades out.
+	 * A zero-length fade is applied instantly, and any elapsed time at or past the total
+	 * duration returns 0, which is what tells the caller the message is finished.
+	 */
+	BALHWAJEOM_API float ResolveFadeOpacity(
+		float ElapsedSeconds,
+		float FadeInDuration,
+		float HoldDuration,
+		float FadeOutDuration);
 }

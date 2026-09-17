@@ -19,6 +19,17 @@
 #include "UObject/UObjectIterator.h"
 
 
+namespace
+{
+	/**
+	 * Step of the locked-feedback fade. The actor's own tick is throttled to 0.1s for a
+	 * cheap lock-state poll, which is far too coarse to read as a fade, so the fade runs
+	 * on its own timer and only while a message is actually on screen.
+	 */
+	constexpr float GateDoorLockedFeedbackFadeInterval = 1.0f / 60.0f;
+}
+
+
 ABalhwajeomGateDoorActor::ABalhwajeomGateDoorActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -86,7 +97,7 @@ void ABalhwajeomGateDoorActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (UWorld* World = GetWorld())
 	{
-		World->GetTimerManager().ClearTimer(LockedFeedbackTimerHandle);
+		World->GetTimerManager().ClearTimer(LockedFeedbackFadeTimerHandle);
 	}
 	if (LockedFeedbackWidget)
 	{
@@ -126,6 +137,8 @@ void ABalhwajeomGateDoorActor::HandleLockedInteractionRequested()
 			return;
 		}
 		LockedFeedbackWidget->AddToViewport(FMath::Max(LockedFeedbackZOrder, 1100));
+		// A new widget starts fully opaque, which would skip the first fade-in entirely.
+		LockedFeedbackWidget->SetRenderOpacity(0.0f);
 	}
 	if (UGameViewportSubsystem* ViewportSubsystem = UGameViewportSubsystem::Get(GetWorld()))
 	{
@@ -137,15 +150,61 @@ void ABalhwajeomGateDoorActor::HandleLockedInteractionRequested()
 	}
 
 	ApplyLockedFeedbackMessage(ResolveLockedFeedbackMessage());
-	LockedFeedbackWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
-	if (UWorld* World = GetWorld())
+	BeginLockedFeedbackFade();
+}
+
+
+void ABalhwajeomGateDoorActor::BeginLockedFeedbackFade()
+{
+	UWorld* World = GetWorld();
+	if (!LockedFeedbackWidget || !World)
 	{
-		World->GetTimerManager().SetTimer(
-			LockedFeedbackTimerHandle,
-			this,
-			&ThisClass::HideLockedFeedback,
-			FMath::Max(0.1f, LockedFeedbackDisplayDuration),
-			false);
+		return;
+	}
+
+	// Interacting again while the message is still on screen resumes the fade-in from the
+	// opacity already being drawn, so a second [F] never blinks the message out and back in.
+	const float CurrentOpacity =
+		FMath::Clamp(LockedFeedbackWidget->GetRenderOpacity(), 0.0f, 1.0f);
+	LockedFeedbackElapsedSeconds =
+		CurrentOpacity * FMath::Max(0.0f, LockedFeedbackFadeInDuration);
+
+	LockedFeedbackWidget->SetRenderOpacity(CurrentOpacity);
+	LockedFeedbackWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+	World->GetTimerManager().SetTimer(
+		LockedFeedbackFadeTimerHandle,
+		this,
+		&ThisClass::AdvanceLockedFeedbackFade,
+		GateDoorLockedFeedbackFadeInterval,
+		true);
+}
+
+
+void ABalhwajeomGateDoorActor::AdvanceLockedFeedbackFade()
+{
+	if (!LockedFeedbackWidget)
+	{
+		HideLockedFeedback();
+		return;
+	}
+
+	LockedFeedbackElapsedSeconds += GateDoorLockedFeedbackFadeInterval;
+
+	const float FadeInDuration = FMath::Max(0.0f, LockedFeedbackFadeInDuration);
+	const float HoldDuration = FMath::Max(0.1f, LockedFeedbackDisplayDuration);
+	const float FadeOutDuration = FMath::Max(0.0f, LockedFeedbackFadeOutDuration);
+
+	LockedFeedbackWidget->SetRenderOpacity(
+		GateDoorLockedFeedback::ResolveFadeOpacity(
+			LockedFeedbackElapsedSeconds,
+			FadeInDuration,
+			HoldDuration,
+			FadeOutDuration));
+
+	if (LockedFeedbackElapsedSeconds >= FadeInDuration + HoldDuration + FadeOutDuration)
+	{
+		HideLockedFeedback();
 	}
 }
 
@@ -291,8 +350,16 @@ TSubclassOf<UUserWidget> ABalhwajeomGateDoorActor::ResolveLockedFeedbackWidgetCl
 
 void ABalhwajeomGateDoorActor::HideLockedFeedback()
 {
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(LockedFeedbackFadeTimerHandle);
+	}
+	LockedFeedbackElapsedSeconds = 0.0f;
+
 	if (LockedFeedbackWidget)
 	{
+		// Left transparent so the next interaction can read this back as "fade from 0".
+		LockedFeedbackWidget->SetRenderOpacity(0.0f);
 		LockedFeedbackWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }

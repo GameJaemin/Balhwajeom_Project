@@ -78,4 +78,62 @@ bool FGateDoorLockedFeedbackStageOrderTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FGateDoorLockedFeedbackFadeOpacityTest,
+	"Balhwajeom.Interaction.GateDoor.LockedFeedback.FadeOpacity",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FGateDoorLockedFeedbackFadeOpacityTest::RunTest(const FString& Parameters)
+{
+	constexpr float FadeIn = 0.25f;
+	constexpr float Hold = 2.5f;
+	constexpr float FadeOut = 0.4f;
+	constexpr float Tolerance = KINDA_SMALL_NUMBER;
+
+	TestEqual(TEXT("A message starts fully transparent"),
+		GateDoorLockedFeedback::ResolveFadeOpacity(0.0f, FadeIn, Hold, FadeOut),
+		0.0f, Tolerance);
+	TestEqual(TEXT("Half the fade-in should be half opaque"),
+		GateDoorLockedFeedback::ResolveFadeOpacity(FadeIn * 0.5f, FadeIn, Hold, FadeOut),
+		0.5f, Tolerance);
+	TestEqual(TEXT("The hold phase stays fully opaque"),
+		GateDoorLockedFeedback::ResolveFadeOpacity(FadeIn + Hold * 0.5f, FadeIn, Hold, FadeOut),
+		1.0f, Tolerance);
+	TestEqual(TEXT("The hold phase is still opaque on its last instant"),
+		GateDoorLockedFeedback::ResolveFadeOpacity(FadeIn + Hold, FadeIn, Hold, FadeOut),
+		1.0f, Tolerance);
+	TestEqual(TEXT("Half the fade-out should be half opaque again"),
+		GateDoorLockedFeedback::ResolveFadeOpacity(
+			FadeIn + Hold + FadeOut * 0.5f, FadeIn, Hold, FadeOut),
+		0.5f, Tolerance);
+	TestEqual(TEXT("The total duration ends fully transparent"),
+		GateDoorLockedFeedback::ResolveFadeOpacity(
+			FadeIn + Hold + FadeOut, FadeIn, Hold, FadeOut),
+		0.0f, Tolerance);
+	TestEqual(TEXT("Overrunning the total duration stays transparent"),
+		GateDoorLockedFeedback::ResolveFadeOpacity(
+			FadeIn + Hold + FadeOut + 10.0f, FadeIn, Hold, FadeOut),
+		0.0f, Tolerance);
+
+	// Designers can switch either fade off without the message disappearing on them.
+	TestEqual(TEXT("A disabled fade-in is opaque from the first instant"),
+		GateDoorLockedFeedback::ResolveFadeOpacity(0.0f, 0.0f, Hold, FadeOut),
+		1.0f, Tolerance);
+	TestEqual(TEXT("A disabled fade-in is opaque during the hold"),
+		GateDoorLockedFeedback::ResolveFadeOpacity(Hold * 0.5f, 0.0f, Hold, FadeOut),
+		1.0f, Tolerance);
+	TestEqual(TEXT("A disabled fade-out cuts out at the end of the hold"),
+		GateDoorLockedFeedback::ResolveFadeOpacity(
+			FadeIn + Hold + Tolerance, FadeIn, Hold, 0.0f),
+		0.0f, Tolerance);
+
+	// Negative durations come from a hand-edited asset, not from the clamped details panel.
+	TestEqual(TEXT("Negative durations are treated as disabled fades"),
+		GateDoorLockedFeedback::ResolveFadeOpacity(Hold * 0.5f, -1.0f, Hold, -1.0f),
+		1.0f, Tolerance);
+
+	return true;
+}
+
 #endif

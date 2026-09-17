@@ -73,6 +73,9 @@ protected:
 	void HandleLockedInteractionRequested();
 
 	UFUNCTION()
+	void AdvanceLockedFeedbackFade();
+
+	void BeginLockedFeedbackFade();
 	void HideLockedFeedback();
 
 	TSubclassOf<UUserWidget> ResolveLockedFeedbackWidgetClass() const;
@@ -119,9 +122,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback")
 	TArray<FGateDoorLockedFeedbackStage> LockedFeedbackStages;
 
+	/** How long the message stays fully opaque, i.e. excluding the two fades around it. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback",
 		meta = (ClampMin = "0.1", UIMin = "0.1", Units = "s"))
 	float LockedFeedbackDisplayDuration = 2.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback",
+		meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	float LockedFeedbackFadeInDuration = 0.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback",
+		meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	float LockedFeedbackFadeOutDuration = 0.4f;
 
 	/** Above the tutorial dim and interaction prompt, below modal screens. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback")
@@ -142,5 +154,8 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UUserWidget> LockedFeedbackWidget;
 
-	FTimerHandle LockedFeedbackTimerHandle;
+	/** Seconds into the current fade-in/hold/fade-out cycle. */
+	float LockedFeedbackElapsedSeconds = 0.0f;
+
+	FTimerHandle LockedFeedbackFadeTimerHandle;
 };
