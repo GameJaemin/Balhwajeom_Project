@@ -38,6 +38,8 @@
 #include "BalhwajeomEvidenceActor.h"
 #include "BalhwajeomEvidenceCameraHUD.h"
 #include "BalhwajeomCameraTargetInterface.h"
+#include "BalhwajeomPhotoCameraZoom.h"
+#include "BalhwajeomPhotoCaptureAvailability.h"
 #include "PhotoWorldStoryActor.h"
 
 namespace
@@ -379,6 +381,122 @@ void UBalhwajeomPhotoCameraComponent::TickComponent(
 		UpdateEvidenceFocus(DeltaTime);
 		RefreshDisplayedGuideSnapshot();
 	}
+
+	UpdatePendingAutoExit();
+}
+
+
+bool UBalhwajeomPhotoCameraComponent::IsActorCapturableNow(
+	AActor* Target,
+	const FVector& SearchOrigin) const
+{
+	if (!IsValid(Target) ||
+		!Target->GetClass()->ImplementsInterface(
+			UBalhwajeomCameraTargetInterface::StaticClass()))
+	{
+		return false;
+	}
+
+	// A closed progression gate makes this return false, so phase-locked evidence never
+	// counts as something still available to photograph.
+	FBalhwajeomCameraTargetInfo TargetInfo;
+	const bool bResolvedInfo =
+		IBalhwajeomCameraTargetInterface::Execute_RequestCameraTargetInfo(Target, TargetInfo);
+
+	FBalhwajeomResolvedPhotoTarget ResolvedTarget;
+	bool bStateCanCapture = false;
+	bool bHasPhotoID = false;
+	bool bAlreadyCaptured = false;
+	float MaximumOffset = TargetInfo.MaximumFocusDistanceOffset;
+	if (bResolvedInfo && ResolveInvestigationTarget(TargetInfo, ResolvedTarget))
+	{
+		bStateCanCapture = ResolvedTarget.bCanCapture;
+		bHasPhotoID = !ResolvedTarget.PhotoID.IsNone();
+		MaximumOffset = ResolvedTarget.MaximumFocusDistanceOffset;
+		if (const UBalhwajeomInvestigationSubsystem* InvestigationSubsystem =
+			GetInvestigationSubsystem())
+		{
+			bAlreadyCaptured = bHasPhotoID &&
+				InvestigationSubsystem->HasCapturedPhoto(ResolvedTarget.PhotoID);
+		}
+	}
+
+	// Only the far edge of the focus range is applied. FindStrictFocusTarget() also has a
+	// near edge, but an object the player is standing on top of is still something to
+	// keep the camera up for: one step back and it is in focus.
+	bool bWithinSearchRadius = false;
+	if (bResolvedInfo)
+	{
+		const float SearchRadius = FMath::Max(0.0f, MaximumFocusDistance + MaximumOffset);
+		const FVector FocusLocation =
+			IBalhwajeomCameraTargetInterface::Execute_RequestCameraFocusLocation(Target);
+		bWithinSearchRadius =
+			FVector::Distance(SearchOrigin, FocusLocation) <= SearchRadius;
+	}
+
+	return BalhwajeomPhotoCaptureAvailability::IsCapturableNow(
+		bResolvedInfo, bWithinSearchRadius, bStateCanCapture, bHasPhotoID, bAlreadyCaptured);
+}
+
+
+bool UBalhwajeomPhotoCameraComponent::HasCapturableTargetRemaining() const
+{
+	const UWorld* World = GetWorld();
+	const AActor* Owner = GetOwner();
+	if (!World || !Owner)
+	{
+		// Reported as "something remains" on purpose: an unanswerable question must not
+		// be the reason the camera drops out of the player's hands.
+		return true;
+	}
+
+	// Measured from the player rather than the photo camera: the radius is about what is
+	// nearby, and the eye-height offset is noise against MaximumFocusDistance.
+	const FVector SearchOrigin = Owner->GetActorLocation();
+
+	// Walked once per finished capture, never per frame. Iterating every actor keeps this
+	// correct for any future camera target, not just the evidence actors.
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		if (IsActorCapturableNow(*It, SearchOrigin))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+
+void UBalhwajeomPhotoCameraComponent::UpdatePendingAutoExit()
+{
+	if (!bAutoExitAfterCapturePresentation)
+	{
+		return;
+	}
+
+	// Leaving camera mode by hand while the card is up satisfies the request already.
+	if (!bIsInCameraMode)
+	{
+		bAutoExitAfterCapturePresentation = false;
+		return;
+	}
+
+	// The same gate ToggleCameraMode() consults. It releases as soon as the card starts
+	// flying away, so the black transition runs underneath it and the player is already
+	// in the third-person view by the time the card clears.
+	if (IsCaptureResultLockingCameraMode())
+	{
+		return;
+	}
+
+	// RequestExitCameraMode() no-ops mid-transition, so only drop the flag once the exit
+	// has actually been taken.
+	RequestExitCameraMode();
+	if (!bIsInCameraMode || bIsCameraTransitioning)
+	{
+		bAutoExitAfterCapturePresentation = false;
+	}
 }
 
 void UBalhwajeomPhotoCameraComponent::SetPhotoCamera(UCameraComponent* Camera)
@@ -530,6 +648,15 @@ void UBalhwajeomPhotoCameraComponent::LookPitch(float Value)
 	}
 }
 
+float UBalhwajeomPhotoCameraComponent::GetZoomAlpha() const
+{
+	return PhotoCamera
+		? BalhwajeomPhotoCameraZoom::ResolveZoomAlpha(
+			PhotoCamera->FieldOfView, MinCameraFieldOfView, MaxCameraFieldOfView)
+		: 0.0f;
+}
+
+
 void UBalhwajeomPhotoCameraComponent::ZoomCamera(float Value)
 {
 	if (!bIsInCameraMode || bIsCameraTransitioning || !PhotoCamera || FMath::IsNearlyZero(Value))
@@ -653,6 +780,10 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 	{
 		return;
 	}
+
+	// Raising the camera again is an explicit request to stay in it, so a queued exit
+	// left over from the previous session must not pull it straight back down.
+	bAutoExitAfterCapturePresentation = false;
 
 	// Entry alignment can move the attached camera in world space. Capture its authored
 	// transform first so leaving photo mode always puts it back at the character's eyes.
@@ -1901,6 +2032,11 @@ void UBalhwajeomPhotoCameraComponent::CompleteImageSave(
 	PendingCapturePreviewTexture = nullptr;
 
 	ShowPhotoFeedback(TEXT("사진을 기록했다."), FColor::Green);
+
+	if (bExitCameraWhenNoCapturableTargetsRemain && !HasCapturableTargetRemaining())
+	{
+		bAutoExitAfterCapturePresentation = true;
+	}
 }
 
 bool UBalhwajeomPhotoCameraComponent::CalculateStorySpawnTransform(FTransform& OutTransform) const
