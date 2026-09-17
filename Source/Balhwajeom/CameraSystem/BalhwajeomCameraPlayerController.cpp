@@ -31,6 +31,9 @@
 ABalhwajeomCameraPlayerController::ABalhwajeomCameraPlayerController()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	// Hidden so the viewport keeps the mouse captured. A visible cursor makes the
+	// viewport capture only while a button is held, which turns look into click-drag.
+	bShowMouseCursor = false;
 
 	static ConstructorHelpers::FClassFinder<UUserWidget> DefaultInteractionPromptClass(
 		TEXT("/Game/Balhwajeom/UI/HUD/WBP_Interact"));
@@ -81,9 +84,10 @@ void ABalhwajeomCameraPlayerController::BeginPlay()
 	Super::BeginPlay();
 
 	// An intro flow actor can lock presentation before the controller reaches
-	// BeginPlay. Do not overwrite its UI-only input mode.
+	// BeginPlay. Do not overwrite its UI-only input mode or hide its cursor.
 	if (bGameplayPresentationEnabled)
 	{
+		bShowMouseCursor = false;
 		FInputModeGameOnly InputMode;
 		InputMode.SetConsumeCaptureMouseDown(false);
 		SetInputMode(InputMode);

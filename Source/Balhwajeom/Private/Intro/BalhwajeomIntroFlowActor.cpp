@@ -630,6 +630,9 @@ void ABalhwajeomIntroFlowActor::SetGameplayEnabled(bool bEnabled)
 	{
 		PC->ResetIgnoreMoveInput();
 		PC->ResetIgnoreLookInput();
+		// Gameplay needs the viewport holding the mouse, or looking around would only
+		// work while a button is held down.
+		PC->bShowMouseCursor = false;
 		PC->bEnableClickEvents = false;
 		PC->bEnableMouseOverEvents = false;
 		FInputModeGameOnly InputMode;
