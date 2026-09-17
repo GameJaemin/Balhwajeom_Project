@@ -89,6 +89,5 @@ private:
 	bool bInputBlockApplied = false;
 	bool bRestoreMoveInput = false;
 	bool bRestoreLookInput = false;
-	bool bRestoreMouseCursor = false;
 	bool bCheckedForIntroActor = false;
 };

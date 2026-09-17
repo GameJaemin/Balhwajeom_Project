@@ -139,15 +139,18 @@ bool FTutorialOverlaySequenceTest::RunTest(const FString& Parameters)
 		TestEqual(TEXT("The camera screen is fourth"), Shown[0], FName(TEXT("OVL_01_004")));
 	}
 
-	// The worst ordering case: all three frames photographed without leaving camera mode,
-	// so the photographed tags land before the player is back in third person.
+	// The worst ordering case: all three frames photographed from inside camera mode, so
+	// the photographed tags land while the viewfinder still owns the screen.
+	StateTags.AddTag(Tag(TEXT("Runtime.Player.Mode.PhotoCamera")));
 	StateTags.AddTag(Tag(TEXT("Evidence.Photographed.OBJ_01_001")));
 	StateTags.AddTag(Tag(TEXT("Evidence.Photographed.OBJ_01_002")));
 	Shown = PlayMoment(Rows, StateTags, Tag(TEXT("Evidence.Photographed.OBJ_01_003")));
 	TestTrue(TEXT("Photographing inside camera mode shows nothing yet"), Shown.IsEmpty());
 
-	Shown = PlayMoment(
-		Rows, StateTags, Tag(TEXT("Tutorial.Trigger.PhotoCaptureCompleted")));
+	// Lowering the camera puts the player back in third person and ends the photo trip.
+	StateTags.RemoveTag(Tag(TEXT("Runtime.Player.Mode.PhotoCamera")));
+	StateTags.AddTag(Tag(TEXT("Tutorial.Trigger.PhotoCaptureCompleted")));
+	Shown = PlayMoment(Rows, StateTags, Tag(TEXT("Runtime.Player.Mode.Exploration")));
 	TestEqual(TEXT("Leaving camera mode shows the memory and tablet screens in order"),
 		Shown.Num(), 2);
 	if (Shown.Num() == 2)

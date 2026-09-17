@@ -14,22 +14,18 @@
 
 | 단계 | 화면 | 가능한 입력 |
 |---|---|---|
-| **DustTeach** | 먼지 쌓인 사진을 **바라보면** 화면이 어두워지고 `[F]` 프롬프트가 **깜빡인다** | **F만** (우클릭·TAB 잠김) |
-| **PhotoPrompt** | **사진 한 장만 털면 바로** 화면 전체 암전 + **카메라 아이콘이 깜빡인다** | **우클릭 해금** |
-| **Photograph** | 1인칭 카메라. 암전은 사라지고 **`WBP_CAM` 뷰파인더**가 덮인다 | 우클릭으로 나와 F, 다시 우클릭으로 촬영 |
-| **CompleteFamilyPhoto** | 사진 세 장을 모두 찍으면 태블릿 잠금 해제 + **태블릿 아이콘 깜빡임** | TAB을 열고 `가족 사진`의 빈칸 문장 완성 |
+| **DustTeach** | 먼지 쌓인 사진을 바라보면 `[F]` 프롬프트가 뜬다 | **F만** (우클릭·TAB 잠김) |
+| **PhotoPrompt** | **사진 한 장만 털면 바로** 카메라가 해금된다 | **우클릭 해금** |
+| **Photograph** | 1인칭 카메라. **`WBP_CAM` 뷰파인더**가 덮인다 | 우클릭으로 나와 F, 다시 우클릭으로 촬영 |
+| **CompleteFamilyPhoto** | 사진 세 장을 모두 찍으면 태블릿 잠금 해제 | TAB을 열고 `가족 사진`의 빈칸 문장 완성 |
 | **Done** | — | 문이 `[F] 문 열기`로 바뀐다 |
 
-> **연출이 두 겹이다.** 설명은 전부 전체화면 오버레이(2.5절)가 맡고,
-> 디렉터는 **"지금 이걸 눌러라"** 를 아이콘 깜빡임으로만 가리킨다.
-> 각 깜빡임은 자기 설명 오버레이를 읽은 뒤에야 시작한다 — 아래 표의 `Hint Required Tags`.
-> **화면 암전은 전 단계에서 껐다.** 오버레이가 이미 화면을 덮으며 어둡게 하는데
-> 그 아래에서 상시 암전까지 걸리니 방이 계속 어두워 보였다.
-
-> **화면에 설명 문구는 띄우지 않는다.** 안내는 두 가지뿐이다 —
-> 화면을 어둡게 해서 쓸 것만 남기고, **지금 눌러야 할 것을 밝기로 깜빡인다.**
-> 깜빡임 대상은 `Hint Target` 이 정한다: `InteractPrompt`(= `WBP_Interact` 의 `[F]`),
-> `PhotoCameraIcon` / `TabletIcon`(= `WBP_HUID` 의 아이콘).
+> **디렉터는 이제 화면에 아무것도 그리지 않는다.** 잠금 해제와 단계 진행만 담당한다.
+> 플레이어에게 보이는 안내는 전부 전체화면 오버레이(2.5절)가 맡는다.
+>
+> 예전에는 화면을 어둡게 하고 HUD 아이콘·`[F]` 프롬프트를 깜빡이는 레이어
+> (`UBalhwajeomTutorialFocusWidget`)가 같이 돌았는데, 오버레이가 같은 내용을
+> 더 분명하게 설명하게 되면서 **두 연출이 겹쳐 서로를 방해했다.** 그래서 통째로 삭제했다.
 
 사진 세 장은 벽에 걸린 `Evidence_OBJ_01_001/002/003`,
 문은 `room3`의 `GateDoor_Exit` 이다. 촬영 후 액자의 가족 대화는 선택 콘텐츠로 남지만
@@ -51,60 +47,14 @@
 
 ## 2. 구조
 
-```
-[3] UBalhwajeomTutorialFocusWidget (ZOrder 5)   암전 + 아이콘 하이라이트
-        ▲ pure 함수 2개만 읽는다. 태그도 맵도 모른다.
-[2] ABalhwajeomTutorialDirector + UBalhwajeomTutorialFlow
-        ▲ Runtime.Lock.* / Evidence.* 태그로만 통신
-[1] PhotoCameraComponent / TabletComponent / DoorInteractionComponent
-        잠금 태그가 "있으면" 막는다. 튜토리얼의 존재를 모른다.
+```text
+[1] UBalhwajeomTutorialFlow (데이터 에셋)   단계 목록
+[2] ABalhwajeomTutorialDirector (액터)      단계 진행 + Runtime.Lock.* 적용/해제
+[3] UBalhwajeomTutorialOverlayPresenter     설명 오버레이 표시 (2.5절)
 ```
 
-**핵심 규칙: 잠금 태그가 없으면 항상 열려 있다.**
-디렉터를 놓지 않은 레벨(Level_Main 포함)은 **설정 0개로 기존과 똑같이 동작한다.**
-
-### 뷰포트 레이어 (암전이 ZOrder 5인 이유)
-
-| ZOrder | 위젯 | 암전 아래/위 |
-|---|---|---|
-| 0 | `WBP_HUID` — 카메라/태블릿 아이콘 | 아래 (어두워짐) |
-| 1 | `WBP_HUD2` — 베드 메모리 | 아래 |
-| **5** | **`UBalhwajeomTutorialFocusWidget`** | **암전 + 하이라이트** |
-| 10 | `WBP_Interact` — 상호작용 프롬프트 | **위 (밝게 남음)** |
-| 50 | `WBP_CAM` — 카메라 뷰파인더 | 위 |
-| 100 / 250 | 태블릿·포커스가이드 / 촬영 카드 | 위 |
-
-`[F]` 프롬프트는 `ShouldShowInteractionPrompt()` 가 **바라보고 있고 + 가깝고 + 상호작용 가능할 때만** 띄운다.
-그래서 "바라볼 때만 강조"가 레이어 순서만으로 해결되고, 추가 코드가 필요 없다.
-
-하이라이트 아이콘은 `WBP_HUID` 의 아이콘(`Image_Camera` / `Image_TAB`)에서
-**브러시와 화면 사각형을 그대로 복사**한다. HUD 레이아웃을 바꿔도 자동으로 따라가므로
-아이콘을 손으로 복제할 필요가 없다. 이름 후보를 배열로 받으므로(`Image_Camera` → `Image_0` 순)
-HUD 이미지 이름이 바뀌어도 하이라이트가 조용히 사라지지 않는다.
-
-### 깜빡임
-
-`RenderOpacity` 를 코사인으로 흔든다. 스텝이 시작되는 순간이 가장 밝은 지점이라 놓치지 않는다.
-
-- **HUD 아이콘**(`PhotoCameraIcon` / `TabletIcon`): 밝은 복사본의 투명도를 흔든다.
-  0 이면 암전 아래의 원래 아이콘이 비쳐 어둡게, 1 이면 완전히 밝게 보인다.
-- **`[F]` 프롬프트**(`InteractPrompt`): `WBP_Interact` 는 ZOrder 10 이라 위에 덮을 수 없으므로,
-  PlayerController 가 프롬프트 페이드에 깜빡임을 **곱해서** 그린다.
-
-**시계는 디렉터가 가진다.** 두 프레젠터가 각자 시간을 재면 서로 어긋나므로,
-`ABalhwajeomTutorialDirector::GetTutorialHighlightPulse()` 하나를 같이 읽는다.
-파라미터도 디렉터 액터에 있다.
-
-| 프로퍼티 | 기본값 | 뜻 |
-|---|---|---|
-| `Highlight Pulses Per Second` | 0.9 | 초당 밝음→어두움→밝음 왕복 횟수 |
-| `Highlight Pulse Min Opacity` | 0.0 | 가장 어두울 때 |
-| `Highlight Pulse Max Opacity` | 1.0 | 가장 밝을 때 |
-
-> ⚠️ **`[F]` 깜빡임은 암전에 영향을 주면 안 된다.** `FollowInteractPrompt` 암전은
-> 프롬프트 알파에 비례하는데, 거기에 깜빡임까지 섞이면 **화면 전체가 같이 깜빡인다.**
-> 그래서 `GetInteractionPromptAlpha()` 는 **깜빡임이 적용되지 않은** 원본 페이드 값을 돌려주고,
-> 깜빡임은 위젯에 그려지는 값에만 곱한다.
+디렉터가 소유한 것은 **스토리 상태 태그뿐**이다. 카메라·태블릿·문은 디렉터를 모르고
+태그만 읽는다. 표현(무엇을 어떻게 보여줄지)은 전부 오버레이 쪽에 있다.
 
 ### 카메라 뷰파인더
 
@@ -116,60 +66,10 @@ HUD 이미지 이름이 바뀌어도 하이라이트가 조용히 사라지지 �
 
 ---
 
-## 2.4 디렉터 연출과 오버레이의 경계
-
-`DA_TutorialFlow_Room2` 는 **7단계**다. 앞의 두 단계는 인트로 태블릿을 기다리는 용도라
-화면에 아무것도 그리지 않는다.
-
-| # | StepID | Hint Target | Hint Required Tags | 끝나는 조건 |
-|---|---|---|---|---|
-| 0 | (이름 없음) | — | — | 태블릿 모드 진입 |
-| 1 | `TabletIntro` | — | — | 탐색 모드 복귀 (5초 자동) |
-| 2 | `DustTeach` | `[F]` 프롬프트 | `Tutorial.Overlay.Seen.Interaction` | 액자 하나 먼지털기 |
-| 3 | `PhotoPrompt` | 카메라 아이콘 | `Tutorial.Overlay.Seen.PhotoCamera` | 카메라 모드 진입 |
-| 4 | `Photograph` | `[F]` 프롬프트 | `Tutorial.Overlay.Seen.MemoryObject` | 사진 3장 |
-| 5 | `CompleteFamilyPhoto` | 태블릿 아이콘 | `Tutorial.Overlay.Seen.Tablet` | 가족 사진 문장 완성 |
-| 6 | `Done` | — | — | — |
-
-**모든 단계의 `Dim Mode` 는 `Off`** 다. 암전 기능 자체는 남아 있으니 필요하면 데이터에서
-다시 켤 수 있다.
-
-`HintRequiredTags` 는 **단계의 진행이 아니라 표현만** 막는다. 단계는 평소처럼 돌고
-완료 조건도 그대로 평가되며, 아이콘 깜빡임과 암전만 태그가 찰 때까지 나오지 않는다.
-태그는 매 프레임 다시 읽으므로, 조건이 풀리면 하이라이트도 다시 사라진다.
-
-`TabletIntro` 는 원래 게임을 켜자마자 태블릿 아이콘을 깜빡이며 화면을 어둡게 했다.
-플레이어가 아직 아무 설명도 못 들은 시점이라 표현을 통째로 껐고, 단계 자체는
-인트로 태블릿을 기다리는 타이밍 역할로 남겼다.
-
-### 사라질 때 페이드
-
-하이라이트는 **꺼질 때 페이드 아웃한다.** 예전에는 단계가 끝나는 순간 툭 사라져서,
-우클릭으로 카메라를 드는 순간 아이콘이 깜빡이던 밝기 그대로 증발했다.
-
-| 대상 | 페이드 주체 |
-|---|---|
-| HUD 아이콘 하이라이트 | `UBalhwajeomTutorialFocusWidget::HighlightInterpolationSpeed` |
-| `[F]` 프롬프트 깜빡임 | `ABalhwajeomCameraPlayerController::InteractionPromptPulseBlend` |
-
-프롬프트 쪽은 깜빡임을 끄는 게 아니라 **깜빡임의 영향력을 0으로 줄인다.**
-그냥 껐다면 마지막 밝기에서 멈춰 프롬프트가 한 번 번쩍이며 사라졌을 것이다.
-
-### 설정 스크립트
-
-```text
-Scripts/Tutorial/ConfigureTutorialHintGates.py
-```
-
-멱등이라 다른 브랜치에서 플로우를 머지한 뒤 다시 돌리면 된다.
-`Balhwajeom.Tutorial.HintGateConfiguration` 이 7단계 전부를 검사한다.
-
----
-
 ## 2.5 전체화면 설명 오버레이
 
-암전·깜빡임과 **별개 시스템**이다. 디렉터가 "지금 뭘 누를지"를 밝기로 알려준다면,
-오버레이는 화면 전체를 덮고 **글로 설명한 뒤 아무 키나 눌러야 넘어간다.**
+플레이어에게 보이는 튜토리얼 안내는 전부 여기에 있다.
+화면 전체를 덮고 **글로 설명한 뒤 아무 키나 눌러야 넘어간다.**
 
 | 에셋 | 역할 |
 |---|---|
@@ -191,7 +91,7 @@ Scripts/Tutorial/ConfigureTutorialHintGates.py
 | `OVL_01_003` | 상호작용 | `Tutorial.Trigger.InteractPromptShown` |
 | `OVL_01_004` | 카메라 | `Tutorial.Trigger.InteractCompleted` |
 | `OVL_01_005` | 회상 | `Tutorial.Trigger.PhotoCaptureCompleted` |
-| `OVL_01_006` | 태블릿 | `Evidence.Photographed.OBJ_01_001~003` |
+| `OVL_01_006` | 태블릿 | `Evidence.Photographed.OBJ_01_001~003` + `Runtime.Player.Mode.Exploration` |
 | `OVL_01_007` | 여동생 폴더 | `Tutorial.Trigger.TabletOpened` |
 | `OVL_01_008` | 사진 추리 | `Tutorial.Trigger.SisterFolderOpened` |
 
@@ -273,11 +173,10 @@ C++ 만 붙이는 태그라 ini 와 철자가 어긋날 자리를 만들지 않�
 | `UBalhwajeomTabletComponent` | `BlockedByTags` 잠금 (`ToggleTablet` / `RequestOpenTablet` 양쪽) |
 | `UDoorInteractionComponent` | `UnlockRequiresTags` / `UnlockQuery`, `IsOpen()` |
 | `ABalhwajeomGateDoorActor` | 잠금 문 + 월드 라벨. `[열 수 없는 문]` ↔ `[F] 문 열기` |
-| `ABalhwajeomCameraPlayerController` | ZOrder 5 레이어 생성, `GetInteractionPromptAlpha()`, `[F]` 프롬프트 깜빡임 |
+| `ABalhwajeomCameraPlayerController` | `[F]` 프롬프트 페이드, 오버레이 제시자 생성 |
 | `ABalhwajeomEvidenceCameraHUD` | `WBP_CAM` 뷰파인더 위젯 (ZOrder 50) |
-| `UBalhwajeomTutorialFocusWidget` | 암전 + **깜빡이는 아이콘 하이라이트**. 트리를 C++에서 만들므로 위젯 BP 불필요 |
 | `UBalhwajeomTutorialFlow` | 레벨당 1개 만드는 데이터 에셋 |
-| `ABalhwajeomTutorialDirector` | 플로우 실행기. `IsHintAllowed()` 로 표현만 게이팅 |
+| `ABalhwajeomTutorialDirector` | 플로우 실행기. 잠금과 단계 진행만 담당하며 화면에는 아무것도 그리지 않는다 |
 | `ABalhwajeomEvidenceActor` | 월드 스토리 재생 시 StoryPlayed 태그 발행 |
 | `UBalhwajeomTutorialOverlayPresenter` | `DT_TutorialOverlay` 를 읽어 오버레이를 띄우는 컨트롤러 컴포넌트 |
 | `BalhwajeomTutorialOverlayQueue` | 어떤 행이 지금 떠야 하는지 판정하는 순수 함수 |
@@ -362,9 +261,8 @@ Steps            = 아래 표 참고
 | `Complete When All Tags` | 전부 있으면 다음 스텝 |
 | `Complete When Any Tags` | 하나라도 있으면 다음 스텝 |
 | `Complete When` (고급) | 위 둘로 표현 못 하는 조건(NOT 등)의 탈출구 |
-| `Dim Mode` | `Off` / `Always`(아이콘 유도) / `FollowInteractPrompt`(바라볼 때만) |
-| `Hint Target` | 깜빡일 대상. `None` / `InteractPrompt`(`[F]`) / `PhotoCameraIcon` / `TabletIcon` |
-| `Dim Opacity` | 암전 세기 |
+
+스텝에 표현 관련 필드는 없다. 화면에 무엇을 띄울지는 `DT_TutorialOverlay` 가 정한다.
 
 세 조건은 **AND** 로 묶이고, 비어 있는 조건은 건너뛴다.
 셋 다 비우면 `AdvanceStep()` 을 부르기 전까지 그 스텝에 머문다(마지막 스텝의 표준 모양).
@@ -575,14 +473,13 @@ DataTable 연결이 깨졌으면 `Balhwajeom.Investigation.ConfiguredDataValidat
 2. **`Evidence.State.<StateID>` 의 StateID 가 DataTable Row Name 과 정확히 같은가**
 3. **디렉터가 레벨에 1개 있고 `Flow` 가 지정됐는가** — 없으면 출력 로그에 경고가 남는다
 4. **`GetCurrentStepID()` 가 기대한 스텝인가** — 아니면 앞 스텝의 완료 조건이 문제다
-5. **암전이 안 보이면**: PC 의 `Tutorial Focus Widget Class` 가 비었는지, 플레이어 모드가 Exploration 인지
-6. **아이콘 깜빡임이 안 보이면**: PC 의 `PlayerHUDWidgetClass` 가 비었거나,
-   `Photo Camera Icon Names` / `Tablet Icon Names` 후보 중 HUD 에 실제로 있는 이름이 하나도 없다
-   (room2 기준 `WBP_HUID` 의 `Image_Camera` / `Image_TAB`)
-7. **`[F]` 깜빡임이 안 보이면**: PC 의 `Interaction Prompt Fade Target Name` 이
+5. **설명 오버레이가 안 뜨면**: 2.5절의 `RequiredTags` 가 전부 충족됐는지,
+   그리고 그 행의 `Tutorial.Overlay.Seen.*` 가 **이미 붙어 있지 않은지** 확인한다
+   (한 번 본 오버레이는 다시 뜨지 않는다)
+6. **`[F]` 프롬프트가 안 보이면**: PC 의 `Interaction Prompt Fade Target Name` 이
    프롬프트 위젯에 **실제로 있는 위젯 이름**인지 확인한다. 없으면 출력 로그에 경고가 남고
-   아무것도 페이드하지 않는다. 스텝의 `Hint Target` 이 `InteractPrompt` 인지도 확인.
-8. **위젯 에셋 이름을 바꿨다면 C++ 경로도 같이 고쳐야 한다.**
+   아무것도 페이드하지 않는다.
+7. **위젯 에셋 이름을 바꿨다면 C++ 경로도 같이 고쳐야 한다.**
    `BalhwajeomCameraPlayerController` 와 `BalhwajeomEvidenceCameraHUD` 생성자가
    `ConstructorHelpers` 로 경로 문자열을 들고 있다. **에셋 리네임은 이 문자열을 따라가지 않고,
    조용히 null 이 되어 위젯이 아예 생성되지 않는다.**

@@ -91,6 +91,9 @@ ROWS = (
             "Evidence.Photographed.OBJ_01_001",
             "Evidence.Photographed.OBJ_01_002",
             "Evidence.Photographed.OBJ_01_003",
+            # The third photo is usually taken from inside camera mode, so waiting for
+            # third person keeps the tablet screen out of the viewfinder.
+            "Runtime.Player.Mode.Exploration",
         ),
         (),
         "태블릿",

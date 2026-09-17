@@ -302,10 +302,8 @@ void UBalhwajeomTutorialOverlayPresenter::ApplyInputBlock(const bool bBlocked)
 		// values behind, and restoring a guess would strand the player in the wrong mode.
 		bRestoreMoveInput = !OwningController->IsMoveInputIgnored();
 		bRestoreLookInput = !OwningController->IsLookInputIgnored();
-		bRestoreMouseCursor = OwningController->bShowMouseCursor;
 		OwningController->SetIgnoreMoveInput(true);
 		OwningController->SetIgnoreLookInput(true);
-		OwningController->bShowMouseCursor = false;
 
 		// Anything already held goes down as released now, so the overlay starts from a
 		// clean input state instead of inheriting a key the player is still leaning on.
@@ -333,7 +331,6 @@ void UBalhwajeomTutorialOverlayPresenter::ApplyInputBlock(const bool bBlocked)
 	{
 		OwningController->SetIgnoreLookInput(false);
 	}
-	OwningController->bShowMouseCursor = bRestoreMouseCursor;
 	bRestoreMoveInput = false;
 	bRestoreLookInput = false;
 }

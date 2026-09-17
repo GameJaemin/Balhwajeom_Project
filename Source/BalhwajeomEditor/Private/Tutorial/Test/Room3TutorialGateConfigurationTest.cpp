@@ -202,14 +202,6 @@ bool FRoom3TutorialGateConfigurationTest::RunTest(const FString& Parameters)
 		AnalysisStep->CompleteWhenAllTags.Num(), 1);
 	TestTrue(TEXT("CompleteFamilyPhoto should wait for the solved family photo"),
 		AnalysisStep->CompleteWhenAllTags.HasTagExact(FamilyPhotoSolvedTag));
-	TestTrue(TEXT("CompleteFamilyPhoto should highlight the tablet icon"),
-		AnalysisStep->HintTarget == EBalhwajeomTutorialHintTarget::TabletIcon);
-
-	// The step used to dim the world for as long as it ran. The full-screen overlays
-	// darken the screen themselves now, and a permanent dim under them left the room
-	// looking unlit. Balhwajeom.Tutorial.HintGateConfiguration covers the whole flow.
-	TestTrue(TEXT("CompleteFamilyPhoto should leave the world undimmed"),
-		AnalysisStep->DimMode == EBalhwajeomTutorialDimMode::Off);
 
 	return true;
 }

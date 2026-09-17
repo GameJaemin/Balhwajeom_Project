@@ -45,55 +45,6 @@ public:
 	static ABalhwajeomTutorialDirector* GetTutorialDirector(const UObject* WorldContextObject);
 
 	/**
-	 * Dim opacity the tutorial focus layer should interpolate toward, already accounting for
-	 * the step's mode, the player's current runtime mode and the [F] prompt's fade alpha.
-	 * Returns 0 when there is no director, so the widget needs no null handling.
-	 */
-	UFUNCTION(BlueprintPure, Category = "Tutorial|Presentation",
-		meta = (WorldContext = "WorldContextObject"))
-	static float GetTutorialDimOpacity(const UObject* WorldContextObject);
-
-	/** What the current step wants pulsing. None when there is no director. */
-	UFUNCTION(BlueprintPure, Category = "Tutorial|Presentation",
-		meta = (WorldContext = "WorldContextObject"))
-	static EBalhwajeomTutorialHintTarget GetTutorialHintTarget(const UObject* WorldContextObject);
-
-	/**
-	 * The current step's HintMessage, subject to the same visibility rule as the hint
-	 * target: empty when there is no director, no step, or another mode owns the screen.
-	 */
-	UFUNCTION(BlueprintPure, Category = "Tutorial|Presentation",
-		meta = (WorldContext = "WorldContextObject"))
-	static FText GetTutorialHintMessage(const UObject* WorldContextObject);
-
-	/**
-	 * Shared 0..1 blink value for whatever the current step highlights.
-	 *
-	 * The clock lives here rather than in each presenter so the HUD icon and the [F]
-	 * prompt brighten and darken together instead of drifting apart. Returns 1 with no
-	 * director, so anything multiplying by it is simply left at full brightness.
-	 */
-	UFUNCTION(BlueprintPure, Category = "Tutorial|Presentation",
-		meta = (WorldContext = "WorldContextObject"))
-	static float GetTutorialHighlightPulse(const UObject* WorldContextObject);
-
-	UFUNCTION(BlueprintPure, Category = "Tutorial|Presentation")
-	float GetHighlightPulse() const;
-
-	/** False while a step's HintRequiredTags are not yet held, which hides its presentation. */
-	bool IsHintAllowed(const FBalhwajeomTutorialStep& Step) const;
-
-	/**
-	 * Pulse value at a point in time. Starts at the bright end, so a highlight announces
-	 * itself the instant its step begins.
-	 */
-	static float CalculatePulseOpacity(
-		float ElapsedSeconds,
-		float PulsesPerSecond,
-		float MinOpacity,
-		float MaxOpacity);
-
-	/**
 	 * Swaps the flow before it starts, so one placed director can run a different script
 	 * per chapter or difficulty. Ignored once a flow is running.
 	 */
@@ -151,20 +102,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial")
 	bool bAutoStartOnBeginPlay = true;
 
-	/** Full bright-to-dark-to-bright cycles per second for whatever the step highlights. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial|Pulse",
-		meta = (ClampMin = "0.05", UIMin = "0.1", UIMax = "3.0"))
-	float HighlightPulsesPerSecond = 0.9f;
-
-	/** Value at the dark end of the pulse. Zero lets the dimmed original show through. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial|Pulse",
-		meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float HighlightPulseMinOpacity = 0.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial|Pulse",
-		meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float HighlightPulseMaxOpacity = 1.0f;
-
 private:
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FBalhwajeomTutorialDirectorTestAccessor;
@@ -194,15 +131,6 @@ private:
 
 	/** True when every non-empty condition on the step is satisfied. */
 	bool IsStepSatisfied(const FBalhwajeomTutorialStep& Step) const;
-
-	/**
-	 * True while the player is in a mode that owns the whole screen.
-	 * Tablet mode is inset from the screen edges rather than full-screen; pass false to
-	 * treat it like Exploration (only the tablet's own open/close hint should do this).
-	 */
-	bool IsScreenOwnedByOtherMode(bool bTabletModeCounts = true) const;
-
-	float CalculateDimOpacity() const;
 
 	int32 CurrentStepIndex = INDEX_NONE;
 

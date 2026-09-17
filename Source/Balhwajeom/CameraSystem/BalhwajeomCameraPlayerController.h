@@ -43,14 +43,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "UI|Interaction")
 	void EnsureInteractionPrompt();
 
-	/**
-	 * Creates the tutorial dim/highlight layer once for the local controller.
-	 * It sits at ZOrder 5: above the player HUD icons and the world, below WB_Interact,
-	 * so dimming the screen leaves the [F] prompt and the centre dot fully readable.
-	 */
-	UFUNCTION(BlueprintCallable, Category = "UI|Tutorial")
-	void EnsureTutorialFocusLayer();
-
 	/** Adds the tutorial overlay presenter on first run, for controllers that have none. */
 	void EnsureTutorialOverlayPresenter();
 
@@ -65,9 +57,6 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "UI|Interaction")
 	UUserWidget* GetInteractionPrompt() const { return InteractionPromptWidget; }
-
-	UFUNCTION(BlueprintPure, Category = "UI|Tutorial")
-	UUserWidget* GetTutorialFocusLayer() const { return TutorialFocusWidget; }
 
 	/**
 	 * Current 0..1 fade alpha of the [F] prompt text.
@@ -144,13 +133,6 @@ protected:
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "UI|Interaction")
 	TObjectPtr<UUserWidget> InteractionPromptWidget;
 
-	/** Dim/highlight layer used by the tutorial flow. Leave unset to disable the layer entirely. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Tutorial")
-	TSubclassOf<UUserWidget> TutorialFocusWidgetClass;
-
-	UPROPERTY(Transient, BlueprintReadOnly, Category = "UI|Tutorial")
-	TObjectPtr<UUserWidget> TutorialFocusWidget;
-
 	/** Widget inside WB_Interact that fades; the rest of the widget (including the center dot) stays visible. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction")
 	FName InteractionPromptFadeTargetName = TEXT("TextBlock_50");
@@ -182,9 +164,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction")
 	FText InteractionPromptFormat = NSLOCTEXT(
 		"BalhwajeomInteraction", "PromptFormat", "[ F ] {Action}");
-
-	/** True while WB_Interact is drawn below the tutorial dim for the camera hint. */
-	bool bInteractionPromptBehindTutorialDim = false;
 
 	/** Larger values make the prompt reach its target opacity more quickly. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction", meta = (ClampMin = "0.1"))
@@ -241,11 +220,7 @@ private:
 	void UpdateBedMemoryHUD(float DeltaSeconds);
 	void ApplyBedMemoryHUDAlpha(float Alpha);
 
-	/** Fade value of the [F] prompt before any tutorial blink is applied. */
 	float InteractionPromptAlpha = 0.0f;
-
-	/** How much of the tutorial blink is currently mixed into the prompt, 0..1. */
-	float InteractionPromptPulseBlend = 0.0f;
 	bool bInteractionReticleStateInitialized = false;
 	bool bInteractionReticleShowsInteractable = false;
 	FText DefaultInteractionPromptText;

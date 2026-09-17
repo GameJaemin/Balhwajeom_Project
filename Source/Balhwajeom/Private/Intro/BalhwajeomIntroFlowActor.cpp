@@ -630,7 +630,6 @@ void ABalhwajeomIntroFlowActor::SetGameplayEnabled(bool bEnabled)
 	{
 		PC->ResetIgnoreMoveInput();
 		PC->ResetIgnoreLookInput();
-		PC->bShowMouseCursor = false;
 		PC->bEnableClickEvents = false;
 		PC->bEnableMouseOverEvents = false;
 		FInputModeGameOnly InputMode;

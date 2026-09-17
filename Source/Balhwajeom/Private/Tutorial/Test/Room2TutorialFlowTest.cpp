@@ -172,10 +172,6 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 	// --- Step 0: only F works ----------------------------------------------------------
 	TestEqual(TEXT("The flow starts on DustTeach"),
 		Director->GetCurrentStepID(), FName(TEXT("DustTeach")));
-	// With no text on screen, the blinking [F] prompt is the entire instruction.
-	TestTrue(TEXT("DustTeach blinks the [F] prompt"),
-		ABalhwajeomTutorialDirector::GetTutorialHintTarget(Character) ==
-			EBalhwajeomTutorialHintTarget::InteractPrompt);
 	TestTrue(TEXT("The photo camera starts locked"),
 		PhotoCamera && PhotoCamera->IsLockedByStoryState());
 	TestFalse(TEXT("The exit door starts locked"), Door->IsUnlocked());
@@ -228,9 +224,6 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 				Director->GetCurrentStepID(), FName(TEXT("PhotoPrompt")));
 			TestFalse(TEXT("The first dust-off unlocks the photo camera"),
 				PhotoCamera && PhotoCamera->IsLockedByStoryState());
-			TestTrue(TEXT("The camera icon is highlighted right away"),
-				ABalhwajeomTutorialDirector::GetTutorialHintTarget(Character) ==
-					EBalhwajeomTutorialHintTarget::PhotoCameraIcon);
 		}
 		else
 		{
@@ -251,16 +244,10 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 			ClearTag.IsValid() && StoryState->HasStateTagExact(ClearTag));
 	}
 
-	// --- PhotoPrompt: the camera is unlocked and its icon is the only bright thing ----
-	TestTrue(TEXT("PhotoPrompt dims the screen"),
-		ABalhwajeomTutorialDirector::GetTutorialDimOpacity(Character) > 0.0f);
-
-	// --- Entering camera mode ends the prompt and clears the dim -----------------------
+	// --- Entering camera mode moves the flow on ---------------------------------------
 	StoryState->SetPlayerModeTag(BalhwajeomGameplayTags::Runtime_Player_Mode_PhotoCamera);
 	TestEqual(TEXT("Raising the camera reaches Photograph"),
 		Director->GetCurrentStepID(), FName(TEXT("Photograph")));
-	TestEqual(TEXT("Camera mode leaves no dim behind"),
-		ABalhwajeomTutorialDirector::GetTutorialDimOpacity(Character), 0.0f);
 	StoryState->SetPlayerModeTag(BalhwajeomGameplayTags::Runtime_Player_Mode_Exploration);
 
 	// --- Photographing all three advances each photo into its memory state ------------
@@ -287,9 +274,6 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 		Director->GetCurrentStepID(), FName(TEXT("CompleteFamilyPhoto")));
 	TestFalse(TEXT("The tablet unlocks for the family-photo puzzle"),
 		StoryState->HasStateTagExact(BalhwajeomGameplayTags::Runtime_Lock_Tablet));
-	TestTrue(TEXT("CompleteFamilyPhoto highlights the tablet icon"),
-		ABalhwajeomTutorialDirector::GetTutorialHintTarget(Character) ==
-			EBalhwajeomTutorialHintTarget::TabletIcon);
 	TestFalse(TEXT("The exit door stays locked until the family photo is completed"),
 		Door->IsUnlocked());
 
@@ -340,8 +324,6 @@ bool FRoom2TutorialFlowEndToEndTest::RunTest(const FString& Parameters)
 		Director->GetCurrentStepID(), FName(TEXT("Done")));
 	TestTrue(TEXT("Done unlocks the exit door"), Door->IsUnlocked());
 	TestTrue(TEXT("An unlocked door offers its interaction"), Door->CanInteract());
-	TestEqual(TEXT("Done leaves no dim on screen"),
-		ABalhwajeomTutorialDirector::GetTutorialDimOpacity(Character), 0.0f);
 
 	return true;
 }
