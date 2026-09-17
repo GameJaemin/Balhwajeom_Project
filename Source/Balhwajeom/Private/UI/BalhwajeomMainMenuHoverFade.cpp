@@ -3,10 +3,11 @@
 #include "Math/UnrealMathUtility.h"
 
 
-float BalhwajeomMainMenuHoverFade::EaseInOut(const float Alpha)
+float BalhwajeomMainMenuHoverFade::EaseOut(const float Alpha)
 {
 	const float Clamped = FMath::Clamp(Alpha, 0.0f, 1.0f);
-	return Clamped * Clamped * (3.0f - 2.0f * Clamped);
+	const float Remaining = 1.0f - Clamped;
+	return 1.0f - Remaining * Remaining * Remaining;
 }
 
 
@@ -35,5 +36,5 @@ float BalhwajeomMainMenuHoverFade::ResolveOpacity(
 	const float IdleOpacity,
 	const float HoverOpacity)
 {
-	return FMath::Lerp(IdleOpacity, HoverOpacity, EaseInOut(HoverAlpha));
+	return FMath::Lerp(IdleOpacity, HoverOpacity, EaseOut(HoverAlpha));
 }

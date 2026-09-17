@@ -13,8 +13,12 @@
  */
 namespace BalhwajeomMainMenuHoverFade
 {
-	/** Smoothstep over 0..1. Both ends have zero slope, so the fade never starts or stops abruptly. */
-	BALHWAJEOM_API float EaseInOut(float Alpha);
+	/**
+	 * Cubic ease-out over 0..1: the fade moves fastest on its first frame and
+	 * decelerates into the end, so the opacity responds immediately to the cursor and
+	 * then settles instead of coasting at a constant speed.
+	 */
+	BALHWAJEOM_API float EaseOut(float Alpha);
 
 	/**
 	 * Moves the 0..1 hover alpha toward bHovered over Duration seconds and clamps it.
