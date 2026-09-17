@@ -126,6 +126,13 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Timing", meta = (ClampMin = "0.0", Units = "s"))
 	float TitleStartCutoffDuration = 2.0f;
 
+	/** How long PrerollTitleStart lets the TitleStart clip roll silently on the title screen before
+	 * rewinding it to frame 0 -- i.e. how long the decoder gets to produce that first frame. Nothing
+	 * of it is seen or heard; it only matters if Start is clicked inside this window, in which case
+	 * the clip just plays from where the warm-up had reached. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Timing", meta = (ClampMin = "0.0", Units = "s"))
+	float TitleStartPrerollWarmupDuration = 0.15f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Timing", meta = (ClampMin = "0.0", Units = "s"))
 	float BGMFadeDuration = 0.8f;
 
@@ -190,9 +197,15 @@ private:
 	UFUNCTION()
 	void HandleMediaEndReached();
 
-	/** Bound to a timer started in HandleMediaOpened (TitleStart branch only); ends the clip early at
+	/** Bound to a timer started once the TitleStart clip starts playing; ends the clip early at
 	 * TitleStartCutoffDuration instead of letting it play to its own OnEndReached. */
 	void HandleTitleStartCutoff();
+
+	/** OnMediaOpened for PrerollTitleStart's open only (the title screen is still up) -- parks the clip
+	 * on frame 0 instead of playing it. StartTitleStart swaps this back out for HandleMediaOpened
+	 * before it starts the clip for real. */
+	UFUNCTION()
+	void HandleTitleStartPrerolled(FString OpenedUrl);
 
 	UFUNCTION()
 	void HandleSkipRequested();
@@ -206,7 +219,14 @@ private:
 
 	void SetGameplayEnabled(bool bEnabled);
 	void ResetInvestigationPhotosIfRequested();
+	/** Opens the TitleStart clip during the title screen and holds it on its first frame, so clicking
+	 * Start can show real picture immediately instead of waiting out an open plus a first decode. */
+	void PrerollTitleStart();
+	/** Timer body for PrerollTitleStart: stops the silent warm-up playback and rewinds to frame 0. */
+	void ParkTitleStartPreroll();
 	void StartTitleStart();
+	/** Arms TitleStartCutoffTimerHandle, once the clip is actually rolling. */
+	void StartTitleStartCutoff();
 	void StartCinematic();
 	bool StartMediaCinematic();
 	void StartSequenceCinematic();
@@ -251,4 +271,7 @@ private:
 
 	/** Runs HandleTitleStartCutoff() after TitleStartCutoffDuration once the TitleStart clip starts playing. */
 	FTimerHandle TitleStartCutoffTimerHandle;
+
+	/** Runs ParkTitleStartPreroll() once the preroll has played long enough to decode a frame. */
+	FTimerHandle TitleStartPrerollParkTimerHandle;
 };
