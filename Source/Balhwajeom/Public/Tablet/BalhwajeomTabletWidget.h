@@ -753,8 +753,12 @@ private:
 	 * is aligned per bLeftAligned to match whatever text it's standing in for. LinePadding is extra
 	 * bottom padding per line (BuildSentenceBuilder's own LineSpacing for Converge, so the swap from
 	 * the puzzle text doesn't tighten line gaps; 0 for Reveal, which instead matches however
-	 * TXT_PopupBody naturally spaces its lines). Used by both Converge (fading the existing solved
-	 * puzzle text out) and Reveal (fading ResultText in). */
+	 * TXT_PopupBody naturally spaces its lines). RunPadding is the horizontal gap around each run
+	 * within a line (BuildSentenceBuilder's own LineItemPadding for Converge, which is what
+	 * separates its segments from its blanks; 0 for Reveal, where a line is a single run and that
+	 * gap would only inset the whole block away from where TXT_PopupBody draws the same text). Used
+	 * by both Converge (fading the existing solved puzzle text out) and Reveal (fading ResultText
+	 * in). */
 	void BuildRandomFadeCharacters(
 		const FString& Text,
 		const FSlateFontInfo& Font,
@@ -762,7 +766,8 @@ private:
 		bool bStartVisible,
 		float TotalWindow,
 		bool bLeftAligned,
-		float LinePadding);
+		float LinePadding,
+		float RunPadding);
 	/** Advances every RandomFadeChars entry toward 1 (bFadeIn) or 0 opacity over its own
 	 * PuzzleSuccessCharFadeDuration window starting at its random delay. */
 	void TickRandomFadeChars(bool bFadeIn);

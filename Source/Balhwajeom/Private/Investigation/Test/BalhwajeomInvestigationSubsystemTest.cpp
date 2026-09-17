@@ -814,6 +814,20 @@ bool FInvestigationDuplicatePhotoTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("A valid photo should register once"), Fixture.Subsystem->RegisterCapturedPhoto(Record));
 	TestTrue(TEXT("Registered PhotoID should be reported as captured"), Fixture.Subsystem->HasCapturedPhoto(Record.PhotoID));
 	TestTrue(TEXT("Photo capture should grant its configured word"), Fixture.Subsystem->HasAcquiredWord(InvestigationSubsystemTests::WordID));
+	TArray<FAcquiredWordRecord> AcquiredWords;
+	Fixture.Subsystem->GetAcquiredWords(AcquiredWords);
+	const FAcquiredWordRecord* PhotoWord = AcquiredWords.FindByPredicate(
+		[](const FAcquiredWordRecord& Candidate)
+		{
+			return Candidate.WordID == InvestigationSubsystemTests::WordID;
+		});
+	if (TestNotNull(TEXT("Photo-granted word record should exist"), PhotoWord))
+	{
+		TestEqual(TEXT("Photo-granted word should preserve its source type"),
+			PhotoWord->SourceType, EWordAcquisitionSource::PhotoCapture);
+		TestEqual(TEXT("Photo-granted word should preserve its source photo"),
+			PhotoWord->SourceID, Record.PhotoID);
+	}
 	TestFalse(TEXT("The same PhotoID should not register twice"), Fixture.Subsystem->RegisterCapturedPhoto(Record));
 	return true;
 }

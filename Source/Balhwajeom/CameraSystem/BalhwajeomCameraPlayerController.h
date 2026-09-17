@@ -11,7 +11,6 @@
 class UUserWidget;
 class UWidget;
 class UImage;
-class UTextBlock;
 class UTexture2D;
 class UBalhwajeomInvestigationSubsystem;
 class UBalhwajeomInteractionModalWidget;
@@ -145,12 +144,12 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UWidget> InteractionPromptFadeTarget;
 
-	/** TextBlock that receives the state-specific action text. */
+	/** Text widget that receives the state-specific action text. Supports both legacy TextBlock and Multi Shadow Text. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction")
 	FName InteractionPromptTextWidgetName = TEXT("TextBlock_50");
 
 	UPROPERTY(Transient)
-	TObjectPtr<UTextBlock> InteractionPromptTextWidget;
+	TObjectPtr<UWidget> InteractionPromptTextWidget;
 
 	/** Center-screen image that switches between the idle dot and interactable magnifier. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction")
