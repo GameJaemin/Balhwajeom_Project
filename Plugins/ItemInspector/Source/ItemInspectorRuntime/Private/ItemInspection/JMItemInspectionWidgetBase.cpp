@@ -85,6 +85,21 @@ FReply UJMItemInspectionWidgetBase::NativeOnKeyDown(const FGeometry& InGeometry,
 	return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 }
 
+FReply UJMItemInspectionWidgetBase::NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// FInputModeGameAndUI forces the viewport into EMouseCaptureMode::CaptureDuringMouseDown, so a
+	// click this widget does not consume bubbles up to SViewport, which calls AcquireFocusAndCapture
+	// and hands keyboard focus to the viewport. From that point NativeOnKeyDown never runs again and
+	// F/Escape can no longer close the inspector. Claim focus for every button, and swallow the ones
+	// the bubble phase has no use for.
+	SetKeyboardFocus();
+
+	// The left button still needs the bubble phase, where it starts a preview drag.
+	return InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton
+		? FReply::Unhandled()
+		: FReply::Handled();
+}
+
 FReply UJMItemInspectionWidgetBase::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
 	if (bPreviewInputEnabled && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && IsPointerOverInteractionArea(InGeometry, InMouseEvent))
@@ -102,6 +117,13 @@ FReply UJMItemInspectionWidgetBase::NativeOnMouseButtonUp(const FGeometry& InGeo
 	{
 		bPreviewDragging = false;
 		return FReply::Handled().ReleaseMouseCapture();
+	}
+
+	// The press of a non-left button was consumed in the preview phase, so its release must be
+	// consumed too. Otherwise the game input layer sees a release without a matching press.
+	if (InMouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
+	{
+		return FReply::Handled();
 	}
 
 	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);

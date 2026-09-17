@@ -456,6 +456,22 @@ bool UPlayerInteractionComponent::TryInspect(
 
 bool UPlayerInteractionComponent::RequestInspect()
 {
+	// The inspector normally eats F inside its own widget. If its keyboard focus was lost - a click
+	// the game viewport captured is enough - the key arrives here instead, and refusing it would
+	// leave the player with no way out of a 3D view that has no visible close button.
+	const EBalhwajeomInteractAction ResolvedInteractAction = BalhwajeomItemInspection::ResolveInteractAction(
+		BalhwajeomItemInspection::IsOpen(GetOwner()),
+		BalhwajeomItemInspection::IsInteractive(GetOwner()),
+		BalhwajeomItemInspection::IsOtherModalOpen(GetOwner()));
+	if (ResolvedInteractAction == EBalhwajeomInteractAction::CloseInspection)
+	{
+		return BalhwajeomItemInspection::RequestClose(GetOwner());
+	}
+	if (ResolvedInteractAction == EBalhwajeomInteractAction::None)
+	{
+		return false;
+	}
+
 	if (IsInteractionSuppressedByPhotoCamera())
 	{
 		return false;

@@ -60,6 +60,32 @@ bool BalhwajeomItemInspection::IsOtherModalOpen(const AActor* PlayerActor)
 		(Camera && (Camera->IsInCameraMode() || Camera->IsCameraTransitioning())) ||
 		(CameraController && CameraController->IsInteractionModalOpen());
 }
+bool BalhwajeomItemInspection::IsInteractive(const AActor* PlayerActor)
+{
+	const APlayerController* Controller = ResolveController(PlayerActor);
+	const ULocalPlayer* LocalPlayer = Controller ? Controller->GetLocalPlayer() : nullptr;
+	const UJMItemInspectionSubsystem* Subsystem = LocalPlayer ? LocalPlayer->GetSubsystem<UJMItemInspectionSubsystem>() : nullptr;
+	return Subsystem && Subsystem->GetInspectionState() == EJMItemInspectionState::Inspecting;
+}
+bool BalhwajeomItemInspection::RequestClose(const AActor* PlayerActor)
+{
+	const APlayerController* Controller = ResolveController(PlayerActor);
+	const ULocalPlayer* LocalPlayer = Controller ? Controller->GetLocalPlayer() : nullptr;
+	UJMItemInspectionSubsystem* Subsystem = LocalPlayer ? LocalPlayer->GetSubsystem<UJMItemInspectionSubsystem>() : nullptr;
+	// Closing anything but a settled session would cut an entrance or exit transition short.
+	if (!Subsystem || Subsystem->GetInspectionState() != EJMItemInspectionState::Inspecting) return false;
+	Subsystem->CloseInspection(EJMItemInspectionCloseReason::User);
+	return true;
+}
+EBalhwajeomInteractAction BalhwajeomItemInspection::ResolveInteractAction(
+	bool bInspectionOpen,
+	bool bInspectionInteractive,
+	bool bOtherModalOpen)
+{
+	if (bInspectionOpen) return bInspectionInteractive ? EBalhwajeomInteractAction::CloseInspection : EBalhwajeomInteractAction::None;
+	if (bOtherModalOpen) return EBalhwajeomInteractAction::None;
+	return EBalhwajeomInteractAction::Interact;
+}
 bool BalhwajeomItemInspection::CanInspect(AActor* Target, APawn* Pawn)
 {
 	return ResolveInspectable(Target, Pawn) != nullptr;

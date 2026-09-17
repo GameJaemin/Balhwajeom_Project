@@ -13,6 +13,16 @@ The project uses the reusable `ItemInspector`, `JMInteraction`, and `JMGameplayE
 
 `ABalhwajeomCameraCharacter` supplies the existing `/Game/Balhwajeom/Input/IMC_Interaction` and `/Game/Balhwajeom/Input/IA_Interact` assets to `UPlayerInteractionComponent`. The editor automation test asserts that this mapping binds `F` to `IA_Interact`. While the inspector has UI focus, its native widget handles `F` and `Escape` to close.
 
+## Input focus while inspecting
+
+`FInputModeGameAndUI` puts the viewport into `EMouseCaptureMode::CaptureDuringMouseDown`, so any click the inspector does not consume reaches `SViewport`, which takes keyboard focus for the game viewport. The inspector would then stop receiving `F` and `Escape` with no way to close it. Three layers keep that from happening, and all three are covered by automation tests:
+
+1. `UJMItemInspectionWidgetBase::NativeOnPreviewMouseButtonDown` reclaims keyboard focus on every click and consumes every button except the left one, which the bubble phase still needs for rotation. The matching non-left release is consumed too.
+2. `UJMItemInspectionSubsystem::TickSessionHealth` restores focus to the inspector when the game viewport holds it. Focus that belongs to the console, an editor window, or another widget is left alone.
+3. `UPlayerInteractionComponent::RequestInspect` closes an open inspection instead of refusing the key, so a gameplay `F` is always an exit. See `BalhwajeomItemInspection::ResolveInteractAction`. It only closes a session that is already `Inspecting`: `BP_OrbitViewCharacter_Legacy` carries a Blueprint `BPC_PlayerInteraction` on top of the `PlayerInteractionComponent` its C++ parent creates, so one `F` press runs `RequestInspect` twice in the same frame, and closing on the second pass would end the inspection during its entrance transition, before the model was ever drawn.
+
+Right-click stays inert during an inspection: the legacy `CameraMode` action is consumed by layer 1, and `UBalhwajeomPhotoCameraComponent::ToggleCameraMode` refuses to run while an inspection is open.
+
 `/ItemInspector/UI/WBP_JMItemInspection` displays only the item preview, with no item text or close button. The preview uses the full available viewport area, preserves the render target's viewport-matched aspect ratio with aspect-fit scaling, and accepts rotate/zoom input across the full screen. The default render-target quality envelope is 1600 pixels on its long side (1600x900 at 16:9). The native fallback uses the same layout.
 
 ## Authoring another inspectable

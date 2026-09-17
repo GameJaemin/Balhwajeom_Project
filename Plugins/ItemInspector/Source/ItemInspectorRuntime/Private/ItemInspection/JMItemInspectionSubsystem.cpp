@@ -12,6 +12,8 @@
 #include "Engine/LocalPlayer.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Widgets/SViewport.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
 #include "Camera/PlayerCameraManager.h"
@@ -380,6 +382,9 @@ bool UJMItemInspectionSubsystem::CreateInspectionWidget(const FJMItemInspectionR
 	FInputModeGameAndUI InputMode;
 	InputMode.SetWidgetToFocus(CurrentWidget->TakeWidget());
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	// The inspector is driven with a visible cursor. Without this, a click the viewport still manages
+	// to capture hides the cursor and switches to high precision mouse movement mid-inspection.
+	InputMode.SetHideCursorDuringCapture(false);
 	PlayerController->SetInputMode(InputMode);
 
 	CurrentWidget->OnCloseRequested.AddDynamic(this, &UJMItemInspectionSubsystem::HandleWidgetCloseRequested);
@@ -1286,5 +1291,47 @@ bool UJMItemInspectionSubsystem::TickSessionHealth(float DeltaTime)
 	{
 		CloseInspection(EJMItemInspectionCloseReason::Failed);
 	}
+	else
+	{
+		RestoreWidgetFocusIfNeeded();
+	}
 	return true;
+}
+
+bool JMItemInspectionFocus::ShouldRestoreWidgetFocus(
+	bool bInspectionOpen,
+	bool bWidgetInViewport,
+	bool bWidgetOwnsFocus,
+	bool bGameViewportOwnsFocus)
+{
+	return bInspectionOpen && bWidgetInViewport && !bWidgetOwnsFocus && bGameViewportOwnsFocus;
+}
+
+void UJMItemInspectionSubsystem::RestoreWidgetFocusIfNeeded()
+{
+	if (!IsValid(CurrentWidget) || !FSlateApplication::IsInitialized())
+	{
+		return;
+	}
+
+	const ULocalPlayer* LocalPlayer = GetLocalPlayer();
+	const UGameViewportClient* ViewportClient = LocalPlayer ? LocalPlayer->ViewportClient : nullptr;
+	const TSharedPtr<SViewport> ViewportWidget = ViewportClient ? ViewportClient->GetGameViewportWidget() : nullptr;
+	if (!ViewportWidget.IsValid())
+	{
+		return;
+	}
+
+	const TSharedPtr<SWidget> FocusedWidget = FSlateApplication::Get().GetKeyboardFocusedWidget();
+	const bool bWidgetOwnsFocus = CurrentWidget->HasAnyUserFocus() || CurrentWidget->HasFocusedDescendants();
+	const bool bGameViewportOwnsFocus = FocusedWidget == ViewportWidget;
+
+	if (JMItemInspectionFocus::ShouldRestoreWidgetFocus(
+		IsInspectionOpen(),
+		CurrentWidget->IsInViewport(),
+		bWidgetOwnsFocus,
+		bGameViewportOwnsFocus))
+	{
+		CurrentWidget->SetKeyboardFocus();
+	}
 }
