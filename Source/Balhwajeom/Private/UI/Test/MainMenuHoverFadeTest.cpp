@@ -15,29 +15,30 @@ bool FMainMenuHoverFadeCurveTest::RunTest(const FString& Parameters)
 	constexpr float Tolerance = KINDA_SMALL_NUMBER;
 
 	TestEqual(TEXT("the curve starts at zero"),
-		BalhwajeomMainMenuHoverFade::EaseInOut(0.0f), 0.0f, Tolerance);
+		BalhwajeomMainMenuHoverFade::EaseOut(0.0f), 0.0f, Tolerance);
 	TestEqual(TEXT("the curve ends at one"),
-		BalhwajeomMainMenuHoverFade::EaseInOut(1.0f), 1.0f, Tolerance);
-	TestEqual(TEXT("the curve is symmetric about its midpoint"),
-		BalhwajeomMainMenuHoverFade::EaseInOut(0.5f), 0.5f, Tolerance);
+		BalhwajeomMainMenuHoverFade::EaseOut(1.0f), 1.0f, Tolerance);
+	// Cubic ease-out is already seven eighths of the way in at the halfway point.
+	TestEqual(TEXT("the curve is well past halfway at its midpoint"),
+		BalhwajeomMainMenuHoverFade::EaseOut(0.5f), 0.875f, Tolerance);
 
 	// Out-of-range input comes from a hand-edited duration, not from AdvanceHoverAlpha.
 	TestEqual(TEXT("input below the range clamps to zero"),
-		BalhwajeomMainMenuHoverFade::EaseInOut(-1.0f), 0.0f, Tolerance);
+		BalhwajeomMainMenuHoverFade::EaseOut(-1.0f), 0.0f, Tolerance);
 	TestEqual(TEXT("input above the range clamps to one"),
-		BalhwajeomMainMenuHoverFade::EaseInOut(2.0f), 1.0f, Tolerance);
+		BalhwajeomMainMenuHoverFade::EaseOut(2.0f), 1.0f, Tolerance);
 
-	// This is what "no popping" means: the ends move slower than the middle, so the
-	// fade eases in and out instead of starting and stopping at full speed.
-	const float NearStart = BalhwajeomMainMenuHoverFade::EaseInOut(0.05f);
-	const float MidLow = BalhwajeomMainMenuHoverFade::EaseInOut(0.475f);
-	const float MidHigh = BalhwajeomMainMenuHoverFade::EaseInOut(0.525f);
-	const float NearEnd = 1.0f - BalhwajeomMainMenuHoverFade::EaseInOut(0.95f);
-	const float MiddleSlope = MidHigh - MidLow;
-	TestTrue(TEXT("the fade eases in rather than starting at full speed"),
-		NearStart < MiddleSlope);
-	TestTrue(TEXT("the fade eases out rather than stopping at full speed"),
-		NearEnd < MiddleSlope);
+	// Ease-out means strictly decelerating: equal slices of time cover less and less
+	// ground. A linear or ease-in-out curve fails this.
+	const float StartSlice = BalhwajeomMainMenuHoverFade::EaseOut(0.05f);
+	const float MidLow = BalhwajeomMainMenuHoverFade::EaseOut(0.475f);
+	const float MidHigh = BalhwajeomMainMenuHoverFade::EaseOut(0.525f);
+	const float EndSlice = 1.0f - BalhwajeomMainMenuHoverFade::EaseOut(0.95f);
+	const float MiddleSlice = MidHigh - MidLow;
+	TestTrue(TEXT("the fade is at its fastest on the first frame"),
+		StartSlice > MiddleSlice);
+	TestTrue(TEXT("the fade decelerates into the end"),
+		MiddleSlice > EndSlice);
 
 	return !HasAnyErrors();
 }
@@ -103,8 +104,10 @@ bool FMainMenuHoverFadeOpacityTest::RunTest(const FString& Parameters)
 		BalhwajeomMainMenuHoverFade::ResolveOpacity(0.0f, Idle, Hover), Idle, Tolerance);
 	TestEqual(TEXT("a fully hovered button sits at the hover value"),
 		BalhwajeomMainMenuHoverFade::ResolveOpacity(1.0f, Idle, Hover), Hover, Tolerance);
-	TestEqual(TEXT("the midpoint sits halfway between the two"),
-		BalhwajeomMainMenuHoverFade::ResolveOpacity(0.5f, Idle, Hover), 0.75f, Tolerance);
+	// Ease-out front-loads the change, so halfway through the fade the opacity is
+	// already seven eighths of the way down rather than halfway.
+	TestEqual(TEXT("the midpoint is already most of the way to the hover value"),
+		BalhwajeomMainMenuHoverFade::ResolveOpacity(0.5f, Idle, Hover), 0.5625f, Tolerance);
 
 	const float Quarter = BalhwajeomMainMenuHoverFade::ResolveOpacity(0.25f, Idle, Hover);
 	TestTrue(TEXT("every intermediate opacity stays between the two values"),
