@@ -121,6 +121,7 @@ void ABalhwajeomIntroFlowActor::EndPlay(const EEndPlayReason::Type EndPlayReason
 		Tablet->OnStatementSolved.RemoveAll(this);
 	}
 	GetWorldTimerManager().ClearTimer(EndingAutoTriggerTimerHandle);
+	GetWorldTimerManager().ClearTimer(TitleStartCutoffTimerHandle);
 	if (CinematicVideoWidget) CinematicVideoWidget->RemoveFromParent();
 	if (MainMenuWidget) MainMenuWidget->RemoveFromParent();
 	if (ScreenFadeWidget) ScreenFadeWidget->RemoveFromParent();
@@ -371,6 +372,15 @@ void ABalhwajeomIntroFlowActor::HandleMediaOpened(FString OpenedUrl)
 		{
 			CinematicVideoWidget->FadeIn(TitleStartRevealFadeDuration);
 		}
+		if (TitleStartCutoffDuration > 0.0f)
+		{
+			GetWorldTimerManager().SetTimer(
+				TitleStartCutoffTimerHandle,
+				this,
+				&ThisClass::HandleTitleStartCutoff,
+				TitleStartCutoffDuration,
+				false);
+		}
 		return;
 	}
 	ScreenFadeWidget->FadeFromBlack(TransitionFadeDuration);
@@ -424,6 +434,10 @@ void ABalhwajeomIntroFlowActor::HandleMediaEndReached()
 	}
 	else if (State == EBalhwajeomIntroState::TitleStart)
 	{
+		// The clip reached its own natural end before TitleStartCutoffDuration elapsed (e.g. a
+		// shorter re-exported clip, or the cutoff disabled) -- the pending timer would otherwise
+		// still fire later and re-run this same transition on whatever state has moved on by then.
+		GetWorldTimerManager().ClearTimer(TitleStartCutoffTimerHandle);
 		// Deliberately do NOT remove CinematicVideoWidget here: ScreenFadeWidget starts this fade
 		// fully transparent and only reaches opaque black after TransitionFadeDuration, so clearing
 		// the ripple widget now would flash the title screen underneath back into view for the
@@ -433,6 +447,25 @@ void ABalhwajeomIntroFlowActor::HandleMediaEndReached()
 		State = EBalhwajeomIntroState::TransitionToCinematic;
 		ScreenFadeWidget->FadeToBlack(TransitionFadeDuration);
 	}
+}
+
+void ABalhwajeomIntroFlowActor::HandleTitleStartCutoff()
+{
+	if (State != EBalhwajeomIntroState::TitleStart)
+	{
+		// Already moved on by some other path (e.g. HandleMediaEndReached beat this timer) -- nothing
+		// left to cut short.
+		return;
+	}
+	if (TitleStartMediaPlayer)
+	{
+		// Stop listening for the clip's own (later) natural end -- HandleMediaEndReached is about to
+		// run the exact same TitleStart transition below, and the widget/player are torn down by
+		// StartCinematic() once the screen fades to black, so a late OnEndReached has nothing left to
+		// act on anyway.
+		TitleStartMediaPlayer->OnEndReached.RemoveAll(this);
+	}
+	HandleMediaEndReached();
 }
 
 void ABalhwajeomIntroFlowActor::SetCinematicAudioVolume(float Volume)
