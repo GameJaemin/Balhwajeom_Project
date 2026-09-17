@@ -15,37 +15,17 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
-#include "Engine/Font.h"
+#include "UI/BalhwajeomUIFonts.h"
 
 namespace
 {
-	/** The same faces the tutorial overlay uses, so the two full-screen layers match. */
-	const TCHAR* RegularFontPath =
-		TEXT("/Game/Balhwajeom/UI/JE/Freesentation-4Regular_Font.Freesentation-4Regular_Font");
-	const TCHAR* SemiBoldFontPath =
-		TEXT("/Game/Balhwajeom/UI/JE/Freesentation-6SemiBold_Font.Freesentation-6SemiBold_Font");
-
-	/** Keeps the inherited font when the Korean face is missing rather than losing the size. */
-	FSlateFontInfo MakePromptFont(
-		const FSlateFontInfo& InheritedFont,
-		const int32 Size,
-		const TCHAR* FontPath = RegularFontPath)
-	{
-		FSlateFontInfo Font = InheritedFont;
-		Font.Size = Size;
-		if (UFont* KoreanFont = LoadObject<UFont>(nullptr, FontPath))
-		{
-			Font.FontObject = KoreanFont;
-		}
-		return Font;
-	}
-
 	UTextBlock* MakeButtonLabel(UWidgetTree& Tree, const FText& Label, const FName& Name)
 	{
 		UTextBlock* Text = Tree.ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), Name);
 		Text->SetText(Label);
 		Text->SetJustification(ETextJustify::Center);
-		Text->SetFont(MakePromptFont(Text->GetFont(), 20, SemiBoldFontPath));
+		Text->SetFont(BalhwajeomUIFonts::MakeKoreanFont(
+			Text->GetFont(), 20, BalhwajeomUIFonts::SemiBoldPath));
 		Text->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 		return Text;
 	}
@@ -133,7 +113,7 @@ void UBalhwajeomConfirmPromptWidget::EnsureFallbackLayout()
 	TXT_Title = WidgetTree->ConstructWidget<UTextBlock>(
 		UTextBlock::StaticClass(), TEXT("TXT_Title"));
 	TXT_Title->SetJustification(ETextJustify::Center);
-	TXT_Title->SetFont(MakePromptFont(TXT_Title->GetFont(), 34, SemiBoldFontPath));
+	TXT_Title->SetFont(BalhwajeomUIFonts::MakeKoreanFont(TXT_Title->GetFont(), 34, BalhwajeomUIFonts::SemiBoldPath));
 	TXT_Title->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 	if (UVerticalBoxSlot* TitleSlot = Column->AddChildToVerticalBox(TXT_Title))
 	{
@@ -144,7 +124,7 @@ void UBalhwajeomConfirmPromptWidget::EnsureFallbackLayout()
 	TXT_Message = WidgetTree->ConstructWidget<UTextBlock>(
 		UTextBlock::StaticClass(), TEXT("TXT_Message"));
 	TXT_Message->SetJustification(ETextJustify::Center);
-	TXT_Message->SetFont(MakePromptFont(TXT_Message->GetFont(), 22));
+	TXT_Message->SetFont(BalhwajeomUIFonts::MakeKoreanFont(TXT_Message->GetFont(), 22));
 	TXT_Message->SetColorAndOpacity(FSlateColor(FLinearColor(0.88f, 0.88f, 0.88f, 1.0f)));
 	TXT_Message->SetAutoWrapText(true);
 	if (UVerticalBoxSlot* MessageSlot = Column->AddChildToVerticalBox(TXT_Message))

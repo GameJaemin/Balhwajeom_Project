@@ -672,12 +672,17 @@ bool FInvestigationChapter01PhaseSettingsValidationTest::RunTest(
 	InvalidSettings->Phase02ObjectIDs.Add(TEXT("OBJ_01_018"));
 	InvalidSettings->Phase03ObjectIDs.Add(TEXT("OBJ_DOES_NOT_EXIST"));
 
+#if WITH_EDITOR
+	// UObject::IsDataValid is editor-only, so this half of the test cannot be compiled into
+	// a game target. Without the guard the runtime module fails to build for Balhwajeom
+	// Win64 (the editor target hides it -- it always has WITH_EDITOR).
 	FDataValidationContext ValidationContext;
 	const UBalhwajeomInvestigationSettings* ConstInvalidSettings = InvalidSettings;
 	TestTrue(
 		TEXT("Duplicate and unknown phase ObjectIDs should invalidate settings"),
 		ConstInvalidSettings->IsDataValid(ValidationContext) ==
 			EDataValidationResult::Invalid);
+#endif
 
 	return true;
 }

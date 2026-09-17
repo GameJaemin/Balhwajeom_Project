@@ -8,27 +8,9 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
-#include "Engine/Font.h"
 #include "UI/BalhwajeomNotificationBanner.h"
+#include "UI/BalhwajeomUIFonts.h"
 
-namespace
-{
-	/** Same Korean face the tutorial overlay uses, so the two layers read as one UI. */
-	const TCHAR* BannerFontPath =
-		TEXT("/Game/Balhwajeom/UI/JE/Freesentation-4Regular_Font.Freesentation-4Regular_Font");
-
-	/** Keeps the inherited font when the Korean face is missing rather than losing the size. */
-	FSlateFontInfo MakeBannerFont(const FSlateFontInfo& InheritedFont, const int32 Size)
-	{
-		FSlateFontInfo Font = InheritedFont;
-		Font.Size = Size;
-		if (UFont* KoreanFont = LoadObject<UFont>(nullptr, BannerFontPath))
-		{
-			Font.FontObject = KoreanFont;
-		}
-		return Font;
-	}
-}
 
 void UBalhwajeomNotificationBannerWidget::NativeOnInitialized()
 {
@@ -85,7 +67,7 @@ void UBalhwajeomNotificationBannerWidget::EnsureFallbackLayout()
 	TXT_Message = WidgetTree->ConstructWidget<UTextBlock>(
 		UTextBlock::StaticClass(), TEXT("TXT_Message"));
 	TXT_Message->SetJustification(ETextJustify::Center);
-	TXT_Message->SetFont(MakeBannerFont(TXT_Message->GetFont(), MessageFontSize));
+	TXT_Message->SetFont(BalhwajeomUIFonts::MakeKoreanFont(TXT_Message->GetFont(), MessageFontSize));
 	TXT_Message->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 	BRD_Body->SetContent(TXT_Message);
 

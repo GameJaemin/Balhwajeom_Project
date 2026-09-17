@@ -13,30 +13,11 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
-#include "Engine/Font.h"
+#include "UI/BalhwajeomUIFonts.h"
 
-namespace
-{
-	const TCHAR* RegularFontPath =
-		TEXT("/Game/Balhwajeom/UI/JE/Freesentation-4Regular_Font.Freesentation-4Regular_Font");
-	const TCHAR* SemiBoldFontPath =
-		TEXT("/Game/Balhwajeom/UI/JE/Freesentation-6SemiBold_Font.Freesentation-6SemiBold_Font");
-
-	/** Keeps the inherited font when the Korean face is missing rather than losing the size. */
-	FSlateFontInfo MakeOverlayFont(
-		const FSlateFontInfo& InheritedFont,
-		int32 Size,
-		const TCHAR* FontPath = RegularFontPath)
-	{
-		FSlateFontInfo Font = InheritedFont;
-		Font.Size = Size;
-		if (UFont* KoreanFont = LoadObject<UFont>(nullptr, FontPath))
-		{
-			Font.FontObject = KoreanFont;
-		}
-		return Font;
-	}
-}
+// The font paths and the make-a-font helper used to live in an anonymous namespace here.
+// They are shared now: a copy per widget file collides as soon as two of those files land
+// in the same unity translation unit.
 
 namespace BalhwajeomTutorialOverlayLayout
 {
@@ -125,7 +106,7 @@ bool Build(UWidgetTree& Tree, FBoundWidgets& OutWidgets)
 	Title->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 	Title->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f));
 	Title->SetShadowOffset(FVector2D(2.0f, 2.0f));
-	Title->SetFont(MakeOverlayFont(Title->GetFont(), 34, SemiBoldFontPath));
+	Title->SetFont(BalhwajeomUIFonts::MakeKoreanFont(Title->GetFont(), 34, BalhwajeomUIFonts::SemiBoldPath));
 	if (UVerticalBoxSlot* TitleSlot = ContentColumn->AddChildToVerticalBox(Title))
 	{
 		TitleSlot->SetHorizontalAlignment(HAlign_Center);
@@ -150,7 +131,7 @@ bool Build(UWidgetTree& Tree, FBoundWidgets& OutWidgets)
 	Description->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 	Description->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f));
 	Description->SetShadowOffset(FVector2D(2.0f, 2.0f));
-	Description->SetFont(MakeOverlayFont(Description->GetFont(), 26));
+	Description->SetFont(BalhwajeomUIFonts::MakeKoreanFont(Description->GetFont(), 26));
 	Description->SetLineHeightPercentage(1.25f);
 	DescriptionBox->SetContent(Description);
 
@@ -162,7 +143,7 @@ bool Build(UWidgetTree& Tree, FBoundWidgets& OutWidgets)
 	ContinuePrompt->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.9f)));
 	ContinuePrompt->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f));
 	ContinuePrompt->SetShadowOffset(FVector2D(2.0f, 2.0f));
-	ContinuePrompt->SetFont(MakeOverlayFont(ContinuePrompt->GetFont(), 20));
+	ContinuePrompt->SetFont(BalhwajeomUIFonts::MakeKoreanFont(ContinuePrompt->GetFont(), 20));
 	if (UVerticalBoxSlot* PromptSlot = ContentColumn->AddChildToVerticalBox(ContinuePrompt))
 	{
 		PromptSlot->SetHorizontalAlignment(HAlign_Center);
