@@ -2,17 +2,32 @@
 
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/GameViewportSubsystem.h"
+#include "Blueprint/WidgetTree.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/TextBlock.h"
 #include "Components/WidgetComponent.h"
+#include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Interaction/DoorInteractionComponent.h"
 #include "Interaction/InspectionComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/PackageName.h"
+#include "Story/StoryStateSubsystem.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "UObject/UObjectIterator.h"
+
+
+namespace
+{
+	/**
+	 * Step of the locked-feedback fade. The actor's own tick is throttled to 0.1s for a
+	 * cheap lock-state poll, which is far too coarse to read as a fade, so the fade runs
+	 * on its own timer and only while a message is actually on screen.
+	 */
+	constexpr float GateDoorLockedFeedbackFadeInterval = 1.0f / 60.0f;
+}
 
 
 ABalhwajeomGateDoorActor::ABalhwajeomGateDoorActor()
@@ -45,8 +60,8 @@ ABalhwajeomGateDoorActor::ABalhwajeomGateDoorActor()
 		ObjectLabelWidget->SetWidgetClass(ObjectLabelWidgetClass.Class);
 	}
 
-	// WBP_Check owns its authored text and layout. The actor only controls how long
-	// that finished widget stays visible after a locked interaction.
+	// WBP_Check owns its layout. Its message is refreshed from the ordered stage data
+	// every time a locked interaction is requested.
 	static ConstructorHelpers::FClassFinder<UUserWidget> LockedFeedbackClass(
 		TEXT("/Game/Balhwajeom/UI/HUD/WBP_Check"));
 	if (LockedFeedbackClass.Succeeded())
@@ -82,7 +97,7 @@ void ABalhwajeomGateDoorActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (UWorld* World = GetWorld())
 	{
-		World->GetTimerManager().ClearTimer(LockedFeedbackTimerHandle);
+		World->GetTimerManager().ClearTimer(LockedFeedbackFadeTimerHandle);
 	}
 	if (LockedFeedbackWidget)
 	{
@@ -122,6 +137,8 @@ void ABalhwajeomGateDoorActor::HandleLockedInteractionRequested()
 			return;
 		}
 		LockedFeedbackWidget->AddToViewport(FMath::Max(LockedFeedbackZOrder, 1100));
+		// A new widget starts fully opaque, which would skip the first fade-in entirely.
+		LockedFeedbackWidget->SetRenderOpacity(0.0f);
 	}
 	if (UGameViewportSubsystem* ViewportSubsystem = UGameViewportSubsystem::Get(GetWorld()))
 	{
@@ -132,16 +149,168 @@ void ABalhwajeomGateDoorActor::HandleLockedInteractionRequested()
 		ViewportSubsystem->SetWidgetSlot(LockedFeedbackWidget, Slot);
 	}
 
-	LockedFeedbackWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
-	if (UWorld* World = GetWorld())
+	ApplyLockedFeedbackMessage(ResolveLockedFeedbackMessage());
+	BeginLockedFeedbackFade();
+}
+
+
+void ABalhwajeomGateDoorActor::BeginLockedFeedbackFade()
+{
+	UWorld* World = GetWorld();
+	if (!LockedFeedbackWidget || !World)
 	{
-		World->GetTimerManager().SetTimer(
-			LockedFeedbackTimerHandle,
-			this,
-			&ThisClass::HideLockedFeedback,
-			FMath::Max(0.1f, LockedFeedbackDisplayDuration),
-			false);
+		return;
 	}
+
+	// Interacting again while the message is still on screen resumes the fade-in from the
+	// opacity already being drawn, so a second [F] never blinks the message out and back in.
+	const float CurrentOpacity =
+		FMath::Clamp(LockedFeedbackWidget->GetRenderOpacity(), 0.0f, 1.0f);
+	LockedFeedbackElapsedSeconds =
+		CurrentOpacity * FMath::Max(0.0f, LockedFeedbackFadeInDuration);
+
+	LockedFeedbackWidget->SetRenderOpacity(CurrentOpacity);
+	LockedFeedbackWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+	World->GetTimerManager().SetTimer(
+		LockedFeedbackFadeTimerHandle,
+		this,
+		&ThisClass::AdvanceLockedFeedbackFade,
+		GateDoorLockedFeedbackFadeInterval,
+		true);
+}
+
+
+void ABalhwajeomGateDoorActor::AdvanceLockedFeedbackFade()
+{
+	if (!LockedFeedbackWidget)
+	{
+		HideLockedFeedback();
+		return;
+	}
+
+	LockedFeedbackElapsedSeconds += GateDoorLockedFeedbackFadeInterval;
+
+	const float FadeInDuration = FMath::Max(0.0f, LockedFeedbackFadeInDuration);
+	const float HoldDuration = FMath::Max(0.1f, LockedFeedbackDisplayDuration);
+	const float FadeOutDuration = FMath::Max(0.0f, LockedFeedbackFadeOutDuration);
+
+	LockedFeedbackWidget->SetRenderOpacity(
+		GateDoorLockedFeedback::ResolveFadeOpacity(
+			LockedFeedbackElapsedSeconds,
+			FadeInDuration,
+			HoldDuration,
+			FadeOutDuration));
+
+	if (LockedFeedbackElapsedSeconds >= FadeInDuration + HoldDuration + FadeOutDuration)
+	{
+		HideLockedFeedback();
+	}
+}
+
+
+FText ABalhwajeomGateDoorActor::ResolveLockedFeedbackMessage() const
+{
+	if (LockedFeedbackStages.IsEmpty())
+	{
+		return FText::GetEmpty();
+	}
+
+	FGameplayTagContainer CurrentStateTags;
+	if (const UGameInstance* GameInstance = GetGameInstance())
+	{
+		if (const UStoryStateSubsystem* StoryState =
+			GameInstance->GetSubsystem<UStoryStateSubsystem>())
+		{
+			CurrentStateTags = StoryState->GetCurrentStateTags();
+		}
+	}
+
+	return GateDoorLockedFeedback::ResolveFirstIncompleteMessage(
+		LockedFeedbackStages, CurrentStateTags);
+}
+
+
+void ABalhwajeomGateDoorActor::ApplyLockedFeedbackMessage(const FText& Message)
+{
+	if (!LockedFeedbackWidget || Message.IsEmptyOrWhitespace())
+	{
+		// No configured stages preserves the text authored in legacy WBP_Check assets.
+		return;
+	}
+
+	if (UFunction* SetMessageTextFunction =
+		LockedFeedbackWidget->FindFunction(TEXT("SetMessageText")))
+	{
+		struct FSetMessageTextParameters
+		{
+			FText NewText;
+		};
+
+		FSetMessageTextParameters Parameters{ Message };
+		LockedFeedbackWidget->ProcessEvent(SetMessageTextFunction, &Parameters);
+		return;
+	}
+
+	// The shipped WBP_Check predates SetMessageText and exposes its TextBlock as
+	// "Text". MessageText is also supported for a future, explicitly named widget.
+	static const FName CandidateNames[] = { TEXT("MessageText"), TEXT("Text") };
+	for (const FName CandidateName : CandidateNames)
+	{
+		UWidget* MessageTarget = LockedFeedbackWidget->GetWidgetFromName(CandidateName);
+		if (UTextBlock* MessageText = Cast<UTextBlock>(MessageTarget))
+		{
+			MessageText->SetText(Message);
+			return;
+		}
+
+		if (MessageTarget)
+		{
+			if (UFunction* SetTextFunction = MessageTarget->FindFunction(TEXT("SetText")))
+			{
+				struct FSetTextParameters
+				{
+					FText InText;
+				};
+
+				FSetTextParameters Parameters{ Message };
+				MessageTarget->ProcessEvent(SetTextFunction, &Parameters);
+				return;
+			}
+		}
+	}
+
+	// Legacy WBP_Check currently has a single generated TextBlock name. Resolve that
+	// sole text target without coupling runtime code to the generated numeric suffix.
+	if (LockedFeedbackWidget->WidgetTree)
+	{
+		TArray<UWidget*> AllWidgets;
+		LockedFeedbackWidget->WidgetTree->GetAllWidgets(AllWidgets);
+		UTextBlock* SoleTextBlock = nullptr;
+		for (UWidget* Widget : AllWidgets)
+		{
+			if (UTextBlock* TextBlock = Cast<UTextBlock>(Widget))
+			{
+				if (SoleTextBlock)
+				{
+					SoleTextBlock = nullptr;
+					break;
+				}
+				SoleTextBlock = TextBlock;
+			}
+		}
+		if (SoleTextBlock)
+		{
+			SoleTextBlock->SetText(Message);
+			return;
+		}
+	}
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("%s: WBP_Check has no unambiguous message text target."),
+		*GetName());
 }
 
 
@@ -181,8 +350,16 @@ TSubclassOf<UUserWidget> ABalhwajeomGateDoorActor::ResolveLockedFeedbackWidgetCl
 
 void ABalhwajeomGateDoorActor::HideLockedFeedback()
 {
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(LockedFeedbackFadeTimerHandle);
+	}
+	LockedFeedbackElapsedSeconds = 0.0f;
+
 	if (LockedFeedbackWidget)
 	{
+		// Left transparent so the next interaction can read this back as "fade from 0".
+		LockedFeedbackWidget->SetRenderOpacity(0.0f);
 		LockedFeedbackWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }

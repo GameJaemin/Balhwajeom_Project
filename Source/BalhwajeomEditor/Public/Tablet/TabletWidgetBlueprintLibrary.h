@@ -137,4 +137,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Investigation")
 	static bool UpgradeInvestigationDataTables();
 
+	/** Reparents WBP_TutorialOverlay onto its runtime class and rebuilds its authored layout. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tutorial")
+	static bool CreateTutorialOverlayWidgetBlueprint();
+
 };
