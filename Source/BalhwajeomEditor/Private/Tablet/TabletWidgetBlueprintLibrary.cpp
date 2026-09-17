@@ -4035,6 +4035,9 @@ bool UTabletWidgetBlueprintLibrary::CreateIntroFlowAssets()
 
 		UBorder* Background = Tree->ConstructWidget<UBorder>(
 			UBorder::StaticClass(), TEXT("VideoBackground"));
+		// SetBackgroundVisible() reaches this by BindWidgetOptional, which only binds
+		// a widget the Blueprint exposes as a variable.
+		Background->bIsVariable = true;
 		Video->OnVariableAdded(Background->GetFName());
 		Background->SetBrushColor(FLinearColor::Black);
 		TabletDesigner::FBuilder::FillCanvas(Root, Background, 0);
@@ -4044,6 +4047,95 @@ bool UTabletWidgetBlueprintLibrary::CreateIntroFlowAssets()
 		Video->OnVariableAdded(Image->GetFName());
 		Image->SetColorAndOpacity(FLinearColor::White);
 		TabletDesigner::FBuilder::FillCanvas(Root, Image, 1);
+
+		// The skip control sits on its own 1920x1080 design layer, the way WBP_MainMenu
+		// and WBP_CapturePhoto already scale. Without it this widget is the only one
+		// following the engine's default DPI curve, which draws the button at roughly
+		// 0.67x on a 720p viewport. Only this layer is wrapped: VideoBackground and
+		// IMG_Video have to keep filling the viewport, and a 16:9 box around them would
+		// letterbox the black plate and expose whatever is behind it.
+		UScaleBox* SkipScale = Tree->ConstructWidget<UScaleBox>(
+			UScaleBox::StaticClass(), TEXT("SkipScale"));
+		Video->OnVariableAdded(SkipScale->GetFName());
+		SkipScale->SetStretch(EStretch::ScaleToFit);
+		SkipScale->SetStretchDirection(EStretchDirection::Both);
+		// This layer spans the movie, so it must not swallow clicks meant for whatever
+		// the clip plays over -- the title screen is still live under the title-start
+		// ripple, which is why SetBackgroundVisible(false) exists.
+		SkipScale->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		TabletDesigner::FBuilder::FillCanvas(Root, SkipScale, 2);
+
+		USizeBox* SkipDesign = Tree->ConstructWidget<USizeBox>(
+			USizeBox::StaticClass(), TEXT("SkipDesign1920x1080"));
+		Video->OnVariableAdded(SkipDesign->GetFName());
+		SkipDesign->SetWidthOverride(1920.0f);
+		SkipDesign->SetHeightOverride(1080.0f);
+		SkipDesign->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		SkipScale->SetContent(SkipDesign);
+
+		UCanvasPanel* SkipCanvas = Tree->ConstructWidget<UCanvasPanel>(
+			UCanvasPanel::StaticClass(), TEXT("SkipCanvas"));
+		Video->OnVariableAdded(SkipCanvas->GetFName());
+		SkipCanvas->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		SkipDesign->SetContent(SkipCanvas);
+
+		UTexture2D* SkipTexture = LoadObject<UTexture2D>(
+			nullptr, TEXT("/Game/Balhwajeom/UI/Title/skip_button.skip_button"));
+		// Native art size in design space, so the button can never be stretched out of
+		// its own aspect ratio. GetImportedSize() is the authored source size;
+		// GetSizeX/Y() report whichever mip streaming happens to have resident, which
+		// in a commandlet is a small one, and that is how this ends up tiny.
+		const FIntPoint SkipImportedSize = SkipTexture
+			? SkipTexture->GetImportedSize()
+			: FIntPoint::ZeroValue;
+		const FVector2D SkipSize = SkipImportedSize.GetMin() > 0
+			? FVector2D(SkipImportedSize.X, SkipImportedSize.Y)
+			: FVector2D(192.0f, 64.0f);
+
+		UButton* Skip = Tree->ConstructWidget<UButton>(
+			UButton::StaticClass(), TEXT("BTN_Skip"));
+		Skip->bIsVariable = true;
+		Video->OnVariableAdded(Skip->GetFName());
+
+		// Every state draws the same Image brush. The engine's default button brushes
+		// are boxes with a border, so leaving any state on its default is what puts a
+		// square outline around the art; state feedback is tint only.
+		FSlateBrush SkipBrush;
+		SkipBrush.SetResourceObject(SkipTexture);
+		SkipBrush.DrawAs = ESlateBrushDrawType::Image;
+		SkipBrush.ImageSize = SkipSize;
+
+		FSlateBrush SkipNormal = SkipBrush;
+		SkipNormal.TintColor = FSlateColor(FLinearColor::White);
+		FSlateBrush SkipHovered = SkipBrush;
+		SkipHovered.TintColor = FSlateColor(FLinearColor(1.15f, 1.15f, 1.15f, 1.0f));
+		FSlateBrush SkipPressed = SkipBrush;
+		SkipPressed.TintColor = FSlateColor(FLinearColor(0.8f, 0.8f, 0.8f, 1.0f));
+		FSlateBrush SkipDisabled = SkipBrush;
+		SkipDisabled.TintColor = FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.35f));
+
+		FButtonStyle SkipStyle;
+		SkipStyle.SetNormal(SkipNormal);
+		SkipStyle.SetHovered(SkipHovered);
+		SkipStyle.SetPressed(SkipPressed);
+		SkipStyle.SetDisabled(SkipDisabled);
+		SkipStyle.SetNormalPadding(FMargin(0.0f));
+		SkipStyle.SetPressedPadding(FMargin(0.0f));
+		Skip->SetStyle(SkipStyle);
+		Skip->SetBackgroundColor(FLinearColor::White);
+		// Removes the Slate focus rectangle. Skip is taken by click here, and key input
+		// during the intro is owned by ABalhwajeomIntroFlowActor. UButton publishes
+		// IsFocusable with a getter only, so the authored property is written directly.
+PRAGMA_DISABLE_DEPRECATION_WARNINGS
+		Skip->IsFocusable = false;
+PRAGMA_ENABLE_DEPRECATION_WARNINGS
+
+		UCanvasPanelSlot* SkipSlot = SkipCanvas->AddChildToCanvas(Skip);
+		SkipSlot->SetAnchors(FAnchors(1.0f, 0.0f));
+		SkipSlot->SetAlignment(FVector2D(1.0f, 0.0f));
+		SkipSlot->SetPosition(FVector2D(-48.0f, 48.0f));
+		SkipSlot->SetSize(SkipSize);
+		SkipSlot->SetZOrder(0);
 	}
 
 	const bool bWidgetsSaved = TabletDesigner::SaveAndCompile(Menu) &&
