@@ -2,6 +2,7 @@
 
 #include "Engine/GameInstance.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
+#include "Investigation/BalhwajeomInvestigationSettings.h"
 #include "Story/StoryStateTags.h"
 
 
@@ -360,6 +361,13 @@ void UStoryStateSubsystem::AddSentenceSolvedEvidenceTag(FName PhotoID)
 
 void UStoryStateSubsystem::EvaluateChapter01PhaseProgress()
 {
+	const UBalhwajeomInvestigationSettings* Settings =
+		GetDefault<UBalhwajeomInvestigationSettings>();
+	if (Settings && !Settings->bEnableChapter01PhaseSystem)
+	{
+		return;
+	}
+
 	const FGameplayTag Phase01Sentence = FGameplayTag::RequestGameplayTag(
 		TEXT("Evidence.SentenceSolved.PHOTO_01_005"), false);
 	const FGameplayTag Phase02DiarySentence = FGameplayTag::RequestGameplayTag(

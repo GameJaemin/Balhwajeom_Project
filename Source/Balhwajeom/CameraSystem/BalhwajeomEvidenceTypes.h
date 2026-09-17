@@ -58,6 +58,10 @@ struct BALHWAJEOM_API FBalhwajeomCameraTargetInfo
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Investigation", meta = (Units = "cm"))
 	float MaximumFocusDistanceOffset = 0.0f;
 
+	/** State-specific minimum viewport occupancy. Negative uses the camera's global value. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Investigation", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
+	float MinimumCaptureScreenOccupancyRatioOverride = -1.0f;
+
 	/** Preferred camera-to-target distance supplied by the current state. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera Target|Legacy", meta = (ClampMin = "1.0", DeprecatedProperty, DeprecationMessage = "Focus distance is now owned by the photo camera."))
 	float PreferredFocusDistance = 700.0f;

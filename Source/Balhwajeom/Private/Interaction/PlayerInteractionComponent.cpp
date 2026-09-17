@@ -463,19 +463,26 @@ bool UPlayerInteractionComponent::RequestInspect()
 
 	if (HasFocusedItemInspection())
 	{
-		if (Cast<ABalhwajeomEvidenceActor>(FocusedItemActor.Get()) && IsValid(FocusedInspection))
+		if (ABalhwajeomEvidenceActor* Evidence =
+			Cast<ABalhwajeomEvidenceActor>(FocusedItemActor.Get());
+			Evidence && IsValid(FocusedInspection))
 		{
 			FText InspectionText;
-			if (TryInspect(InspectionText))
+			if (Evidence->RequestInvestigationInteractionForItemInspection(InspectionText))
 			{
-				OnInspectionSucceeded.Broadcast(InspectionText);
-				RestoreGameInputAfterInspectionMessage(this);
+				if (!InspectionText.IsEmpty())
+				{
+					OnInspectionSucceeded.Broadcast(InspectionText);
+					RestoreGameInputAfterInspectionMessage(this);
+				}
 
-				// A successful investigation interaction consumes this input completely.
-				// Do not chain the separate item-inspection modal after it: that modal needs
-				// another F to close and turns every evidence -> next target transition into
-				// an unintended two-step interaction. The item inspector remains the fallback
-				// below when the evidence has no investigation interaction to execute.
+				// Complete the investigation-side action first, but defer its world story until
+				// the rotating inspector has fully closed. A state-authored modal (the diary)
+				// wins over the inspector and owns the same deferred completion point.
+				const bool bInspectionOpened = BalhwajeomItemInspection::TryInspect(
+					FocusedItemActor.Get(),
+					Cast<APawn>(GetOwner()));
+				Evidence->ResolveDeferredItemInspection(bInspectionOpened);
 				return true;
 			}
 		}
@@ -515,8 +522,11 @@ bool UPlayerInteractionComponent::RequestInspect()
 		return false;
 	}
 
-	OnInspectionSucceeded.Broadcast(InspectionText);
-	RestoreGameInputAfterInspectionMessage(this);
+	if (!InspectionText.IsEmpty())
+	{
+		OnInspectionSucceeded.Broadcast(InspectionText);
+		RestoreGameInputAfterInspectionMessage(this);
+	}
 
 	return true;
 }

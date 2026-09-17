@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "BalhwajeomCapturePhotoPresentationState.h"
 #include "GameFramework/HUD.h"
 #include "BalhwajeomEvidenceCameraHUD.generated.h"
 
@@ -11,6 +12,7 @@ class UMultiShadowTextWidget;
 class UTexture2D;
 class UUserWidget;
 class UBalhwajeomCapturePhotoWidget;
+class FCapturePhotoDismissInputProcessor;
 
 /** Minimal functional camera overlay for the MVP. */
 UCLASS()
@@ -38,8 +40,23 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Camera|Evidence")
 	bool IsCapturePhotoPresentationActive() const
 	{
-		return EvidenceSavedAnimationStartTime >= 0.0f;
+		return CapturePhotoPresentationState.IsActive();
 	}
+
+	/**
+	 * True only while the card still needs the player to acknowledge it. The exit animation is
+	 * deliberately excluded: once the card is committed to leaving there is no reason to keep
+	 * refusing a camera-mode exit, and refusing it there cost the player a dead ~0.4s in which
+	 * a TAB press did nothing.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Camera|Evidence")
+	bool IsCapturePhotoPresentationLockingCameraMode() const;
+
+	/** Consumes the press while the capture result owns the screen. Returns whether it did. */
+	bool HandleCapturePhotoDismissInput();
+
+	/** Confirms only while the centered capture result is awaiting confirmation. */
+	bool TryConfirmCapturePhotoPresentation();
 
 	/** Shows the captured image, its sentence, and newly granted keywords before flying to TAB. */
 	void TriggerCapturePhotoPresentation(
@@ -62,6 +79,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Viewfinder")
 	TSubclassOf<UUserWidget> ViewfinderWidgetClass;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Evidence",
+		meta = (ClampMin = "0.01", Units = "s"))
+	float CapturePhotoPromptFadeDuration = 0.1666667f;
+
 private:
 	/** Shows the viewfinder widget, or draws the fallback crosshair when none is set. */
 	void UpdateViewfinder();
@@ -73,7 +94,13 @@ private:
 
 	void UpdateCapturePhotoPresentation();
 	bool EnsureCapturePhotoWidget();
+	bool EnsureCapturePhotoPromptWidget();
+	void UpdateCapturePhotoPrompt(double Now);
 	void FinishCapturePhotoPresentation();
+
+	/** Slate-level press interception, live only while the card owns the screen. */
+	void RegisterCapturePhotoDismissInput();
+	void UnregisterCapturePhotoDismissInput();
 	bool EnsureFocusGuideWidget();
 	void HideFocusGuideWidget();
 	void UpdateFocusGuideWidget(
@@ -81,7 +108,8 @@ private:
 		float GuideOpacity,
 		bool bShowStatusIcon,
 		bool bUsePhotoRequiredIcon,
-		const FText& LabelText);
+		const FText& LabelText,
+		const FText& SubLabelText);
 
 	UPROPERTY(EditDefaultsOnly, Category = "Camera|Guide")
 	TSubclassOf<UUserWidget> FocusGuideWidgetClass;
@@ -104,16 +132,26 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMultiShadowTextWidget> FocusGuideLabelText;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UMultiShadowTextWidget> FocusGuideSubLabelText;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Camera|Evidence")
 	TSubclassOf<UBalhwajeomCapturePhotoWidget> CapturePhotoWidgetClass;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UBalhwajeomCapturePhotoWidget> CapturePhotoWidget;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Camera|Evidence")
+	TSubclassOf<UUserWidget> CapturePhotoPromptWidgetClass;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UUserWidget> CapturePhotoPromptWidget;
+
 	/** Shutter flash time left, in seconds. Frozen while the screenshot frame renders. */
 	float PhotoFlashRemaining = 0.0f;
-	float EvidenceSavedAnimationStartTime = -1.0f;
 	float CapturePhotoLayoutWaitStartTime = -1.0f;
+	FCapturePhotoPresentationState CapturePhotoPresentationState;
+	TSharedPtr<FCapturePhotoDismissInputProcessor> CapturePhotoDismissInputProcessor;
 	bool bCapturePhotoMovementLocked = false;
 	bool bCaptureUIHiddenForScreenshot = false;
 	FVector2D DisplayedGuidePosition = FVector2D::ZeroVector;

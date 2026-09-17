@@ -71,10 +71,11 @@ struct BALHWAJEOM_API FPhotoDefinition : public FTableRowBase
 	TSoftObjectPtr<USoundBase> StoryVoice;
 
 	/**
-	 * Optional one-shot sound restarted whenever a non-empty WorldStoryCue appears
-	 * (for example, a keyboard tap). Caption timing and completion never depend on this sound.
+	 * Sound Cue triggered once for every visible non-whitespace character. A Random node can
+	 * select between several short variations; text timing never depends on sound duration.
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo|Audio")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Photo|Audio",
+		meta = (DisplayName = "Character Typing Sound"))
 	TSoftObjectPtr<USoundBase> StoryCueSound;
 
 	/** How long the final world-story caption remains visible before it starts fading out. */

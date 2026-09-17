@@ -13,6 +13,7 @@
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
 #include "Components/PanelWidget.h"
+#include "Components/RetainerBox.h"
 #include "Components/ScaleBox.h"
 #include "Components/ScaleBoxSlot.h"
 #include "Components/ScrollBox.h"
@@ -61,6 +62,8 @@
 #include "Investigation/PhotoDefinitions.h"
 #include "Investigation/SentenceDefinitions.h"
 #include "Tablet/BalhwajeomTabletWidget.h"
+#include "Tutorial/BalhwajeomTutorialOverlayLayout.h"
+#include "Tutorial/BalhwajeomTutorialOverlayWidget.h"
 #include "CameraSystem/PhotoWorldStoryWidget.h"
 #include "CameraSystem/BalhwajeomCapturePhotoWidget.h"
 #include "Intro/BalhwajeomIntroFlowActor.h"
@@ -100,7 +103,6 @@ namespace TabletDesigner
 	const TCHAR* MessengerSisterPath = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/messenger_sis.messenger_sis");
 	const TCHAR* MessengerBrotherPath = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/messenger_bro.messenger_bro");
 	const TCHAR* MessengerSelectedPath = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/messenger_selected.messenger_selected");
-	const TCHAR* MessengerScrollPath = TEXT("/Game/Balhwajeom/UI/Tablet/Messenger/messenger_scroll.messenger_scroll");
 	const TCHAR* InternetAssetName = TEXT("WBP_Internet");
 	const TCHAR* InternetAssetPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_Internet.WBP_Internet");
 	const TCHAR* InternetClassPath = TEXT("/Game/Balhwajeom/UI/Tablet/Internet/WBP_Internet.WBP_Internet_C");
@@ -1226,10 +1228,6 @@ namespace TabletDesigner
 			CurrentRoomName->SetJustification(ETextJustify::Center);
 			CurrentRoomName->SetShadowOffset(FVector2D::ZeroVector);
 			Place(Root, CurrentRoomName, 337.0f, 82.0f, 293.0f, 32.0f, 4);
-
-			UImage* ScrollThumb = MakeTextureImage(TEXT("IMG_MessengerScroll"), MessengerScrollPath, false);
-			ScrollThumb->SetVisibility(ESlateVisibility::HitTestInvisible);
-			Place(Root, ScrollThumb, 639.0f, 279.0f, 9.0f, 135.0f, 4);
 
 			// messenger_BG already contains the close glyph. Keep an invisible button over it
 			// so the native tablet back-navigation event remains intact.
@@ -3619,6 +3617,20 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 	CardSlot->SetSize(FVector2D(928.0f, 721.0f));
 	CardSlot->SetZOrder(1);
 
+	URetainerBox* CardComposite = Tree->ConstructWidget<URetainerBox>(
+		URetainerBox::StaticClass(), TEXT("CardComposite"));
+	CardComposite->bIsVariable = true;
+	CardComposite->SetRetainRendering(true);
+	UCanvasPanelSlot* CardCompositeSlot = Card->AddChildToCanvas(CardComposite);
+	CardCompositeSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+	CardCompositeSlot->SetOffsets(FMargin(0.0f));
+	CardCompositeSlot->SetZOrder(1);
+
+	UCanvasPanel* CardVisualRoot = Tree->ConstructWidget<UCanvasPanel>(
+		UCanvasPanel::StaticClass(), TEXT("CardVisualRoot"));
+	CardVisualRoot->bIsVariable = true;
+	CardComposite->SetContent(CardVisualRoot);
+
 	UBorder* CardBackground = Tree->ConstructWidget<UBorder>(
 		UBorder::StaticClass(), TEXT("CardBackground"));
 	CardBackground->bIsVariable = true;
@@ -3628,7 +3640,7 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 		CardBackground->SetBrushFromTexture(BlackBackground);
 	}
 	CardBackground->SetBrushColor(FLinearColor::White);
-	UCanvasPanelSlot* BackgroundSlot = Card->AddChildToCanvas(CardBackground);
+	UCanvasPanelSlot* BackgroundSlot = CardVisualRoot->AddChildToCanvas(CardBackground);
 	BackgroundSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
 	BackgroundSlot->SetOffsets(FMargin(0.0f));
 	BackgroundSlot->SetZOrder(0);
@@ -3637,7 +3649,7 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 		UImage::StaticClass(), TEXT("CapturedPhotoImage"));
 	Photo->bIsVariable = true;
 	Photo->SetColorAndOpacity(FLinearColor::White);
-	UCanvasPanelSlot* PhotoSlot = Card->AddChildToCanvas(Photo);
+	UCanvasPanelSlot* PhotoSlot = CardVisualRoot->AddChildToCanvas(Photo);
 	PhotoSlot->SetPosition(FVector2D(50.0f, 40.0f));
 	PhotoSlot->SetSize(FVector2D(830.0f, 469.0f));
 	PhotoSlot->SetZOrder(1);
@@ -3647,7 +3659,7 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 	SentenceBackground->bIsVariable = true;
 	SentenceBackground->SetBrushColor(FLinearColor::Transparent);
 	SentenceBackground->SetPadding(FMargin(10.0f, 6.0f));
-	UCanvasPanelSlot* SentenceSlot = Card->AddChildToCanvas(SentenceBackground);
+	UCanvasPanelSlot* SentenceSlot = CardVisualRoot->AddChildToCanvas(SentenceBackground);
 	SentenceSlot->SetPosition(FVector2D(170.0f, 520.0f));
 	SentenceSlot->SetSize(FVector2D(588.0f, 165.0f));
 	SentenceSlot->SetZOrder(1);
@@ -3705,6 +3717,54 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 	TabTargetSlot->SetZOrder(2);
 
 	return TabletDesigner::SaveAndCompile(Blueprint);
+}
+
+bool UTabletWidgetBlueprintLibrary::ConfigureCapturePhotoPromptWidgetBlueprint()
+{
+	static const TCHAR* PromptAssetPath =
+		TEXT("/Game/Balhwajeom/UI/Camera/WBP_PhotoCheck.WBP_PhotoCheck");
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, PromptAssetPath);
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		UE_LOG(LogTemp, Error, TEXT("PHOTO_CHECK_PROMPT failed: prompt Widget Blueprint is missing."));
+		return false;
+	}
+
+	UCanvasPanel* Root = Cast<UCanvasPanel>(Blueprint->WidgetTree->RootWidget);
+	USizeBox* PromptContainer = Cast<USizeBox>(
+		Blueprint->WidgetTree->FindWidget(TEXT("SizeBox_0")));
+	UMultiShadowTextWidget* PromptLabel = Cast<UMultiShadowTextWidget>(
+		Blueprint->WidgetTree->FindWidget(TEXT("LabelText")));
+	UCanvasPanelSlot* PromptSlot = PromptContainer
+		? Cast<UCanvasPanelSlot>(PromptContainer->Slot)
+		: nullptr;
+	if (!Root || !PromptContainer || !PromptLabel || !PromptSlot)
+	{
+		UE_LOG(
+			LogTemp,
+			Error,
+			TEXT("PHOTO_CHECK_PROMPT failed: expected CanvasPanel/SizeBox_0/LabelText structure is missing."));
+		return false;
+	}
+
+	Blueprint->Modify();
+	PromptContainer->Modify();
+	PromptLabel->Modify();
+	PromptSlot->Modify();
+	PromptLabel->SetText(FText::FromString(TEXT("좌클릭하여 계속")));
+	PromptLabel->Justification = ETextJustify::Center;
+	PromptSlot->SetAnchors(FAnchors(0.5f, 1.0f));
+	PromptSlot->SetAlignment(FVector2D(0.5f, 1.0f));
+	PromptSlot->SetPosition(FVector2D(0.0f, -96.0f));
+	PromptSlot->SetAutoSize(true);
+
+	const bool bSaved = TabletDesigner::SaveAndCompile(Blueprint);
+	UE_LOG(
+		LogTemp,
+		Display,
+		TEXT("PHOTO_CHECK_PROMPT Result=%s Position=(0,-96) Text=좌클릭하여 계속"),
+		bSaved ? TEXT("Success") : TEXT("Failure"));
+	return bSaved;
 }
 
 bool UTabletWidgetBlueprintLibrary::CreateIntroFlowAssets()
@@ -3787,7 +3847,7 @@ bool UTabletWidgetBlueprintLibrary::CreateIntroFlowAssets()
 		UButton* Start = Tree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("BTN_Start"));
 		Start->bIsVariable = true;
 		Menu->OnVariableAdded(Start->GetFName());
-		Start->SetBackgroundColor(FLinearColor(0.12f, 0.12f, 0.11f, 0.95f));
+		Start->SetBackgroundColor(FLinearColor(1.0f, 1.0f, 1.0f, 1.0f));
 		UTextBlock* StartText = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("TXT_Start"));
 		StartText->SetText(FText::FromString(TEXT("시작하기")));
 		StartText->SetJustification(ETextJustify::Center);
@@ -4399,4 +4459,59 @@ bool UTabletWidgetBlueprintLibrary::RedesignMessengerWidget()
 {
 	using namespace TabletDesigner;
 	return BuildMessengerWidgetBlueprints(true);
+}
+bool UTabletWidgetBlueprintLibrary::CreateTutorialOverlayWidgetBlueprint()
+{
+	static const TCHAR* OverlayFolderPath = TEXT("/Game/Balhwajeom/UI/HUD");
+	static const TCHAR* OverlayAssetName = TEXT("WBP_TutorialOverlay");
+	static const TCHAR* OverlayAssetPath =
+		TEXT("/Game/Balhwajeom/UI/HUD/WBP_TutorialOverlay.WBP_TutorialOverlay");
+
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, OverlayAssetPath);
+	if (!Blueprint)
+	{
+		FAssetToolsModule& AssetToolsModule =
+			FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+		UWidgetBlueprintFactory* Factory = NewObject<UWidgetBlueprintFactory>();
+		Factory->ParentClass = UBalhwajeomTutorialOverlayWidget::StaticClass();
+		Blueprint = Cast<UWidgetBlueprint>(AssetToolsModule.Get().CreateAsset(
+			OverlayAssetName,
+			OverlayFolderPath,
+			UWidgetBlueprint::StaticClass(),
+			Factory));
+	}
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		return false;
+	}
+
+	// The asset was authored empty on UUserWidget, so reparenting is the normal path here
+	// rather than an error the way it is for the already-typed capture widgets.
+	if (Blueprint->ParentClass != UBalhwajeomTutorialOverlayWidget::StaticClass())
+	{
+		Blueprint->ParentClass = UBalhwajeomTutorialOverlayWidget::StaticClass();
+		FBlueprintEditorUtils::RefreshAllNodes(Blueprint);
+	}
+
+	if (Blueprint->WidgetTree->RootWidget && !TabletDesigner::ClearWidgetTree(Blueprint))
+	{
+		return false;
+	}
+
+	BalhwajeomTutorialOverlayLayout::FBoundWidgets Widgets;
+	if (!BalhwajeomTutorialOverlayLayout::Build(*Blueprint->WidgetTree, Widgets) ||
+		!Widgets.IsComplete())
+	{
+		return false;
+	}
+
+	// Only the bound widgets become Blueprint variables; BindWidgetOptional cannot find a
+	// widget that is not one, and everything else is pure presentation the runtime never
+	// touches.
+	for (const TPair<const TCHAR*, UWidget*>& Bound : Widgets.AsNamedPairs())
+	{
+		Bound.Value->bIsVariable = true;
+	}
+
+	return TabletDesigner::SaveAndCompile(Blueprint);
 }

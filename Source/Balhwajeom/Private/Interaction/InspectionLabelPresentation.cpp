@@ -15,24 +15,16 @@ namespace BalhwajeomInspectionLabelPresentation
 		float& OutOpacity
 	)
 	{
-		constexpr float ClosestScale = 1.0f;
-		constexpr float FarthestScale = 0.55f;
-		constexpr float ClosestOpacity = 1.0f;
-		constexpr float FarthestOpacity = 0.45f;
-		constexpr float EaseExponent = 2.0f;
-
-		const float DistanceRatio = MinimumPresentationDistance > KINDA_SMALL_NUMBER
-			? FMath::Clamp(Distance / MinimumPresentationDistance, 0.0f, 1.0f)
-			: 1.0f;
-		const float EasedRatio = FMath::InterpEaseInOut(
-			0.0f,
-			1.0f,
-			DistanceRatio,
-			EaseExponent
-		);
-
-		OutScale = FMath::Lerp(ClosestScale, FarthestScale, EasedRatio);
-		OutOpacity = FMath::Lerp(ClosestOpacity, FarthestOpacity, EasedRatio);
+		// Object labels use a screen-space WidgetComponent, so their desired size is
+		// already expressed in screen pixels. Scaling the rendered widget down here
+		// resamples the completed Slate output (including the font atlas), which makes
+		// distant text look low-resolution. Reducing opacity at the same time further
+		// weakens glyph contrast. Keep the final presentation pixel-aligned and let the
+		// inspection distance state decide which label content is visible.
+		(void)Distance;
+		(void)MinimumPresentationDistance;
+		OutScale = 1.0f;
+		OutOpacity = 1.0f;
 	}
 
 	void ApplyToWidget(

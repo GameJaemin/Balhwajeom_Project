@@ -22,6 +22,8 @@ class BALHWAJEOM_API UStoryStateSubsystem : public UGameInstanceSubsystem
 {
 	GENERATED_BODY()
 
+	friend struct FStoryStateSubsystemTestAccessor;
+
 public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;

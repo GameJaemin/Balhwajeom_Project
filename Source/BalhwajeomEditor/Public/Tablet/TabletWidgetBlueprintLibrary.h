@@ -121,6 +121,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Camera")
 	static bool CreateCapturePhotoWidgetBlueprint();
 
+	/** Normalizes the designer-authored photo confirmation prompt for the capture-result hold state. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Camera")
+	static bool ConfigureCapturePhotoPromptWidgetBlueprint();
+
 	/** Creates WBP_MainMenu, WBP_ScreenFade, and BP_IntroFlowController. */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Intro")
 	static bool CreateIntroFlowAssets();
@@ -132,5 +136,9 @@ public:
 	/** Creates DT_KeywordChoices and migrates choices embedded in legacy keyword documents. */
 	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Investigation")
 	static bool UpgradeInvestigationDataTables();
+
+	/** Reparents WBP_TutorialOverlay onto its runtime class and rebuilds its authored layout. */
+	UFUNCTION(BlueprintCallable, Category = "Balhwajeom|Editor|Tutorial")
+	static bool CreateTutorialOverlayWidgetBlueprint();
 
 };

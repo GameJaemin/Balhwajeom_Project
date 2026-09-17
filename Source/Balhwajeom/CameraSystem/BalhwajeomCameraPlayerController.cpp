@@ -15,19 +15,24 @@
 #include "Interaction/DoorInteractionComponent.h"
 #include "Interaction/InspectionComponent.h"
 #include "Interaction/PlayerInteractionComponent.h"
+#include "Interaction/WorldInteractable.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Story/StoryStateSubsystem.h"
 #include "Story/StoryStateTags.h"
+#include "Tutorial/BalhwajeomTutorialOverlayTriggers.h"
+#include "Tutorial/BalhwajeomTutorialOverlayPresenter.h"
 #include "Tablet/BalhwajeomTabletComponent.h"
 #include "Tutorial/BalhwajeomTutorialDirector.h"
-#include "Tutorial/BalhwajeomTutorialFocusWidget.h"
 #include "UI/BalhwajeomKeywordCounterWidget.h"
+#include "UI/BalhwajeomInteractionModalWidget.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
 ABalhwajeomCameraPlayerController::ABalhwajeomCameraPlayerController()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	// Hidden so the viewport keeps the mouse captured. A visible cursor makes the
+	// viewport capture only while a button is held, which turns look into click-drag.
 	bShowMouseCursor = false;
 
 	static ConstructorHelpers::FClassFinder<UUserWidget> DefaultInteractionPromptClass(
@@ -45,7 +50,6 @@ ABalhwajeomCameraPlayerController::ABalhwajeomCameraPlayerController()
 	}
 
 	// Native by default, so a level needs no Widget Blueprint to get the tutorial layer.
-	TutorialFocusWidgetClass = UBalhwajeomTutorialFocusWidget::StaticClass();
 
 	static ConstructorHelpers::FClassFinder<UUserWidget> DefaultBedMemoryHUDClass(
 		TEXT("/Game/Balhwajeom/UI/HUD/WBP_HUD2"));
@@ -62,11 +66,17 @@ ABalhwajeomCameraPlayerController::ABalhwajeomCameraPlayerController()
 		TEXT("/Game/Balhwajeom/UI/JE/IMG/Room/tab_button.tab_button"));
 	static ConstructorHelpers::FObjectFinder<UTexture2D> TabletClickedTextureFinder(
 		TEXT("/Game/Balhwajeom/UI/JE/IMG/Room/tab_button_click.tab_button_click"));
+	static ConstructorHelpers::FObjectFinder<UTexture2D> InteractionReticleDotTextureFinder(
+		TEXT("/Game/Balhwajeom/UI/HUD/Textures/T_Interact_Dot.T_Interact_Dot"));
+	static ConstructorHelpers::FObjectFinder<UTexture2D> InteractionReticleMagnifierTextureFinder(
+		TEXT("/Game/Balhwajeom/UI/HUD/Textures/T_Interact_Magnifier.T_Interact_Magnifier"));
 
 	CameraButtonIdleTexture = CameraIdleTextureFinder.Object;
 	CameraButtonClickedTexture = CameraClickedTextureFinder.Object;
 	TabletButtonIdleTexture = TabletIdleTextureFinder.Object;
 	TabletButtonClickedTexture = TabletClickedTextureFinder.Object;
+	InteractionReticleDotTexture = InteractionReticleDotTextureFinder.Object;
+	InteractionReticleMagnifierTexture = InteractionReticleMagnifierTextureFinder.Object;
 }
 
 void ABalhwajeomCameraPlayerController::BeginPlay()
@@ -88,12 +98,34 @@ void ABalhwajeomCameraPlayerController::BeginPlay()
 	RefreshHudModeIcons();
 	EnsureKeywordCounter();
 	EnsureBedMemoryHUD();
-	EnsureTutorialFocusLayer();
 	EnsureInteractionPrompt();
+	EnsureTutorialOverlayPresenter();
+}
+
+void ABalhwajeomCameraPlayerController::EnsureTutorialOverlayPresenter()
+{
+	if (!IsLocalController() ||
+		FindComponentByClass<UBalhwajeomTutorialOverlayPresenter>())
+	{
+		return;
+	}
+
+	// Created rather than declared as a default subobject so a Blueprint controller that
+	// predates the tutorial overlays still gets one.
+	UBalhwajeomTutorialOverlayPresenter* Presenter =
+		NewObject<UBalhwajeomTutorialOverlayPresenter>(
+			this, TEXT("TutorialOverlayPresenter"));
+	Presenter->RegisterComponent();
 }
 
 void ABalhwajeomCameraPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (InteractionModalWidget)
+	{
+		InteractionModalWidget->OnCloseRequested.RemoveAll(this);
+		InteractionModalWidget->RemoveFromParent();
+		InteractionModalWidget = nullptr;
+	}
 	if (BoundHudStoryStateSubsystem)
 	{
 		BoundHudStoryStateSubsystem->OnStateTagAdded.RemoveDynamic(
@@ -129,6 +161,101 @@ void ABalhwajeomCameraPlayerController::EndPlay(const EEndPlayReason::Type EndPl
 	KeywordCounterWidget = nullptr;
 
 	Super::EndPlay(EndPlayReason);
+}
+
+bool ABalhwajeomCameraPlayerController::ShowInteractionModal(
+	TSubclassOf<UUserWidget> ContentWidgetClass,
+	const FText& DocumentText,
+	const TArray<FText>& NewlyGrantedKeywords)
+{
+	if (!IsLocalController() || !bGameplayPresentationEnabled ||
+		IsInteractionModalOpen() || !ContentWidgetClass)
+	{
+		return false;
+	}
+
+	UBalhwajeomInteractionModalWidget* Modal =
+		CreateWidget<UBalhwajeomInteractionModalWidget>(
+			this, UBalhwajeomInteractionModalWidget::StaticClass());
+	if (!Modal || !Modal->Present(
+		ContentWidgetClass, DocumentText, NewlyGrantedKeywords))
+	{
+		return false;
+	}
+
+	InteractionModalWidget = Modal;
+	InteractionModalWidget->OnCloseRequested.AddUObject(
+		this, &ThisClass::HandleInteractionModalCloseRequested);
+	InteractionModalWidget->AddToViewport(1300);
+
+	bInteractionModalChangedMoveIgnore = !IsMoveInputIgnored();
+	bInteractionModalChangedLookIgnore = !IsLookInputIgnored();
+	bInteractionModalPreviousMouseCursor = bShowMouseCursor;
+	if (bInteractionModalChangedMoveIgnore)
+	{
+		SetIgnoreMoveInput(true);
+	}
+	if (bInteractionModalChangedLookIgnore)
+	{
+		SetIgnoreLookInput(true);
+	}
+	bShowMouseCursor = true;
+
+	FInputModeUIOnly InputMode;
+	InputMode.SetWidgetToFocus(InteractionModalWidget->TakeWidget());
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(InputMode);
+	InteractionModalWidget->SetKeyboardFocus();
+	return true;
+}
+
+bool ABalhwajeomCameraPlayerController::IsInteractionModalOpen() const
+{
+	return IsValid(InteractionModalWidget) && InteractionModalWidget->IsInViewport();
+}
+
+void ABalhwajeomCameraPlayerController::CloseInteractionModal()
+{
+	if (!InteractionModalWidget)
+	{
+		return;
+	}
+
+	InteractionModalWidget->OnCloseRequested.RemoveAll(this);
+	InteractionModalWidget->RemoveFromParent();
+	InteractionModalWidget = nullptr;
+	if (bInteractionModalChangedMoveIgnore)
+	{
+		SetIgnoreMoveInput(false);
+	}
+	if (bInteractionModalChangedLookIgnore)
+	{
+		SetIgnoreLookInput(false);
+	}
+	bShowMouseCursor = bInteractionModalPreviousMouseCursor;
+	bInteractionModalChangedMoveIgnore = false;
+	bInteractionModalChangedLookIgnore = false;
+
+	if (bGameplayPresentationEnabled)
+	{
+		FInputModeGameOnly InputMode;
+		InputMode.SetConsumeCaptureMouseDown(false);
+		SetInputMode(InputMode);
+	}
+
+	// The modal closing is the moment an F interaction is over and the player is back in
+	// third person, which is exactly what the tutorial waits for.
+	BalhwajeomTutorialOverlayTriggers::Set(
+		this, BalhwajeomGameplayTags::Tutorial_Trigger_InteractCompleted);
+
+	// Deferred evidence stories subscribe here so popup content never overlaps the
+	// world-locked 3D text. Broadcast only after the modal and its input mode are gone.
+	OnInteractionModalClosed.Broadcast();
+}
+
+void ABalhwajeomCameraPlayerController::HandleInteractionModalCloseRequested()
+{
+	CloseInteractionModal();
 }
 
 void ABalhwajeomCameraPlayerController::EnsurePlayerHUD()
@@ -326,11 +453,6 @@ void ABalhwajeomCameraPlayerController::SetGameplayPresentationEnabled(bool bEna
 		BedMemoryHUDWidget->SetVisibility(
 			bEnabled && bBedMemoryHUDActive ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	}
-	if (TutorialFocusWidget)
-	{
-		TutorialFocusWidget->SetVisibility(
-			bEnabled ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-	}
 	if (InteractionPromptWidget)
 	{
 		InteractionPromptWidget->SetVisibility(
@@ -355,29 +477,8 @@ void ABalhwajeomCameraPlayerController::EnsureBedMemoryHUD()
 }
 
 
-void ABalhwajeomCameraPlayerController::EnsureTutorialFocusLayer()
-{
-	if (!IsLocalController() || IsValid(TutorialFocusWidget) || !TutorialFocusWidgetClass)
-	{
-		return;
-	}
-
-	TutorialFocusWidget = CreateWidget<UUserWidget>(this, TutorialFocusWidgetClass);
-	if (TutorialFocusWidget)
-	{
-		TutorialFocusWidget->SetVisibility(
-			bGameplayPresentationEnabled ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-		// ZOrder 5 keeps the dim above the HUD icons (0) and the bed HUD (1) but below
-		// WBP_Interact (20), so the [F] prompt and centre dot stay readable while dimmed.
-		TutorialFocusWidget->AddToViewport(5);
-	}
-}
-
-
 float ABalhwajeomCameraPlayerController::GetInteractionPromptAlpha() const
 {
-	// The un-pulsed fade value. Reading the widget's render opacity instead would make
-	// the tutorial dim inherit the prompt's blink.
 	return InteractionPromptAlpha;
 }
 
@@ -555,6 +656,10 @@ void ABalhwajeomCameraPlayerController::EnsureInteractionPrompt()
 		InteractionPromptWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 		InteractionPromptFadeTarget =
 			InteractionPromptWidget->GetWidgetFromName(InteractionPromptFadeTargetName);
+		InteractionPromptTextWidget = Cast<UTextBlock>(
+			InteractionPromptWidget->GetWidgetFromName(InteractionPromptTextWidgetName));
+		InteractionReticleWidget = Cast<UImage>(
+			InteractionPromptWidget->GetWidgetFromName(InteractionReticleWidgetName));
 		// Older prompt widgets named their text TextBlock_50. Keep this
 		// fallback so an older BP_OrbitViewPlayerController CDO that inherited the
 		// previous, incorrect "Text" default still resolves the real text widget.
@@ -562,6 +667,21 @@ void ABalhwajeomCameraPlayerController::EnsureInteractionPrompt()
 		{
 			InteractionPromptFadeTarget =
 				InteractionPromptWidget->GetWidgetFromName(TEXT("TextBlock_50"));
+		}
+		if (!InteractionPromptTextWidget)
+		{
+			InteractionPromptTextWidget = Cast<UTextBlock>(InteractionPromptFadeTarget);
+		}
+		// Keep compatibility with the current WBP_Interact asset while allowing the
+		// designer-facing widget name to be migrated to InteractionReticle.
+		if (!InteractionReticleWidget)
+		{
+			InteractionReticleWidget = Cast<UImage>(
+				InteractionPromptWidget->GetWidgetFromName(TEXT("Image_108")));
+		}
+		if (InteractionPromptTextWidget)
+		{
+			DefaultInteractionPromptText = InteractionPromptTextWidget->GetText();
 		}
 		if (InteractionPromptFadeTarget)
 		{
@@ -578,6 +698,8 @@ void ABalhwajeomCameraPlayerController::EnsureInteractionPrompt()
 				*GetName(),
 				*InteractionPromptFadeTargetName.ToString());
 		}
+		bInteractionReticleStateInitialized = false;
+		RefreshInteractionReticle(false);
 		InteractionPromptWidget->AddToViewport(10);
 	}
 }
@@ -591,7 +713,6 @@ void ABalhwajeomCameraPlayerController::Tick(float DeltaSeconds)
 	EnsurePlayerHUD();
 	EnsureKeywordCounter();
 	EnsureBedMemoryHUD();
-	EnsureTutorialFocusLayer();
 	EnsureInteractionPrompt();
 	UpdateInteractionPrompt(DeltaSeconds);
 	UpdateBedMemoryHUD(DeltaSeconds);
@@ -632,6 +753,95 @@ bool ABalhwajeomCameraPlayerController::ShouldShowInteractionPrompt() const
 	return IsValid(EvidenceActor) && EvidenceActor->CanRequestInvestigationInteraction();
 }
 
+FText ABalhwajeomCameraPlayerController::ResolveInteractionPromptActionText() const
+{
+	const APawn* ControlledPawn = GetPawn();
+	const UPlayerInteractionComponent* InteractionComponent = IsValid(ControlledPawn)
+		? ControlledPawn->FindComponentByClass<UPlayerInteractionComponent>()
+		: nullptr;
+	if (!IsValid(InteractionComponent))
+	{
+		return FText::GetEmpty();
+	}
+
+	UInspectionComponent* FocusedInspection = InteractionComponent->GetFocusedInspection();
+	AActor* FocusedActor = IsValid(FocusedInspection) ? FocusedInspection->GetOwner() : nullptr;
+	if (!IsValid(FocusedActor))
+	{
+		return FText::GetEmpty();
+	}
+
+	if (const ABalhwajeomEvidenceActor* EvidenceActor = Cast<ABalhwajeomEvidenceActor>(FocusedActor))
+	{
+		return EvidenceActor->GetInteractionPromptText();
+	}
+	if (const UDoorInteractionComponent* DoorInteraction =
+		FocusedActor->FindComponentByClass<UDoorInteractionComponent>())
+	{
+		return DoorInteraction->GetInteractionPromptText();
+	}
+	if (FocusedActor->Implements<UWorldInteractable>())
+	{
+		return IWorldInteractable::Execute_GetInteractionPromptText(FocusedActor);
+	}
+	return FText::GetEmpty();
+}
+
+void ABalhwajeomCameraPlayerController::RefreshInteractionPromptText(
+	bool bHasValidInteractionTarget)
+{
+	if (!InteractionPromptTextWidget || !bHasValidInteractionTarget)
+	{
+		// Losing focus starts an opacity fade. Keep the last valid target's text
+		// during that fade instead of briefly replacing it with WBP_Interact's
+		// generic default while pixels are still visible. The next valid target
+		// refreshes the text before its fade-in begins.
+		return;
+	}
+
+	const FText ActionText = ResolveInteractionPromptActionText();
+	FText DesiredText = DefaultInteractionPromptText;
+	if (!ActionText.IsEmptyOrWhitespace())
+	{
+		FFormatNamedArguments Arguments;
+		Arguments.Add(TEXT("Action"), ActionText);
+		DesiredText = FText::Format(InteractionPromptFormat, Arguments);
+	}
+
+	if (!InteractionPromptTextWidget->GetText().EqualTo(DesiredText))
+	{
+		InteractionPromptTextWidget->SetText(DesiredText);
+	}
+}
+
+void ABalhwajeomCameraPlayerController::RefreshInteractionReticle(
+	bool bHasValidInteractionTarget)
+{
+	if (!InteractionReticleWidget)
+	{
+		return;
+	}
+
+	UTexture2D* DesiredTexture = bHasValidInteractionTarget
+		? InteractionReticleMagnifierTexture.Get()
+		: InteractionReticleDotTexture.Get();
+	if (!DesiredTexture)
+	{
+		return;
+	}
+
+	if (bInteractionReticleStateInitialized &&
+		bInteractionReticleShowsInteractable == bHasValidInteractionTarget &&
+		InteractionReticleWidget->GetBrush().GetResourceObject() == DesiredTexture)
+	{
+		return;
+	}
+
+	InteractionReticleWidget->SetBrushFromTexture(DesiredTexture, false);
+	bInteractionReticleStateInitialized = true;
+	bInteractionReticleShowsInteractable = bHasValidInteractionTarget;
+}
+
 bool ABalhwajeomCameraPlayerController::IsInteractionPromptSuppressedByTablet() const
 {
 	const UBalhwajeomTabletComponent* TabletComponent =
@@ -664,6 +874,7 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 	{
 		return;
 	}
+
 	if (!bGameplayPresentationEnabled)
 	{
 		InteractionPromptWidget->SetVisibility(ESlateVisibility::Collapsed);
@@ -691,6 +902,14 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 		InteractionPromptWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 	const bool bShouldShow = ShouldShowInteractionPrompt();
+	if (bShouldShow)
+	{
+		// The first time the player is close enough to something to be offered [F].
+		BalhwajeomTutorialOverlayTriggers::Set(
+			this, BalhwajeomGameplayTags::Tutorial_Trigger_InteractPromptShown);
+	}
+	RefreshInteractionReticle(bShouldShow);
+	RefreshInteractionPromptText(bShouldShow);
 	const float TargetOpacity = bShouldShow ? 1.0f : 0.0f;
 	InteractionPromptAlpha = FMath::FInterpTo(
 		InteractionPromptAlpha,
@@ -698,22 +917,15 @@ void ABalhwajeomCameraPlayerController::UpdateInteractionPrompt(float DeltaSecon
 		DeltaSeconds,
 		InteractionPromptFadeSpeed);
 
-	// A tutorial step can ask for the [F] prompt itself to pulse.
 	float DisplayOpacity = InteractionPromptAlpha;
-	if (ABalhwajeomTutorialDirector::GetTutorialHintTarget(this) ==
-		EBalhwajeomTutorialHintTarget::InteractPrompt)
-	{
-		DisplayOpacity *= ABalhwajeomTutorialDirector::GetTutorialHighlightPulse(this);
-	}
-
 	if (!bShouldShow && InteractionPromptAlpha <= KINDA_SMALL_NUMBER)
 	{
 		InteractionPromptAlpha = 0.0f;
 		DisplayOpacity = 0.0f;
 	}
 
-	// A prompt widget without a fade target still keeps a correct alpha above, so the
-	// tutorial dim works even when the widget is a plain centre dot.
+	// A prompt widget without a fade target still keeps a correct alpha above, so a
+	// widget that is a plain centre dot still behaves.
 	if (!IsValid(InteractionPromptFadeTarget))
 	{
 		return;

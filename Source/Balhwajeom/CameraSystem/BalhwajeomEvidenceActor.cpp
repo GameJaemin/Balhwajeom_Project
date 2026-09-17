@@ -14,19 +14,24 @@
 #include "Interaction/InspectionComponent.h"
 #include "ItemInspection/JMInspectableComponent.h"
 #include "ItemInspection/JMItemInspectionData.h"
+#include "ItemInspection/JMItemInspectionSubsystem.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
 #include "CameraSystem/BalhwajeomEvidenceFocusGuideLayout.h"
+#include "CameraSystem/BalhwajeomCameraPlayerController.h"
 #include "CameraSystem/PhotoWorldStoryActor.h"
 #include "Engine/StaticMesh.h"
 #include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "GameFramework/PlayerController.h"
+#include "Investigation/BalhwajeomInvestigationSettings.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Story/StoryStateSubsystem.h"
 #include "Engine/GameInstance.h"
+#include "Engine/LocalPlayer.h"
 #include "Engine/Texture2D.h"
+#include "Environment/BalhwajeomCeilingFrameSinkComponent.h"
 
 ABalhwajeomEvidenceActor::ABalhwajeomEvidenceActor()
 {
@@ -435,6 +440,7 @@ void ABalhwajeomEvidenceActor::ConfigureItemInspection()
 
 void ABalhwajeomEvidenceActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	ClearQueuedWorldStory();
 	if (UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem())
 	{
 		Investigation->OnEvidenceStateChanged.RemoveDynamic(
@@ -469,6 +475,23 @@ void ABalhwajeomEvidenceActor::ConfigureInvestigationObject(FName InObjectID)
 
 bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplayText)
 {
+	return RequestInvestigationInteractionInternal(
+		OutDisplayText,
+		/*bDeferWorldStoryForItemInspection*/ false);
+}
+
+bool ABalhwajeomEvidenceActor::RequestInvestigationInteractionForItemInspection(
+	FText& OutDisplayText)
+{
+	return RequestInvestigationInteractionInternal(
+		OutDisplayText,
+		/*bDeferWorldStoryForItemInspection*/ true);
+}
+
+bool ABalhwajeomEvidenceActor::RequestInvestigationInteractionInternal(
+	FText& OutDisplayText,
+	const bool bDeferWorldStoryForItemInspection)
+{
 	OutDisplayText = FText::GetEmpty();
 	if (!bProgressionAvailable || bProgressionCleared || bProgressionRemovalPending)
 	{
@@ -498,6 +521,33 @@ bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplay
 	}
 
 	OutDisplayText = ViewData.InteractionText;
+	ABalhwajeomCameraPlayerController* ModalController = nullptr;
+	TSubclassOf<UUserWidget> ModalContentClass;
+	FText ModalDocumentText = ViewData.InteractionText;
+	bool bModalOpened = false;
+	if (ViewData.Presentation == EEvidenceInteractionPresentation::ModalWidget)
+	{
+		ModalController = Cast<ABalhwajeomCameraPlayerController>(
+			GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr);
+		ModalContentClass = ViewData.InteractionWidgetClass.LoadSynchronous();
+		if (!ModalController || ModalController->IsInteractionModalOpen() || !ModalContentClass)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("%s: state '%s' could not prepare its interaction modal '%s'."),
+				*GetName(),
+				*ViewData.StateID.ToString(),
+				*ViewData.InteractionWidgetClass.ToString());
+			return false;
+		}
+		FKeywordDocumentDefinition Document;
+		if (Investigation->GetKeywordDocumentDefinition(
+			ViewData.KeywordDocumentID, Document))
+		{
+			ModalDocumentText = Document.DocumentText;
+		}
+		// The dedicated modal owns the presentation; suppress the legacy inspection message.
+		OutDisplayText = FText::GetEmpty();
+	}
 	if (ViewData.Presentation == EEvidenceInteractionPresentation::KeywordSelectionWindow)
 	{
 		FKeywordDocumentDefinition Document;
@@ -521,18 +571,162 @@ bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplay
 		OutDisplayText = FText::GetEmpty();
 	}
 
-	if (!Investigation->CompleteEvidenceInteraction(EvidenceInstanceID, ViewData.StateID))
+	TArray<FName> NewlyGrantedWordIDs;
+	if (!Investigation->CompleteEvidenceInteractionWithGrantedWords(
+		EvidenceInstanceID, ViewData.StateID, NewlyGrantedWordIDs))
 	{
 		LogBlockedWorldStory(TEXT("its InteractionBehavior is ChangeState but NextStateID is empty or points at another object"));
 		return false;
 	}
 
-	if (ViewData.Presentation == EEvidenceInteractionPresentation::WorldStory)
+	if (ViewData.Presentation == EEvidenceInteractionPresentation::ModalWidget)
 	{
-		// Uses the state we interacted with, which matters when the interaction also changed state.
-		PlayWorldStoryForState(ViewData.StateID);
+		TArray<FText> NewlyGrantedKeywordTexts;
+		for (const FName WordID : NewlyGrantedWordIDs)
+		{
+			FWordDefinition Word;
+			if (Investigation->GetWordDefinition(WordID, Word))
+			{
+				NewlyGrantedKeywordTexts.Add(Word.DisplayWord);
+			}
+		}
+		bModalOpened = ModalController->ShowInteractionModal(
+			ModalContentClass, ModalDocumentText, NewlyGrantedKeywordTexts);
+		if (!bModalOpened)
+		{
+			UE_LOG(LogTemp, Error,
+				TEXT("%s: interaction completed but state '%s' failed to open its modal."),
+				*GetName(), *ViewData.StateID.ToString());
+		}
+	}
+
+	const bool bShouldPlayWorldStory =
+		ViewData.Presentation == EEvidenceInteractionPresentation::WorldStory ||
+		ViewData.bPlayWorldStoryAfterPresentation;
+	if (bShouldPlayWorldStory)
+	{
+		// A modal may change state before it opens (the closed diary becomes open). Follow-up
+		// stories use that resulting state, while a plain WorldStory preserves the state that
+		// was actually interacted with.
+		const FName StoryStateID = ViewData.bPlayWorldStoryAfterPresentation
+			? CurrentStateID
+			: ViewData.StateID;
+		if (bModalOpened)
+		{
+			QueueWorldStory(StoryStateID);
+			bQueuedStoryWaitsForModal = true;
+			ModalController->OnInteractionModalClosed.RemoveAll(this);
+			ModalController->OnInteractionModalClosed.AddUObject(
+				this, &ThisClass::HandleInteractionModalClosed);
+		}
+		else if (bDeferWorldStoryForItemInspection)
+		{
+			QueueWorldStory(StoryStateID);
+		}
+		else
+		{
+			PlayWorldStoryForState(StoryStateID);
+		}
 	}
 	return true;
+}
+
+void ABalhwajeomEvidenceActor::QueueWorldStory(const FName StateID)
+{
+	ClearQueuedWorldStory();
+	QueuedWorldStoryStateID = StateID;
+}
+
+void ABalhwajeomEvidenceActor::ResolveDeferredItemInspection(
+	const bool bInspectionOpened)
+{
+	if (QueuedWorldStoryStateID.IsNone() || bQueuedStoryWaitsForModal)
+	{
+		return;
+	}
+
+	if (!bInspectionOpened)
+	{
+		PlayQueuedWorldStory();
+		return;
+	}
+
+	const APlayerController* PlayerController = GetWorld()
+		? GetWorld()->GetFirstPlayerController()
+		: nullptr;
+	const ULocalPlayer* LocalPlayer = PlayerController
+		? PlayerController->GetLocalPlayer()
+		: nullptr;
+	QueuedStoryInspectionSubsystem = LocalPlayer
+		? LocalPlayer->GetSubsystem<UJMItemInspectionSubsystem>()
+		: nullptr;
+	if (!QueuedStoryInspectionSubsystem)
+	{
+		PlayQueuedWorldStory();
+		return;
+	}
+
+	QueuedStoryInspectionSubsystem->OnInspectionClosed.RemoveDynamic(
+		this, &ThisClass::HandleItemInspectionClosed);
+	QueuedStoryInspectionSubsystem->OnInspectionClosed.AddUniqueDynamic(
+		this, &ThisClass::HandleItemInspectionClosed);
+}
+
+void ABalhwajeomEvidenceActor::HandleInteractionModalClosed()
+{
+	bQueuedStoryWaitsForModal = false;
+	PlayQueuedWorldStory();
+}
+
+void ABalhwajeomEvidenceActor::HandleItemInspectionClosed(
+	const EJMItemInspectionCloseReason Reason)
+{
+	if (ShouldPlayWorldStoryAfterInspectionClose(Reason))
+	{
+		PlayQueuedWorldStory();
+		return;
+	}
+
+	// A failed/replaced session or a world teardown is not a completed player presentation.
+	ClearQueuedWorldStory();
+}
+
+bool ABalhwajeomEvidenceActor::ShouldPlayWorldStoryAfterInspectionClose(
+	const EJMItemInspectionCloseReason Reason)
+{
+	return Reason == EJMItemInspectionCloseReason::User ||
+		Reason == EJMItemInspectionCloseReason::CloseButton ||
+		Reason == EJMItemInspectionCloseReason::ExternalRequest;
+}
+
+void ABalhwajeomEvidenceActor::PlayQueuedWorldStory()
+{
+	const FName StoryStateID = QueuedWorldStoryStateID;
+	ClearQueuedWorldStory();
+	if (!StoryStateID.IsNone())
+	{
+		PlayWorldStoryForState(StoryStateID);
+	}
+}
+
+void ABalhwajeomEvidenceActor::ClearQueuedWorldStory()
+{
+	if (QueuedStoryInspectionSubsystem)
+	{
+		QueuedStoryInspectionSubsystem->OnInspectionClosed.RemoveDynamic(
+			this, &ThisClass::HandleItemInspectionClosed);
+	}
+	QueuedStoryInspectionSubsystem = nullptr;
+
+	if (ABalhwajeomCameraPlayerController* ModalController =
+		Cast<ABalhwajeomCameraPlayerController>(
+			GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr))
+	{
+		ModalController->OnInteractionModalClosed.RemoveAll(this);
+	}
+
+	QueuedWorldStoryStateID = NAME_None;
+	bQueuedStoryWaitsForModal = false;
 }
 
 void ABalhwajeomEvidenceActor::LogBlockedWorldStory(const TCHAR* Reason) const
@@ -558,6 +752,7 @@ bool ABalhwajeomEvidenceActor::PlayWorldStory()
 
 void ABalhwajeomEvidenceActor::StopWorldStory()
 {
+	ClearQueuedWorldStory();
 	if (ActiveWorldStory.IsValid())
 	{
 		ActiveWorldStory->StopStory();
@@ -677,6 +872,15 @@ bool ABalhwajeomEvidenceActor::CanRequestInvestigationInteraction() const
 		Investigation->BeginEvidenceInteraction(EvidenceInstanceID, ViewData);
 }
 
+FText ABalhwajeomEvidenceActor::GetInteractionPromptText() const
+{
+	const UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	FEvidenceStateDefinition State;
+	return Investigation && Investigation->GetEvidenceStateDefinition(CurrentStateID, State)
+		? State.InteractionPromptText
+		: FText::GetEmpty();
+}
+
 UBalhwajeomInvestigationSubsystem* ABalhwajeomEvidenceActor::GetInvestigationSubsystem() const
 {
 	const UWorld* World = GetWorld();
@@ -736,6 +940,7 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID, bool bInit
 		Investigation->HasCapturedPhoto(State.PhotoID);
 	MinimumFocusDistanceOffset = State.MinimumFocusDistanceOffset;
 	MaximumFocusDistanceOffset = State.MaximumFocusDistanceOffset;
+	MinimumCaptureScreenOccupancyRatioOverride = State.MinimumCaptureScreenOccupancyRatioOverride;
 	PreferredFocusDistanceAt1x = State.PreferredFocusDistance;
 	FocusDistanceToleranceAt1x = State.FocusDistanceTolerance;
 	bScaleFocusDistanceWithZoom = State.bScaleFocusDistanceWithZoom;
@@ -752,7 +957,12 @@ void ABalhwajeomEvidenceActor::ApplyInvestigationState(FName StateID, bool bInit
 	{
 		EvidenceData.EvidenceID = ObjectID;
 		EvidenceData.EvidenceName = ObjectDefinition.ObjectName;
-		RequiredActivationTag = ObjectDefinition.RequiredActivationTag;
+		const UBalhwajeomInvestigationSettings* Settings =
+			GetDefault<UBalhwajeomInvestigationSettings>();
+		RequiredActivationTag = Settings
+			? Settings->ResolveChapter01RequiredActivationTag(
+				ObjectID, ObjectDefinition.RequiredActivationTag)
+			: ObjectDefinition.RequiredActivationTag;
 		ClearRequiredTag = ObjectDefinition.ClearRequiredTag;
 		GrantedTagOnClear = ObjectDefinition.GrantedTagOnClear;
 	}
@@ -803,6 +1013,30 @@ bool ABalhwajeomEvidenceActor::CanClearForProgression() const
 
 void ABalhwajeomEvidenceActor::BeginProgressionRemoval_Implementation()
 {
+	if (UBalhwajeomCeilingFrameSinkComponent* SinkComponent =
+		FindComponentByClass<UBalhwajeomCeilingFrameSinkComponent>())
+	{
+		SinkComponent->OnSinkFinished.AddUniqueDynamic(
+			this, &ThisClass::HandleProgressionSinkFinished);
+		if (SinkComponent->StartSink())
+		{
+			return;
+		}
+		SinkComponent->OnSinkFinished.RemoveDynamic(
+			this, &ThisClass::HandleProgressionSinkFinished);
+	}
+
+	FinalizeProgressionRemoval();
+}
+
+void ABalhwajeomEvidenceActor::HandleProgressionSinkFinished()
+{
+	if (UBalhwajeomCeilingFrameSinkComponent* SinkComponent =
+		FindComponentByClass<UBalhwajeomCeilingFrameSinkComponent>())
+	{
+		SinkComponent->OnSinkFinished.RemoveDynamic(
+			this, &ThisClass::HandleProgressionSinkFinished);
+	}
 	FinalizeProgressionRemoval();
 }
 
@@ -1110,6 +1344,8 @@ bool ABalhwajeomEvidenceActor::RequestCameraTargetInfo_Implementation(
 			OutInfo.bCanCapture = State.bCanCapture;
 			OutInfo.MinimumFocusDistanceOffset = State.MinimumFocusDistanceOffset;
 			OutInfo.MaximumFocusDistanceOffset = State.MaximumFocusDistanceOffset;
+			OutInfo.MinimumCaptureScreenOccupancyRatioOverride =
+				State.MinimumCaptureScreenOccupancyRatioOverride;
 			OutInfo.PreferredFocusDistance = State.PreferredFocusDistance;
 			OutInfo.FocusDistanceTolerance = State.FocusDistanceTolerance;
 			OutInfo.bScaleFocusDistanceWithZoom = State.bScaleFocusDistanceWithZoom;
@@ -1122,6 +1358,8 @@ bool ABalhwajeomEvidenceActor::RequestCameraTargetInfo_Implementation(
 	OutInfo.bCanBeCaptured = bCanBeCaptured;
 	OutInfo.MinimumFocusDistanceOffset = MinimumFocusDistanceOffset;
 	OutInfo.MaximumFocusDistanceOffset = MaximumFocusDistanceOffset;
+	OutInfo.MinimumCaptureScreenOccupancyRatioOverride =
+		MinimumCaptureScreenOccupancyRatioOverride;
 	OutInfo.PreferredFocusDistanceAt1x = PreferredFocusDistanceAt1x;
 	OutInfo.FocusDistanceToleranceAt1x = FocusDistanceToleranceAt1x;
 	OutInfo.bScaleFocusDistanceWithZoom = bScaleFocusDistanceWithZoom;

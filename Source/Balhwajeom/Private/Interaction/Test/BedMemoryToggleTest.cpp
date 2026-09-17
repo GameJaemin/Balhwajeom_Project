@@ -13,6 +13,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
@@ -37,6 +38,23 @@ struct FBedMemoryTestAccessor
 	static ECollisionResponse GetInteractionPawnResponse(const ABedMemoryActor* Bed)
 	{
 		return Bed->InteractionCollision->GetCollisionResponseToChannel(ECC_Pawn);
+	}
+
+	static const USceneComponent* GetStoryAnchor(const ABedMemoryActor* Bed)
+	{
+		return Bed->StoryAnchor;
+	}
+
+#if WITH_EDITORONLY_DATA
+	static const UTextRenderComponent* GetStoryAnchorPreviewText(const ABedMemoryActor* Bed)
+	{
+		return Bed->StoryAnchorPreviewText;
+	}
+#endif
+
+	static FVector2D GetInitialStoryDelayRange(const ABedMemoryActor* Bed)
+	{
+		return Bed->InitialStoryDelayRange;
 	}
 
 	static void SimulateColliderBeginOverlap(ABedMemoryActor* Bed, APawn* Pawn)
@@ -106,16 +124,16 @@ struct FBedMemoryTestAccessor
 		Bed->UpdatePlayerTurn();
 	}
 
-	static TArray<FName> BuildShuffleCycle(ABedMemoryActor* Bed, int32 VoiceCount)
+	static TArray<FName> BuildShuffleCycle(ABedMemoryActor* Bed, int32 StoryCount)
 	{
-		Bed->VoiceCandidates.Reset();
+		Bed->StoryCandidates.Reset();
 		Bed->ShuffleBag.Reset();
 		Bed->LastPlayedPhotoID = NAME_None;
-		for (int32 Index = 0; Index < VoiceCount; ++Index)
+		for (int32 Index = 0; Index < StoryCount; ++Index)
 		{
-			FBedMemoryVoiceCandidate Candidate;
+			FBedMemoryStoryCandidate Candidate;
 			Candidate.PhotoID = FName(*FString::Printf(TEXT("Photo_%d"), Index));
-			Bed->VoiceCandidates.Add(Candidate);
+			Bed->StoryCandidates.Add(Candidate);
 		}
 		Bed->RefillShuffleBag();
 
@@ -123,7 +141,7 @@ struct FBedMemoryTestAccessor
 		while (!Bed->ShuffleBag.IsEmpty())
 		{
 			PlaybackOrder.Add(
-				Bed->VoiceCandidates[Bed->ShuffleBag.Pop(EAllowShrinking::No)].PhotoID);
+				Bed->StoryCandidates[Bed->ShuffleBag.Pop(EAllowShrinking::No)].PhotoID);
 		}
 		return PlaybackOrder;
 	}
@@ -132,12 +150,12 @@ struct FBedMemoryTestAccessor
 	{
 		Bed->LastPlayedPhotoID = LastPlayed;
 		Bed->RefillShuffleBag();
-		return Bed->VoiceCandidates[Bed->ShuffleBag.Pop(EAllowShrinking::No)].PhotoID;
+		return Bed->StoryCandidates[Bed->ShuffleBag.Pop(EAllowShrinking::No)].PhotoID;
 	}
 
-	static void ResetVoiceTestData(ABedMemoryActor* Bed)
+	static void ResetStoryTestData(ABedMemoryActor* Bed)
 	{
-		Bed->VoiceCandidates.Reset();
+		Bed->StoryCandidates.Reset();
 		Bed->ShuffleBag.Reset();
 		Bed->LastPlayedPhotoID = NAME_None;
 	}
@@ -211,6 +229,24 @@ bool FBedMemoryColliderToggleTest::RunTest(const FString& Parameters)
 		TEXT("Interaction collider remains an overlap trigger for the player pawn"),
 		FBedMemoryTestAccessor::GetInteractionPawnResponse(Bed),
 		ECR_Overlap);
+	TestNotNull(
+		TEXT("Bed exposes an authored StoryAnchor for collected-photo text"),
+		FBedMemoryTestAccessor::GetStoryAnchor(Bed));
+#if WITH_EDITORONLY_DATA
+	const UTextRenderComponent* StoryAnchorPreview =
+		FBedMemoryTestAccessor::GetStoryAnchorPreviewText(Bed);
+	TestNotNull(TEXT("StoryAnchor exposes an editor preview caption"), StoryAnchorPreview);
+	if (StoryAnchorPreview)
+	{
+		TestTrue(
+			TEXT("StoryAnchor preview caption is hidden in game"),
+			StoryAnchorPreview->bHiddenInGame);
+	}
+#endif
+	TestEqual(
+		TEXT("The first collected-photo story starts immediately by default"),
+		FBedMemoryTestAccessor::GetInitialStoryDelayRange(Bed),
+		FVector2D::ZeroVector);
 
 	Controller->SetPlayer(LocalPlayer);
 	Controller->Possess(Character);
@@ -238,21 +274,21 @@ bool FBedMemoryColliderToggleTest::RunTest(const FString& Parameters)
 	FBedMemoryTestAccessor::SetAnimations(Bed, SitAnimation, SeatedIdle);
 	const TArray<FName> ShuffleCycle =
 		FBedMemoryTestAccessor::BuildShuffleCycle(Bed, 8);
-	TSet<FName> UniqueVoices;
+	TSet<FName> UniqueStories;
 	for (const FName PhotoID : ShuffleCycle)
 	{
-		UniqueVoices.Add(PhotoID);
+		UniqueStories.Add(PhotoID);
 	}
-	TestEqual(TEXT("An eight-voice shuffle cycle contains eight entries"), ShuffleCycle.Num(), 8);
+	TestEqual(TEXT("An eight-story shuffle cycle contains eight entries"), ShuffleCycle.Num(), 8);
 	TestEqual(
-		TEXT("Every voice appears exactly once in a shuffle cycle"),
-		UniqueVoices.Num(),
+		TEXT("Every story appears exactly once in a shuffle cycle"),
+		UniqueStories.Num(),
 		8);
 	TestNotEqual(
-		TEXT("A new shuffle cycle does not repeat the previous cycle's final voice first"),
+		TEXT("A new shuffle cycle does not repeat the previous cycle's final story first"),
 		FBedMemoryTestAccessor::GetFirstOfNextShuffleCycle(Bed, ShuffleCycle.Last()),
 		ShuffleCycle.Last());
-	FBedMemoryTestAccessor::ResetVoiceTestData(Bed);
+	FBedMemoryTestAccessor::ResetStoryTestData(Bed);
 	if (!World->HasBegunPlay())
 	{
 		World->BeginPlay();
@@ -378,8 +414,8 @@ bool FBedMemoryColliderToggleTest::RunTest(const FString& Parameters)
 			180.0f,
 			0.1f));
 	TestEqual(
-		TEXT("Animation and audio preparation have not started"),
-		Bed->GetAvailableVoiceCount(),
+		TEXT("No captured-photo world stories are available"),
+		Bed->GetAvailableStoryCount(),
 		0);
 	TestFalse(
 		TEXT("Sit label is hidden while resting"),

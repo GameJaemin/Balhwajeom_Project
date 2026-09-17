@@ -1,17 +1,17 @@
-Name,StateID,ObjectID,StateName,InteractionBehavior,InteractionPresentation,NextStateID,InteractionText,KeywordDocumentID,StateMesh,StateEffect,FarLabel,MidLabel,NearLabel,bCanCapture,PhotoID,PostCaptureStateID ,MinimumFocusDistanceOffset,MaximumFocusDistanceOffset
-STATE_01_001_DUST,STATE_01_001_DUST,OBJ_01_001,먼지 쌓인 형의 돌 사진,ChangeState,SimpleText,STATE_01_001_CLEAR,사진의 먼지를 닦았다.,,,,,사진,먼지 덮인 사진,FALSE,,,0,0
+Name,StateID,ObjectID,StateName,InteractionBehavior,InteractionPresentation,NextStateID,InteractionText,KeywordDocumentID,StateMesh,StateEffect,FarLabel,MidLabel,NearLabel,bCanCapture,PhotoID,PostCaptureStateID ,MinimumFocusDistanceOffset,MaximumFocusDistanceOffset,InteractionWidgetClass,GrantedWordIDs,InteractionPromptText,CaptureBlockedLabel,bPlayWorldStoryAfterPresentation
+STATE_01_001_DUST,STATE_01_001_DUST,OBJ_01_001,먼지 쌓인 형의 돌 사진,ChangeState,ModalWidget,STATE_01_001_CLEAR,사진의 먼지를 닦았다.,,,,,사진,먼지 덮인 사진,FALSE,,,0,0,WidgetBlueprintGeneratedClass'/Game/Balhwajeom/UI/Family/WBP_Family1.WBP_Family1_C',(),먼지 털기,사진을 찍기 전에 먼지부터 털어 보자.
 STATE_01_001_CLEAR,STATE_01_001_CLEAR,OBJ_01_001,형의 돌 사진,None,SimpleText,,,,,,,사진,첫째 형의 돌 사진,TRUE,PHOTO_01_001,STATE_01_001_MEMORY,0,0
-STATE_01_001_MEMORY,STATE_01_001_MEMORY,OBJ_01_001,첫째인 형의 돌 사진,PlayPhotoStory,None,,,,,,,사진,첫째 형의 돌 사진,FALSE,,,0,0
-STATE_01_002_DUST,STATE_01_002_DUST,OBJ_01_002,먼지 쌓인 일상 사진,ChangeState,SimpleText,STATE_01_002_CLEAR,사진의 먼지를 닦았다.,,,,,사진,먼지로 더럽혀진 사진,FALSE,,,0,0
+STATE_01_001_MEMORY,STATE_01_001_MEMORY,OBJ_01_001,첫째인 형의 돌 사진,PlayPhotoStory,None,,,,,,,사진,첫째 형의 돌 사진,FALSE,,,0,0,,,회상하기
+STATE_01_002_DUST,STATE_01_002_DUST,OBJ_01_002,먼지 쌓인 일상 사진,ChangeState,ModalWidget,STATE_01_002_CLEAR,사진의 먼지를 닦았다.,,,,,사진,먼지로 더럽혀진 사진,FALSE,,,0,0,WidgetBlueprintGeneratedClass'/Game/Balhwajeom/UI/Family/WBP_Family2.WBP_Family2_C',(),먼지 털기,사진을 찍기 전에 먼지부터 털어 보자.
 STATE_01_002_CLEAR,STATE_01_002_CLEAR,OBJ_01_002,일상 사진,None,SimpleText,,,,,,,사진,여동생과 노는 사진,TRUE,PHOTO_01_002,STATE_01_002_MEMORY,0,0
-STATE_01_002_MEMORY,STATE_01_002_MEMORY,OBJ_01_002,즐거웠던 일상 사진,PlayPhotoStory,None,,,,,,,사진,여동생과 노는 사진,FALSE,,,0,0
-STATE_01_003_DUST,STATE_01_003_DUST,OBJ_01_003,먼지 쌓인 가족 사진,ChangeState,SimpleText,STATE_01_003_CLEAR,사진의 먼지를 닦았다.,,,,,사진,더러워서 보이지 않는 사진,FALSE,,,0,0
+STATE_01_002_MEMORY,STATE_01_002_MEMORY,OBJ_01_002,즐거웠던 일상 사진,PlayPhotoStory,None,,,,,,,사진,여동생과 노는 사진,FALSE,,,0,0,,,회상하기
+STATE_01_003_DUST,STATE_01_003_DUST,OBJ_01_003,먼지 쌓인 가족 사진,ChangeState,ModalWidget,STATE_01_003_CLEAR,사진의 먼지를 닦았다.,,,,,사진,더러워서 보이지 않는 사진,FALSE,,,0,0,WidgetBlueprintGeneratedClass'/Game/Balhwajeom/UI/Family/WBP_Family3.WBP_Family3_C',(),먼지 털기,사진을 찍기 전에 먼지부터 털어 보자.
 STATE_01_003_CLEAR,STATE_01_003_CLEAR,OBJ_01_003,가족 사진,None,SimpleText,,,,,,,사진,최근에 찍은 가족 사진,TRUE,PHOTO_01_003,STATE_01_003_MEMORY,0,0
-STATE_01_003_MEMORY,STATE_01_003_MEMORY,OBJ_01_003,단정한 가족 사진,PlayPhotoStory,None,,,,,,,사진,최근에 찍은 가족 사진,FALSE,,,0,0
-STATE_01_004_CLOSED,STATE_01_004_CLOSED,OBJ_01_004,닫혀 있는 일기장,ChangeState,SimpleText,STATE_01_004_OPEN,일기장을 열어보았다.,,,,,일기장,여동생의 일기장,FALSE,,,0,0
-STATE_01_004_OPEN,STATE_01_004_OPEN,OBJ_01_004,열려 있는 일기장,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_001,,,,열린 일기장,열린 여동생의 일기장,TRUE,PHOTO_01_004,STATE_01_004_MEMORY,0,0
-STATE_01_004_MEMORY,STATE_01_004_MEMORY,OBJ_01_004,여동생의 일기장,PlayPhotoStory,None,,,,,,,열린 일기장,열린 여동생의 일기장,FALSE,,,0,0
-STATE_01_005_FRONT,STATE_01_005_FRONT,OBJ_01_005,고데기,ChangeState,SimpleText,STATE_01_005_BACK,고데기를 뒤집었다.,,,,,고데기,파손된 고데기,FALSE,,,0,0
+STATE_01_003_MEMORY,STATE_01_003_MEMORY,OBJ_01_003,단정한 가족 사진,PlayPhotoStory,None,,,,,,,사진,최근에 찍은 가족 사진,FALSE,,,0,0,,,회상하기
+STATE_01_004_CLOSED,STATE_01_004_CLOSED,OBJ_01_004,닫혀 있는 일기장,ChangeState,ModalWidget,STATE_01_004_OPEN,일기장을 열어보았다.,KEYDOC_01_001,,,,일기장,여동생의 일기장,FALSE,PHOTO_01_004,,0,0,WidgetBlueprintGeneratedClass'/Game/Balhwajeom/UI/Diary/WBP_Diary.WBP_Diary_C',"(WORD_01_004,WORD_01_005)",일기장 보기,일기장을 먼저 펼쳐 보자.,TRUE
+STATE_01_004_OPEN,STATE_01_004_OPEN,OBJ_01_004,열려 있는 일기장,Repeatable,ModalWidget,,,KEYDOC_01_001,,,,열린 일기장,열린 여동생의 일기장,TRUE,PHOTO_01_004,STATE_01_004_MEMORY,0,0,WidgetBlueprintGeneratedClass'/Game/Balhwajeom/UI/Diary/WBP_Diary.WBP_Diary_C',(),일기장 보기,,TRUE
+STATE_01_004_MEMORY,STATE_01_004_MEMORY,OBJ_01_004,여동생의 일기장,Repeatable,ModalWidget,,,,,,,열린 일기장,열린 여동생의 일기장,FALSE,PHOTO_01_004,,0,0,WidgetBlueprintGeneratedClass'/Game/Balhwajeom/UI/Diary/WBP_Diary.WBP_Diary_C',(),회상하기,,TRUE
+STATE_01_005_FRONT,STATE_01_005_FRONT,OBJ_01_005,고데기,ChangeState,SimpleText,STATE_01_005_BACK,고데기를 뒤집었다.,,,,,고데기,파손된 고데기,FALSE,,,0,0,,,뒤집어 보기,고데기를 뒤집어 반대편을 확인해 보자.
 STATE_01_005_BACK,STATE_01_005_BACK,OBJ_01_005,고데기 뒷면,None,None,,,,,,,고데기,파손된 고데기,TRUE,PHOTO_01_005,STATE_01_005_MEMORY,0,0
 STATE_01_005_MEMORY,STATE_01_005_MEMORY,OBJ_01_005,여동생의 고데기,PlayPhotoStory,None,,,,,,,고데기,파손된 고데기,FALSE,,,0,0
 STATE_01_006_NORMAL,STATE_01_006_NORMAL,OBJ_01_006,창문,None,None,,,,,,,창문,깨져 있는 창문,TRUE,PHOTO_01_006,,0,0
@@ -25,11 +25,11 @@ STATE_01_011_MEMORY,STATE_01_011_MEMORY,OBJ_01_011,여동생이 몰래 산 화�
 STATE_01_012_NORMAL,STATE_01_012_NORMAL,OBJ_01_012,책,None,None,,,,,,,책,소설책,TRUE,PHOTO_01_012,,0,0
 STATE_01_013_NORMAL,STATE_01_013_NORMAL,OBJ_01_013,베개,None,None,,,,,,,베개,검게 타버린 배개,TRUE,PHOTO_01_013,STATE_01_013_MEMORY,0,0
 STATE_01_013_MEMORY,STATE_01_013_MEMORY,OBJ_01_013,검게 타버린 베개,PlayPhotoStory,None,,,,,,,베개,검게 타버린 배개,FALSE,,,0,0
-STATE_01_014_CLOSED,STATE_01_014_CLOSED,OBJ_01_014,닫혀 있는 방문,ChangeState,SimpleText,STATE_01_014_OPEN,방문을 열었다.,,,,,방문,여동생의 방문,TRUE,PHOTO_01_014,,0,0
+STATE_01_014_CLOSED,STATE_01_014_CLOSED,OBJ_01_014,닫혀 있는 방문,ChangeState,SimpleText,STATE_01_014_OPEN,방문을 열었다.,,,,,방문,여동생의 방문,TRUE,PHOTO_01_014,,0,0,,,문 열기
 STATE_01_014_OPEN,STATE_01_014_OPEN,OBJ_01_014,열려 있는 방문,None,None,,,,,,,방문,여동생의 방문,TRUE,PHOTO_01_014,,0,0
 STATE_01_015_NORMAL,STATE_01_015_NORMAL,OBJ_01_015,보조배터리,None,None,,,,,,,보조 배터리,그을린 보조배터리,TRUE,PHOTO_01_015,STATE_01_015_MEMORY,0,0
 STATE_01_015_MEMORY,STATE_01_015_MEMORY,OBJ_01_015,그을린 거대한 보조배터리,PlayPhotoStory,None,,,,,,,보조 배터리,그을린 보조배터리,FALSE,,,0,0
-STATE_01_016_NORMAL,STATE_01_016_NORMAL,OBJ_01_016,디퓨저 옆 쪽지,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_009,,,,쪽지,누군가 남긴 쪽지,TRUE,PHOTO_01_016,STATE_01_016_MEMORY,0,0
+STATE_01_016_NORMAL,STATE_01_016_NORMAL,OBJ_01_016,디퓨저 옆 쪽지,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_009,,,,쪽지,누군가 남긴 쪽지,TRUE,PHOTO_01_016,STATE_01_016_MEMORY,0,0,,,쪽지 보기
 STATE_01_016_MEMORY,STATE_01_016_MEMORY,OBJ_01_016,어머니의 손글씨 쪽지,PlayPhotoStory,None,,,,,,,쪽지,어머니가 남긴 쪽지,FALSE,,,0,0
 STATE_01_017_NORMAL,STATE_01_017_NORMAL,OBJ_01_017,디퓨저,None,None,,,,,,,디퓨저,녹아 있는 디퓨저,TRUE,PHOTO_01_017,STATE_01_017_MEMORY,0,0
 STATE_01_017_MEMORY,STATE_01_017_MEMORY,OBJ_01_017,녹아버린 디퓨저,PlayPhotoStory,None,,,,,,,디퓨저,녹아 있는 디퓨저,FALSE,,,0,0
@@ -37,7 +37,7 @@ STATE_01_018_NORMAL,STATE_01_018_NORMAL,OBJ_01_018,시계,None,None,,,,,,,시계
 STATE_01_018_MEMORY,STATE_01_018_MEMORY,OBJ_01_018,멈춰있는 시계,PlayPhotoStory,None,,,,,,,시계,작동하지 않는 시계,FALSE,,,0,0
 STATE_01_019_NORMAL,STATE_01_019_NORMAL,OBJ_01_019,장롱,None,None,,,,,,,장롱,넘어져 있는 장롱,TRUE,PHOTO_01_019,STATE_01_019_MEMORY,0,0
 STATE_01_019_MEMORY,STATE_01_019_MEMORY,OBJ_01_019,타버린 옷이 있는 장롱,PlayPhotoStory,None,,,,,,,장롱,넘어져 있는 장롱,FALSE,,,0,0
-STATE_01_020_NORMAL,STATE_01_020_NORMAL,OBJ_01_020,장롱 쪽지,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_010,,,,쪽지,장롱에 붙어 있는 쪽지,TRUE,PHOTO_01_020,STATE_01_020_MEMORY,0,0
+STATE_01_020_NORMAL,STATE_01_020_NORMAL,OBJ_01_020,장롱 쪽지,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_010,,,,쪽지,장롱에 붙어 있는 쪽지,TRUE,PHOTO_01_020,STATE_01_020_MEMORY,0,0,,,쪽지 보기
 STATE_01_020_MEMORY,STATE_01_020_MEMORY,OBJ_01_020,장롱에 붙어있는 쪽지,PlayPhotoStory,None,,,,,,,쪽지,장롱에 붙어 있는 쪽지,FALSE,,,0,0
 STATE_01_021_NORMAL,STATE_01_021_NORMAL,OBJ_01_021,책상,None,None,,,,,,,책상,그을린 책상,TRUE,PHOTO_01_021,STATE_01_021_MEMORY,0,0
 STATE_01_021_MEMORY,STATE_01_021_MEMORY,OBJ_01_021,재가 내려앉은 책상,PlayPhotoStory,None,,,,,,,책상,그을린 책상,FALSE,,,0,0
@@ -45,9 +45,9 @@ STATE_01_022_NORMAL,STATE_01_022_NORMAL,OBJ_01_022,자격증 책,None,None,,,,,,
 STATE_01_022_MEMORY,STATE_01_022_MEMORY,OBJ_01_022,타버린 자격증 책,PlayPhotoStory,None,,,,,,,자격증 책,타버린 자격증 책,FALSE,,,0,0
 STATE_01_023_NORMAL,STATE_01_023_NORMAL,OBJ_01_023,거울,None,None,,,,,,,거울,깨져버린 거울,TRUE,PHOTO_01_023,STATE_01_023_MEMORY,0,0
 STATE_01_023_MEMORY,STATE_01_023_MEMORY,OBJ_01_023,깨져버린 거울,PlayPhotoStory,None,,,,,,,거울,깨져버린 거울,FALSE,,,0,0
-STATE_01_024_NORMAL,STATE_01_024_NORMAL,OBJ_01_024,바닥 쪽지,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_011,,,,쪽지,바닥에 떨어진 쪽지,TRUE,PHOTO_01_024,STATE_01_024_MEMORY,0,0
+STATE_01_024_NORMAL,STATE_01_024_NORMAL,OBJ_01_024,바닥 쪽지,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_011,,,,쪽지,바닥에 떨어진 쪽지,TRUE,PHOTO_01_024,STATE_01_024_MEMORY,0,0,,,쪽지 보기
 STATE_01_024_MEMORY,STATE_01_024_MEMORY,OBJ_01_024,바닥에 떨여진 쪽지,PlayPhotoStory,None,,,,,,,쪽지,바닥에 떨어진 쪽지,FALSE,,,0,0
-STATE_01_025_NORMAL,STATE_01_025_NORMAL,OBJ_01_025,책장 쪽지,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_012,,,,쪽지,책장에 붙어 있는 쪽지,TRUE,PHOTO_01_025,STATE_01_025_MEMORY,0,0
+STATE_01_025_NORMAL,STATE_01_025_NORMAL,OBJ_01_025,책장 쪽지,Repeatable,KeywordSelectionWindow,,,KEYDOC_01_012,,,,쪽지,책장에 붙어 있는 쪽지,TRUE,PHOTO_01_025,STATE_01_025_MEMORY,0,0,,,쪽지 보기
 STATE_01_025_MEMORY,STATE_01_025_MEMORY,OBJ_01_025,어머니가 남겨놓은 쪽지,PlayPhotoStory,None,,,,,,,쪽지,책장에 붙어 있는 쪽지,FALSE,,,0,0
 STATE_01_026_NORMAL,STATE_01_026_NORMAL,OBJ_01_026,침대,Repeatable,None,,,,,,,침대,타버린 침대,FALSE,,,0,0
 STATE_01_027_NORMAL,STATE_01_027_NORMAL,OBJ_01_027,책장,None,None,,,,,,,책장,그을린 책장,TRUE,PHOTO_01_027,,0,0

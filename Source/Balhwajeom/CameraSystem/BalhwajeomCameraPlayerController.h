@@ -10,10 +10,15 @@
 
 class UUserWidget;
 class UWidget;
+class UImage;
+class UTextBlock;
 class UTexture2D;
 class UBalhwajeomInvestigationSubsystem;
+class UBalhwajeomInteractionModalWidget;
 class UBalhwajeomKeywordCounterWidget;
 class UStoryStateSubsystem;
+
+DECLARE_MULTICAST_DELEGATE(FOnBalhwajeomInteractionModalClosed);
 
 /** Owns mouse-look input and forwards it to the possessed Project Self character. */
 UCLASS(Blueprintable)
@@ -40,13 +45,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "UI|Interaction")
 	void EnsureInteractionPrompt();
 
-	/**
-	 * Creates the tutorial dim/highlight layer once for the local controller.
-	 * It sits at ZOrder 5: above the player HUD icons and the world, below WB_Interact,
-	 * so dimming the screen leaves the [F] prompt and the centre dot fully readable.
-	 */
-	UFUNCTION(BlueprintCallable, Category = "UI|Tutorial")
-	void EnsureTutorialFocusLayer();
+	/** Adds the tutorial overlay presenter on first run, for controllers that have none. */
+	void EnsureTutorialOverlayPresenter();
 
 	UFUNCTION(BlueprintPure, Category = "UI")
 	UUserWidget* GetPlayerHUD() const { return PlayerHUDWidget; }
@@ -59,9 +59,6 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "UI|Interaction")
 	UUserWidget* GetInteractionPrompt() const { return InteractionPromptWidget; }
-
-	UFUNCTION(BlueprintPure, Category = "UI|Tutorial")
-	UUserWidget* GetTutorialFocusLayer() const { return TutorialFocusWidget; }
 
 	/**
 	 * Current 0..1 fade alpha of the [F] prompt text.
@@ -86,6 +83,21 @@ public:
 
 	/** Applies a photo-capture keyword count after its card has reached the TAB HUD. */
 	void FlushPendingPhotoKeywordCount();
+
+	/** Opens a blocking interaction widget and decorates it with newly acquired keywords. */
+	bool ShowInteractionModal(
+		TSubclassOf<UUserWidget> ContentWidgetClass,
+		const FText& DocumentText,
+		const TArray<FText>& NewlyGrantedKeywords);
+
+	UFUNCTION(BlueprintPure, Category = "UI|Interaction")
+	bool IsInteractionModalOpen() const;
+
+	UFUNCTION(BlueprintCallable, Category = "UI|Interaction")
+	void CloseInteractionModal();
+
+	/** Native completion point for presentations that must start after the modal is gone. */
+	FOnBalhwajeomInteractionModalClosed OnInteractionModalClosed;
 
 protected:
 	virtual void BeginPlay() override;
@@ -126,19 +138,37 @@ protected:
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "UI|Interaction")
 	TObjectPtr<UUserWidget> InteractionPromptWidget;
 
-	/** Dim/highlight layer used by the tutorial flow. Leave unset to disable the layer entirely. */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Tutorial")
-	TSubclassOf<UUserWidget> TutorialFocusWidgetClass;
-
-	UPROPERTY(Transient, BlueprintReadOnly, Category = "UI|Tutorial")
-	TObjectPtr<UUserWidget> TutorialFocusWidget;
-
 	/** Widget inside WB_Interact that fades; the rest of the widget (including the center dot) stays visible. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction")
 	FName InteractionPromptFadeTargetName = TEXT("TextBlock_50");
 
 	UPROPERTY(Transient)
 	TObjectPtr<UWidget> InteractionPromptFadeTarget;
+
+	/** TextBlock that receives the state-specific action text. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction")
+	FName InteractionPromptTextWidgetName = TEXT("TextBlock_50");
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> InteractionPromptTextWidget;
+
+	/** Center-screen image that switches between the idle dot and interactable magnifier. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction")
+	FName InteractionReticleWidgetName = TEXT("InteractionReticle");
+
+	UPROPERTY(Transient)
+	TObjectPtr<UImage> InteractionReticleWidget;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Interaction")
+	TObjectPtr<UTexture2D> InteractionReticleDotTexture;
+
+	UPROPERTY(EditDefaultsOnly, Category = "UI|Interaction")
+	TObjectPtr<UTexture2D> InteractionReticleMagnifierTexture;
+
+	/** Applied when a target supplies an action; {Action} is replaced at runtime. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction")
+	FText InteractionPromptFormat = NSLOCTEXT(
+		"BalhwajeomInteraction", "PromptFormat", "[ F ] {Action}");
 
 	/** Larger values make the prompt reach its target opacity more quickly. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|Interaction", meta = (ClampMin = "0.1"))
@@ -165,6 +195,8 @@ protected:
 private:
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FBedMemoryTestAccessor;
+	friend struct FInteractionReticleTestAccessor;
+	friend struct FInteractionModalTestAccessor;
 #endif
 
 	void HandleMouseYaw(float Value);
@@ -173,6 +205,7 @@ private:
 	void BindHudModeEvents();
 	void RefreshHudModeIcons();
 	void HideInspectionMessage();
+	void HandleInteractionModalCloseRequested();
 
 	UFUNCTION()
 	void HandleHudModeTagChanged(FGameplayTag StateTag);
@@ -184,14 +217,19 @@ private:
 	UFUNCTION()
 	void HandleInvestigationPhotoGalleryReset();
 	bool ShouldShowInteractionPrompt() const;
+	FText ResolveInteractionPromptActionText() const;
+	void RefreshInteractionPromptText(bool bHasValidInteractionTarget);
+	void RefreshInteractionReticle(bool bHasValidInteractionTarget);
 	bool IsInteractionPromptSuppressedByTablet() const;
 	bool IsInteractionPromptSuppressedByPhotoCamera() const;
 	void UpdateInteractionPrompt(float DeltaSeconds);
 	void UpdateBedMemoryHUD(float DeltaSeconds);
 	void ApplyBedMemoryHUDAlpha(float Alpha);
 
-	/** Fade value of the [F] prompt before any tutorial blink is applied. */
 	float InteractionPromptAlpha = 0.0f;
+	bool bInteractionReticleStateInitialized = false;
+	bool bInteractionReticleShowsInteractable = false;
+	FText DefaultInteractionPromptText;
 	float BedMemoryHUDAlpha = 0.0f;
 	bool bBedMemoryHUDActive = false;
 	bool bGameplayPresentationEnabled = true;
@@ -203,6 +241,13 @@ private:
 	/** Story state source used to keep the two WBP_HUID mode buttons in sync. */
 	UPROPERTY(Transient)
 	TObjectPtr<UStoryStateSubsystem> BoundHudStoryStateSubsystem;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UBalhwajeomInteractionModalWidget> InteractionModalWidget;
+
+	bool bInteractionModalChangedMoveIgnore = false;
+	bool bInteractionModalChangedLookIgnore = false;
+	bool bInteractionModalPreviousMouseCursor = false;
 
 	UPROPERTY(EditDefaultsOnly, Category = "UI|Mode Buttons")
 	TObjectPtr<UTexture2D> CameraButtonIdleTexture;

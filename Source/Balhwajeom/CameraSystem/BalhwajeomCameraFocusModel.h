@@ -20,6 +20,15 @@ struct BALHWAJEOM_API FBalhwajeomFocusRegion
 	float SharpFar = 0.0f;
 };
 
+struct BALHWAJEOM_API FBalhwajeomScreenFrameMetrics
+{
+	/** Fraction of the target's projected rectangle that remains inside the viewport. */
+	float VisibleFraction = 0.0f;
+
+	/** Fraction of the viewport occupied by the visible target rectangle. */
+	float ScreenOccupancyRatio = 0.0f;
+};
+
 struct BALHWAJEOM_API FBalhwajeomFocusGraceState
 {
 	float MissElapsed = 0.0f;
@@ -70,4 +79,16 @@ public:
 		const FBalhwajeomFocusRegion& FocusRegion,
 		float BlurTransitionDistance,
 		float MaximumBlurStrength);
+
+	static bool CalculateScreenFrameMetrics(
+		const FVector2D& ScreenMin,
+		const FVector2D& ScreenMax,
+		const FVector2D& ViewportSize,
+		FBalhwajeomScreenFrameMetrics& OutMetrics);
+
+	static bool IsScreenOccupancySufficient(
+		float ScreenOccupancyRatio,
+		float GlobalMinimumRatio,
+		float OverrideMinimumRatio,
+		float& OutRequiredRatio);
 };

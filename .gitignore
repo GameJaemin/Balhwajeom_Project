@@ -80,3 +80,7 @@ DerivedDataCache/*
 
 # Per-user Unreal Engine sandbox content
 /Content/Developers/
+
+# Source images staged for Scripts/Tutorial/ImportOverlayImage.py.
+# Only the imported .uasset is tracked, as with every other texture in the project.
+Scripts/Tutorial/OverlayImages/

@@ -6,7 +6,9 @@
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
+#include "CoreGlobals.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/Texture.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "ItemInspection/JMItemInspectionData.h"
@@ -14,6 +16,49 @@
 #include "ItemInspection/JMItemInspectionSurfaceWidgetBase.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "UObject/StrongObjectPtr.h"
+
+namespace
+{
+FVector2D CalculateProjectedBoundsExtent(
+	const UStaticMeshComponent* MeshComponent,
+	const USceneCaptureComponent2D* SceneCapture,
+	const UTextureRenderTarget2D* RenderTarget)
+{
+	if (!MeshComponent || !MeshComponent->GetStaticMesh() || !SceneCapture || !RenderTarget || RenderTarget->SizeY <= 0)
+	{
+		return FVector2D(TNumericLimits<float>::Max());
+	}
+
+	const FBox LocalBounds = MeshComponent->GetStaticMesh()->GetBounds().GetBox();
+	const float AspectRatio = static_cast<float>(RenderTarget->SizeX) / static_cast<float>(RenderTarget->SizeY);
+	const float HorizontalTangent = FMath::Tan(FMath::DegreesToRadians(SceneCapture->FOVAngle * 0.5f));
+	const float VerticalTangent = HorizontalTangent / AspectRatio;
+	FVector2D MaximumExtent = FVector2D::ZeroVector;
+
+	for (int32 CornerIndex = 0; CornerIndex < 8; ++CornerIndex)
+	{
+		const FVector LocalCorner(
+			(CornerIndex & 1) != 0 ? LocalBounds.Max.X : LocalBounds.Min.X,
+			(CornerIndex & 2) != 0 ? LocalBounds.Max.Y : LocalBounds.Min.Y,
+			(CornerIndex & 4) != 0 ? LocalBounds.Max.Z : LocalBounds.Min.Z);
+		const FVector CameraSpaceCorner = SceneCapture->GetComponentTransform().InverseTransformPosition(
+			MeshComponent->GetComponentTransform().TransformPosition(LocalCorner));
+		if (CameraSpaceCorner.X <= 0.0f)
+		{
+			return FVector2D(TNumericLimits<float>::Max());
+		}
+
+		MaximumExtent.X = FMath::Max(
+			MaximumExtent.X,
+			FMath::Abs(CameraSpaceCorner.Y) / (CameraSpaceCorner.X * HorizontalTangent));
+		MaximumExtent.Y = FMath::Max(
+			MaximumExtent.Y,
+			FMath::Abs(CameraSpaceCorner.Z) / (CameraSpaceCorner.X * VerticalTangent));
+	}
+
+	return MaximumExtent;
+}
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FJMItemInspectionPaperSurfaceWidgetTest,
@@ -108,6 +153,8 @@ bool FJMItemInspectionPaperSurfaceWidgetTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Surface widget follows the same rotating pivot as the mesh"), SurfaceComponent->GetAttachParent(), PreviewPivot);
 	if (PreviewPivot)
 	{
+		const FRotator AuthoredInitialRotation(-18.0f, 61.0f, 7.0f);
+		PaperData->ViewSettings.InitialRotation = AuthoredInitialRotation;
 		FJMItemInspectionTransitionSource TransitionSource;
 		TransitionSource.bIsValid = true;
 		TransitionSource.bIsOnScreen = true;
@@ -124,10 +171,18 @@ bool FJMItemInspectionPaperSurfaceWidgetTest::RunTest(const FString& Parameters)
 		PreviewActor->UpdateEnterTransition(0.5f);
 		PreviewActor->CompleteEnterTransition();
 		TestTrue(
-			TEXT("Entrance transition preserves the sampled third-person source rotation"),
-			PreviewPivot->GetRelativeRotation().Quaternion().Equals(TransitionSource.PreviewRelativeRotation, KINDA_SMALL_NUMBER));
+			TEXT("Entrance transition commits the Data Asset initial rotation"),
+			PreviewPivot->GetRelativeRotation().Quaternion().Equals(AuthoredInitialRotation.Quaternion(), KINDA_SMALL_NUMBER));
 		if (PreviewMeshComponent)
 		{
+			TArray<UTexture*> UsedTextures;
+			PreviewMeshComponent->GetUsedTextures(UsedTextures, EMaterialQualityLevel::High);
+			for (const UTexture* Texture : UsedTextures)
+			{
+				TestTrue(
+					TEXT("Preview material textures request full mip residency before capture"),
+					Texture && Texture->ShouldMipLevelsBeForcedResident());
+			}
 			TestTrue(
 				TEXT("Entrance transition commits the Data Asset preview scale"),
 				PreviewMeshComponent->GetRelativeScale3D().Equals(FVector(PaperData->ViewSettings.PreviewScale), KINDA_SMALL_NUMBER));
@@ -140,6 +195,7 @@ bool FJMItemInspectionPaperSurfaceWidgetTest::RunTest(const FString& Parameters)
 				static_cast<float>(FMath::Abs(SceneCapture->GetRelativeLocation().X)));
 		}
 
+		PaperData->ViewSettings.InitialRotation = FRotator::ZeroRotator;
 		PreviewActor->ResetPreviewRotation();
 		PreviewActor->RotatePreview(30.0f, 0.0f);
 		const FQuat ExpectedYawRotation = FQuat(FVector::UpVector, FMath::DegreesToRadians(-10.5f));
@@ -173,6 +229,218 @@ bool FJMItemInspectionPaperSurfaceWidgetTest::RunTest(const FString& Parameters)
 					KINDA_SMALL_NUMBER));
 		}
 	}
+
+	PreviewActor->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FJMItemInspectionZoomStopsBeforeNearPlaneTest,
+	"JM.ItemInspector.Preview.ZoomStopsBeforeNearPlane",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FJMItemInspectionZoomStopsBeforeNearPlaneTest::RunTest(const FString& Parameters)
+{
+	TStrongObjectPtr<UJMItemInspectionData> InspectionDataOwner(NewObject<UJMItemInspectionData>());
+	UJMItemInspectionData* InspectionData = InspectionDataOwner.Get();
+	InspectionData->PreviewMesh = TSoftObjectPtr<UStaticMesh>(
+		FSoftObjectPath(TEXT("/Engine/BasicShapes/Cube.Cube")));
+	InspectionData->ViewSettings.PreviewOffset = FVector(60.0f, 0.0f, 0.0f);
+	InspectionData->ViewSettings.InitialZoom = 1.0f;
+	InspectionData->ViewSettings.MinZoom = 0.5f;
+	InspectionData->ViewSettings.MaxZoom = 100.0f;
+
+	UStaticMesh* PreviewMesh = InspectionData->PreviewMesh.LoadSynchronous();
+	UWorld* World = FAutomationEditorCommonUtils::CreateNewMap();
+	AJMItemInspectionPreviewActor* PreviewActor = World
+		? World->SpawnActor<AJMItemInspectionPreviewActor>(FVector::ZeroVector, FRotator::ZeroRotator)
+		: nullptr;
+	if (!TestNotNull(TEXT("Preview actor spawns"), PreviewActor)
+		|| !TestNotNull(TEXT("Cube preview mesh loads"), PreviewMesh))
+	{
+		return false;
+	}
+
+	UTextureRenderTarget2D* RenderTarget = NewObject<UTextureRenderTarget2D>(PreviewActor);
+	RenderTarget->InitAutoFormat(1280, 720);
+	if (!TestTrue(
+		TEXT("Preview configures"),
+		PreviewActor->ConfigurePreview(InspectionData, PreviewMesh, RenderTarget, 45.0f, 1.0f)))
+	{
+		PreviewActor->Destroy();
+		return false;
+	}
+
+	PreviewActor->ZoomPreview(1000.0f);
+	UStaticMeshComponent* MeshComponent = PreviewActor->FindComponentByClass<UStaticMeshComponent>();
+	USceneCaptureComponent2D* SceneCapture = PreviewActor->FindComponentByClass<USceneCaptureComponent2D>();
+	if (!TestNotNull(TEXT("Preview mesh component exists"), MeshComponent)
+		|| !TestNotNull(TEXT("Scene capture exists"), SceneCapture))
+	{
+		PreviewActor->Destroy();
+		return false;
+	}
+
+	MeshComponent->UpdateBounds();
+	const FVector BoundsCenter = PreviewActor->GetTransform().InverseTransformPosition(MeshComponent->Bounds.Origin);
+	const float CameraX = SceneCapture->GetRelativeLocation().X;
+	const float NearSurfaceX = BoundsCenter.X - MeshComponent->Bounds.SphereRadius;
+	const float SurfaceGap = NearSurfaceX - CameraX;
+	const float EffectiveNearClip = SceneCapture->bOverride_CustomNearClippingPlane
+		? SceneCapture->CustomNearClippingPlane
+		: GNearClippingPlane;
+
+	TestTrue(
+		TEXT("Maximum zoom keeps the near clipping plane in front of the mesh surface"),
+		SurfaceGap + KINDA_SMALL_NUMBER >= EffectiveNearClip + 1.0f);
+
+	PreviewActor->RotatePreview(-180.0f / InspectionData->ViewSettings.RotationSensitivity, 0.0f);
+	MeshComponent->UpdateBounds();
+	const FVector RotatedBoundsCenter = PreviewActor->GetTransform().InverseTransformPosition(
+		MeshComponent->Bounds.Origin);
+	const float RotatedSurfaceGap = RotatedBoundsCenter.X
+		- MeshComponent->Bounds.SphereRadius
+		- SceneCapture->GetRelativeLocation().X;
+	TestTrue(
+		TEXT("Rotating an offset mesh reapplies the near-plane safety distance"),
+		RotatedSurfaceGap + KINDA_SMALL_NUMBER >= EffectiveNearClip + 1.0f);
+
+	PreviewActor->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FJMItemInspectionZoomKeepsRotatedBoundsInsideViewportTest,
+	"JM.ItemInspector.Preview.ZoomKeepsRotatedBoundsInsideViewport",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FJMItemInspectionZoomKeepsRotatedBoundsInsideViewportTest::RunTest(const FString& Parameters)
+{
+	TStrongObjectPtr<UJMItemInspectionData> InspectionDataOwner(NewObject<UJMItemInspectionData>());
+	UJMItemInspectionData* InspectionData = InspectionDataOwner.Get();
+	InspectionData->PreviewMesh = TSoftObjectPtr<UStaticMesh>(
+		FSoftObjectPath(TEXT("/Engine/BasicShapes/Cube.Cube")));
+	InspectionData->ViewSettings.InitialZoom = 1.0f;
+	InspectionData->ViewSettings.MinZoom = 0.5f;
+	InspectionData->ViewSettings.MaxZoom = 100.0f;
+
+	UStaticMesh* PreviewMesh = InspectionData->PreviewMesh.LoadSynchronous();
+	UWorld* World = FAutomationEditorCommonUtils::CreateNewMap();
+	AJMItemInspectionPreviewActor* PreviewActor = World
+		? World->SpawnActor<AJMItemInspectionPreviewActor>(FVector::ZeroVector, FRotator::ZeroRotator)
+		: nullptr;
+	if (!TestNotNull(TEXT("Preview actor spawns"), PreviewActor)
+		|| !TestNotNull(TEXT("Cube preview mesh loads"), PreviewMesh))
+	{
+		return false;
+	}
+
+	UTextureRenderTarget2D* RenderTarget = NewObject<UTextureRenderTarget2D>(PreviewActor);
+	RenderTarget->InitAutoFormat(1600, 900);
+	if (!TestTrue(
+		TEXT("Rotated preview configures"),
+		PreviewActor->ConfigurePreview(InspectionData, PreviewMesh, RenderTarget, 45.0f, 1.0f)))
+	{
+		PreviewActor->Destroy();
+		return false;
+	}
+
+	PreviewActor->ZoomPreview(1000.0f);
+	USceneCaptureComponent2D* SceneCapture = PreviewActor->FindComponentByClass<USceneCaptureComponent2D>();
+	if (!TestNotNull(TEXT("Scene capture exists"), SceneCapture))
+	{
+		PreviewActor->Destroy();
+		return false;
+	}
+	const float InitialMaximumZoomDistance = FMath::Abs(SceneCapture->GetRelativeLocation().X);
+
+	PreviewActor->RotatePreview(
+		-41.0f / InspectionData->ViewSettings.RotationSensitivity,
+		-32.0f / InspectionData->ViewSettings.RotationSensitivity);
+	UStaticMeshComponent* MeshComponent = PreviewActor->FindComponentByClass<UStaticMeshComponent>();
+	if (!TestNotNull(TEXT("Preview mesh component exists"), MeshComponent)
+		|| !SceneCapture)
+	{
+		PreviewActor->Destroy();
+		return false;
+	}
+
+	const FVector2D ProjectedExtent = CalculateProjectedBoundsExtent(MeshComponent, SceneCapture, RenderTarget);
+	TestTrue(
+		TEXT("Maximum zoom keeps every rotated mesh corner inside the horizontal safe frame"),
+		ProjectedExtent.X <= 0.90f + KINDA_SMALL_NUMBER);
+	TestTrue(
+		TEXT("Maximum zoom keeps every rotated mesh corner inside the vertical safe frame"),
+		ProjectedExtent.Y <= 0.90f + KINDA_SMALL_NUMBER);
+	TestTrue(
+		TEXT("A more restrictive rotation temporarily moves the camera farther away"),
+		FMath::Abs(SceneCapture->GetRelativeLocation().X) > InitialMaximumZoomDistance + KINDA_SMALL_NUMBER);
+
+	PreviewActor->ResetPreviewRotation();
+	TestTrue(
+		TEXT("Returning to the initial rotation restores the requested maximum zoom"),
+		FMath::IsNearlyEqual(
+			FMath::Abs(SceneCapture->GetRelativeLocation().X),
+			InitialMaximumZoomDistance,
+			0.01f));
+
+	PreviewActor->Destroy();
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FJMItemInspectionInitialDistanceUsesNarrowViewportFOVTest,
+	"JM.ItemInspector.Preview.InitialDistanceUsesNarrowViewportFOV",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FJMItemInspectionInitialDistanceUsesNarrowViewportFOVTest::RunTest(const FString& Parameters)
+{
+	TStrongObjectPtr<UJMItemInspectionData> InspectionDataOwner(NewObject<UJMItemInspectionData>());
+	UJMItemInspectionData* InspectionData = InspectionDataOwner.Get();
+	InspectionData->PreviewMesh = TSoftObjectPtr<UStaticMesh>(
+		FSoftObjectPath(TEXT("/Engine/BasicShapes/Cube.Cube")));
+
+	UStaticMesh* PreviewMesh = InspectionData->PreviewMesh.LoadSynchronous();
+	UWorld* World = FAutomationEditorCommonUtils::CreateNewMap();
+	AJMItemInspectionPreviewActor* PreviewActor = World
+		? World->SpawnActor<AJMItemInspectionPreviewActor>(FVector::ZeroVector, FRotator::ZeroRotator)
+		: nullptr;
+	if (!TestNotNull(TEXT("Preview actor spawns"), PreviewActor)
+		|| !TestNotNull(TEXT("Cube preview mesh loads"), PreviewMesh))
+	{
+		return false;
+	}
+
+	UTextureRenderTarget2D* RenderTarget = NewObject<UTextureRenderTarget2D>(PreviewActor);
+	RenderTarget->InitAutoFormat(1280, 720);
+	if (!TestTrue(
+		TEXT("Widescreen preview configures"),
+		PreviewActor->ConfigurePreview(InspectionData, PreviewMesh, RenderTarget, 90.0f, 0.1f)))
+	{
+		PreviewActor->Destroy();
+		return false;
+	}
+
+	UStaticMeshComponent* MeshComponent = PreviewActor->FindComponentByClass<UStaticMeshComponent>();
+	USceneCaptureComponent2D* SceneCapture = PreviewActor->FindComponentByClass<USceneCaptureComponent2D>();
+	if (!TestNotNull(TEXT("Preview mesh component exists"), MeshComponent)
+		|| !TestNotNull(TEXT("Scene capture exists"), SceneCapture))
+	{
+		PreviewActor->Destroy();
+		return false;
+	}
+
+	const float HorizontalHalfFOV = FMath::DegreesToRadians(SceneCapture->FOVAngle * 0.5f);
+	const float VerticalHalfFOV = FMath::Atan(
+		FMath::Tan(HorizontalHalfFOV)
+		/ (static_cast<float>(RenderTarget->SizeX) / static_cast<float>(RenderTarget->SizeY)));
+	const float LimitingHalfFOV = FMath::Min(HorizontalHalfFOV, VerticalHalfFOV);
+	const float RequiredDistance = MeshComponent->Bounds.SphereRadius
+		/ FMath::Sin(LimitingHalfFOV) * 1.15f;
+	const float ActualDistance = FMath::Abs(SceneCapture->GetRelativeLocation().X);
+	TestTrue(
+		TEXT("Initial camera distance fits the mesh through the narrower vertical FOV"),
+		ActualDistance + KINDA_SMALL_NUMBER >= RequiredDistance);
 
 	PreviewActor->Destroy();
 	return true;

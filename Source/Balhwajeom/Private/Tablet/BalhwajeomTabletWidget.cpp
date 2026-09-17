@@ -1,4 +1,7 @@
-#include "Tablet/BalhwajeomTabletWidget.h"
+﻿#include "Tablet/BalhwajeomTabletWidget.h"
+
+#include "Story/StoryStateTags.h"
+#include "Tutorial/BalhwajeomTutorialOverlayTriggers.h"
 
 #include "Components/Border.h"
 #include "Components/Button.h"
@@ -22,7 +25,10 @@
 #include "Components/WidgetSwitcher.h"
 #include "Blueprint/WidgetTree.h"
 #include "Animation/WidgetAnimation.h"
+#include "Fonts/FontMeasure.h"
+#include "Framework/Application/SlateApplication.h"
 #include "ImageUtils.h"
+#include "Internationalization/BreakIterator.h"
 #include "Misc/Paths.h"
 #include "Tablet/BalhwajeomMessengerWidget.h"
 #include "Tablet/BalhwajeomInternetWidget.h"
@@ -50,6 +56,103 @@ namespace
 		}
 	}
 
+	// Timings for UBalhwajeomTabletWidget's solved-puzzle transition (flash -> hold -> converge ->
+	// reveal). Tuned for a snappy "got it" beat rather than a long cutscene-style pause.
+	constexpr float PuzzleSuccessFlashDuration = 0.12f;
+	constexpr float PuzzleSuccessHoldDuration = 0.5f;
+	// Converge and Reveal both explode their text into one UTextBlock per character (see
+	// BuildRandomFadeCharacters) and fade each character out/in at its own random point within these
+	// windows, so letters disappear/appear in scattered order rather than all together or in a
+	// left-to-right sweep. PuzzleSuccessCharFadeDuration is how long any single character's own
+	// fade takes; it must stay shorter than either window (each character's random start delay is
+	// clamped to [0, window - PuzzleSuccessCharFadeDuration] so it still finishes inside the window).
+	constexpr float PuzzleSuccessConvergeDuration = 0.6f;
+	constexpr float PuzzleSuccessRevealFadeDuration = 0.6f;
+	constexpr float PuzzleSuccessCharFadeDuration = 0.2f;
+	// Short crossfade from the random-fade character grid to TXT_PopupBody once Reveal finishes (see
+	// BeginHandoffStage) -- long enough to mask the two widgets not necessarily sharing the exact
+	// same position, short enough that it doesn't read as its own separate beat.
+	constexpr float PuzzleSuccessHandoffDuration = 0.12f;
+
+	// Matches UBalhwajeomTabletSentenceBlank::Configure's own BlankSize->SetMinDesiredWidth(60.0f):
+	// BuildFlatSolvedSentenceText brackets each blank's word between these two sentinels so
+	// BuildRandomFadeCharacters can reserve the same minimum width around it, instead of the word
+	// visibly shrinking to its bare text width (and every word after it sliding over to meet it) the
+	// instant the blank's own box disappears at the start of Converge.
+	constexpr TCHAR BlankWordRunStart = TEXT('\x01');
+	constexpr TCHAR BlankWordRunEnd = TEXT('\x02');
+	constexpr float PuzzleBlankMinWidth = 60.0f;
+
+	// One contiguous run of a line's text: either plain sentence text, or a former blank's word (see
+	// BlankWordRunStart/End) that BuildRandomFadeCharacters wraps in a minimum-width box.
+	struct FTextRun
+	{
+		FString Text;
+		bool bIsBlankWord = false;
+	};
+
+	TArray<FTextRun> ParseTextRuns(const FString& Line)
+	{
+		TArray<FTextRun> Runs;
+		FString Current;
+		bool bInBlankWord = false;
+		auto FlushCurrent = [&Runs, &Current, &bInBlankWord]()
+		{
+			if (!Current.IsEmpty())
+			{
+				Runs.Add({Current, bInBlankWord});
+				Current.Reset();
+			}
+		};
+		for (const TCHAR Ch : Line)
+		{
+			if (Ch == BlankWordRunStart)
+			{
+				FlushCurrent();
+				bInBlankWord = true;
+			}
+			else if (Ch == BlankWordRunEnd)
+			{
+				FlushCurrent();
+				bInBlankWord = false;
+			}
+			else
+			{
+				Current.AppendChar(Ch);
+			}
+		}
+		FlushCurrent();
+		return Runs;
+	}
+
+	// Splits Text into user-perceived "characters" (grapheme clusters) for BuildRandomFadeCharacters,
+	// instead of FString::Mid(i, 1)'s raw UTF-16-code-unit slicing. Matters for Hangul: if the source
+	// text is decomposed (NFD -- a syllable stored as separate leading/vowel/trailing Jamo code
+	// points instead of one precomposed block), slicing by code unit splits a single syllable across
+	// several widgets, and the font can only compose Jamo into a syllable within one continuous text
+	// run -- so each widget ends up showing a disconnected Jamo fragment instead of a whole letter.
+	// FBreakIterator's character-boundary iterator is the same ICU-backed logic Slate's own editable
+	// text widgets use for cursor movement, so it always groups a full grapheme (composed or not)
+	// into one slice.
+	TArray<FString> SplitIntoGraphemes(const FString& Text)
+	{
+		TArray<FString> Graphemes;
+		if (Text.IsEmpty())
+		{
+			return Graphemes;
+		}
+		const TSharedRef<IBreakIterator> CharIterator = FBreakIterator::CreateCharacterBoundaryIterator();
+		CharIterator->SetString(Text);
+		int32 PreviousPosition = 0;
+		for (int32 CurrentPosition = CharIterator->MoveToNext(); CurrentPosition != INDEX_NONE;
+			 CurrentPosition = CharIterator->MoveToNext())
+		{
+			Graphemes.Add(Text.Mid(PreviousPosition, CurrentPosition - PreviousPosition));
+			PreviousPosition = CurrentPosition;
+		}
+		return Graphemes;
+	}
+
 	/** Strips a UButton's default gray chrome/padding so only its custom content shows. */
 	void MakeButtonTransparent(UButton* Button)
 	{
@@ -67,6 +170,51 @@ namespace
 		Style.SetNormalPadding(FMargin(0.0f));
 		Style.SetPressedPadding(FMargin(0.0f));
 		Button->SetStyle(Style);
+	}
+
+	/** Manually shortens InText to fit MaxWidth, appending "...", instead of relying on UMG's
+	 * ETextOverflowPolicy::Ellipsis -- that overflow policy only truncates correctly (visible "..."
+	 * at the tail) for left-justified text. TXT_Label is center-justified by design, which made
+	 * long labels get hard-clipped on both sides instead, with no ellipsis shown.
+	 *
+	 * The kept prefix is measured against MaxWidth on its own (not prefix+"..." together), so the
+	 * readable word is never shortened by one more character just to make room for the dots -- the
+	 * trailing "..." is allowed to spill past MaxWidth instead and rely on the label's own
+	 * ClipToBounds to crop it, which is preferable to ever clipping mid-word. */
+	FText TruncateLabelToFit(const FText& InText, const FSlateFontInfo& FontInfo, const float MaxWidth)
+	{
+		const FString FullString = InText.ToString();
+		if (MaxWidth <= 0.0f || FullString.IsEmpty())
+		{
+			return InText;
+		}
+
+		const TSharedRef<FSlateFontMeasure> FontMeasure =
+			FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+		if (FontMeasure->Measure(FullString, FontInfo).X <= MaxWidth)
+		{
+			return InText;
+		}
+
+		// Binary search for the longest prefix of FullString that alone fits within MaxWidth.
+		int32 Low = 0;
+		int32 High = FullString.Len();
+		FString Best;
+		while (Low <= High)
+		{
+			const int32 Mid = (Low + High) / 2;
+			const FString Candidate = FullString.Left(Mid);
+			if (FontMeasure->Measure(Candidate, FontInfo).X <= MaxWidth)
+			{
+				Best = Candidate;
+				Low = Mid + 1;
+			}
+			else
+			{
+				High = Mid - 1;
+			}
+		}
+		return FText::FromString(Best + TEXT("..."));
 	}
 
 	/** Uses only the painted 106x39 area of the 144x47 source, excluding its right/bottom padding. */
@@ -117,6 +265,12 @@ UBalhwajeomTabletWidget::UBalhwajeomTabletWidget(const FObjectInitializer& Objec
 		TEXT("/Game/Balhwajeom/UI/Tablet/StateMent/WBP_TabletStatement.WBP_TabletStatement_C")));
 	PhotoDetailWidgetClass = TSoftClassPtr<UBalhwajeomTabletDetailWidget>(FSoftObjectPath(
 		TEXT("/Game/Balhwajeom/UI/Tablet/WBP_TabletPhoto.WBP_TabletPhoto_C")));
+	KeywordDropSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(
+		TEXT("/Game/Balhwajeom/Audio/SFX/Sentence/keyword_drop.keyword_drop")));
+	SentenceCorrectSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(
+		TEXT("/Game/Balhwajeom/Audio/SFX/Sentence/Wave.Wave")));
+	SentenceErrorSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(
+		TEXT("/Game/Balhwajeom/Audio/SFX/Sentence/error.error")));
 }
 
 UBalhwajeomTabletPersonFolderWidget::UBalhwajeomTabletPersonFolderWidget(
@@ -521,6 +675,22 @@ void UBalhwajeomTabletWidget::SetTabletPage(const ETabletPage NewPage, const boo
 	{
 		WidgetSwitcher_TabletPage->SetActiveWidgetIndex(ToPageIndex(NewPage));
 	}
+
+	// Every route into and out of the sister's folder passes through here, so the tutorial
+	// trigger tracks the page itself rather than the one button that happens to open it.
+	static const FName SisterCharacterID(TEXT("CHARACTER_SISTER"));
+	const bool bSisterFolderOpen =
+		NewPage == ETabletPage::PersonFolder && ActiveCharacterID == SisterCharacterID;
+	if (bSisterFolderOpen)
+	{
+		BalhwajeomTutorialOverlayTriggers::Set(
+			this, BalhwajeomGameplayTags::Tutorial_Trigger_SisterFolderOpened);
+	}
+	else
+	{
+		BalhwajeomTutorialOverlayTriggers::Clear(
+			this, BalhwajeomGameplayTags::Tutorial_Trigger_SisterFolderOpened);
+	}
 }
 
 void UBalhwajeomTabletWidget::NavigateBack()
@@ -866,20 +1036,13 @@ void UBalhwajeomTabletWidget::PreparePuzzle(FName SentenceID)
 	RefreshPuzzleControls();
 }
 
-void UBalhwajeomTabletWidget::HidePuzzleControls()
+void UBalhwajeomTabletWidget::HidePuzzleWordAndPhotoControls()
 {
 	if (WB_PuzzleWords)
 	{
 		WB_PuzzleWords->ClearChildren();
 		WB_PuzzleWords->SetVisibility(ESlateVisibility::Collapsed);
 	}
-	if (WB_SentenceBuilder)
-	{
-		WB_SentenceBuilder->ClearChildren();
-		WB_SentenceBuilder->SetVisibility(ESlateVisibility::Collapsed);
-	}
-	ActiveBlanksBySlot.Reset();
-	ActiveSentenceSegments.Reset();
 	if (TXT_PuzzlePhotoLabel)
 	{
 		TXT_PuzzlePhotoLabel->SetVisibility(ESlateVisibility::Collapsed);
@@ -905,15 +1068,32 @@ void UBalhwajeomTabletWidget::HidePuzzleControls()
 		TXT_SelectedPhotoResult->SetText(FText::GetEmpty());
 		TXT_SelectedPhotoResult->SetVisibility(ESlateVisibility::Collapsed);
 	}
+	if (BTN_StatementSubmit)
+	{
+		BTN_StatementSubmit->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void UBalhwajeomTabletWidget::ClearSentenceBuilder()
+{
+	if (WB_SentenceBuilder)
+	{
+		WB_SentenceBuilder->ClearChildren();
+		WB_SentenceBuilder->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	ActiveBlanksBySlot.Reset();
+	ActiveSentenceSegments.Reset();
+}
+
+void UBalhwajeomTabletWidget::HidePuzzleControls()
+{
+	HidePuzzleWordAndPhotoControls();
+	ClearSentenceBuilder();
 	if (TXT_PopupBody)
 	{
 		// Restored here; RefreshPuzzleControls/BuildSentenceBuilder hides it again if there's
 		// an active unsolved puzzle to show the interactive sentence builder instead.
 		TXT_PopupBody->SetVisibility(ESlateVisibility::Visible);
-	}
-	if (BTN_StatementSubmit)
-	{
-		BTN_StatementSubmit->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }
 
@@ -1110,9 +1290,18 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 
 	for (int32 SegmentIndex = 0; SegmentIndex < Segments.Num(); ++SegmentIndex)
 	{
+		// The Unicode Line Separator (codepoint 0x2028) and Paragraph Separator (0x2029) are also
+		// normalized to a plain newline: a DataTable row's multi-line text field inserts one of
+		// these instead of a plain newline when a line break is typed directly into it in the
+		// editor, rather than arriving via CSV reimport -- see the matching normalization in
+		// BuildRandomFadeCharacters.
+		const TCHAR LineSepBuf[2] = { (TCHAR)0x2028, 0 };
+		const TCHAR ParaSepBuf[2] = { (TCHAR)0x2029, 0 };
 		FString NormalizedSegment = Segments[SegmentIndex]
 			.Replace(TEXT("\r\n"), TEXT("\n"))
-			.Replace(TEXT("\r"), TEXT("\n"));
+			.Replace(TEXT("\r"), TEXT("\n"))
+			.Replace(LineSepBuf, TEXT("\n"))
+			.Replace(ParaSepBuf, TEXT("\n"));
 		TArray<FString> Lines;
 		NormalizedSegment.ParseIntoArray(Lines, TEXT("\n"), false);
 		for (int32 LineIndex = 0; LineIndex < Lines.Num(); ++LineIndex)
@@ -1291,6 +1480,10 @@ void UBalhwajeomTabletWidget::HandleSentenceBlankDropped(
 		// Dropped back onto the same blank it came from -- nothing to do.
 		return;
 	}
+	if (USoundBase* Sound = KeywordDropSound.LoadSynchronous())
+	{
+		UGameplayStatics::PlaySound2D(this, Sound);
+	}
 	if (Sentence.SentenceType == ESentenceType::PhotoAnalysis)
 	{
 		SetPhotoPuzzleErrorStyle(false);
@@ -1380,6 +1573,10 @@ void UBalhwajeomTabletWidget::HandleSentenceBlankClicked(const int32 SlotIndex)
 	if (!Blank || !Blank->IsFilled())
 	{
 		return;
+	}
+	if (USoundBase* Sound = KeywordDropSound.LoadSynchronous())
+	{
+		UGameplayStatics::PlaySound2D(this, Sound);
 	}
 
 	ActiveSubmission.SubmittedWords.RemoveAll(
@@ -1685,6 +1882,13 @@ void UBalhwajeomTabletWidget::EvaluatePuzzleIfComplete()
 
 void UBalhwajeomTabletWidget::ValidateActivePuzzle(const bool bExplicitStatementSubmit)
 {
+	// A success transition is already mid-flight (see PlayPuzzleSuccessTransition) -- ignore any
+	// further drop/submit while the solved sentence is still flashing/converging away, instead of
+	// letting a second ValidateSentence call race the one already animating.
+	if (PuzzleSuccessStage != EPuzzleSuccessStage::Inactive)
+	{
+		return;
+	}
 	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
 	FSentenceDefinition Sentence;
 	if (!Investigation || !Investigation->GetSentenceDefinition(ActiveSentenceID, Sentence) ||
@@ -1692,17 +1896,33 @@ void UBalhwajeomTabletWidget::ValidateActivePuzzle(const bool bExplicitStatement
 	FText Result;
 	if (Investigation->ValidateSentence(ActiveSentenceID, ActiveSubmission, Result))
 	{
-		if (TXT_PopupBody) TXT_PopupBody->SetText(Result);
-		HidePuzzleControls();
-		if (Sentence.SentenceType == ESentenceType::PhotoAnalysis)
-		{
-			ApplyPopupBodyResultStyle(true);
-		}
+		// The candidate word/photo lists disappear immediately; the filled sentence itself stays on
+		// screen for PlayPuzzleSuccessTransition's flash/hold/converge stages and TXT_PopupBody
+		// doesn't get Result until the reveal stage (see BeginResultRevealStage).
+		HidePuzzleWordAndPhotoControls();
 		RefreshAcquiredWordsDisplay();
 		RefreshFolderContents();
+		PlayPuzzleSuccessTransition(
+			Result, Sentence.SentenceTemplate, Sentence.SentenceType == ESentenceType::PhotoAnalysis);
+		if (Sentence.SentenceType == ESentenceType::Statement)
+		{
+			OnStatementSolved.Broadcast();
+		}
+		if (USoundBase* Sound = SentenceCorrectSound.LoadSynchronous())
+		{
+			UGameplayStatics::PlaySound2D(this, Sound);
+		}
 	}
-	else if (TXT_PuzzleFeedback)
+	else
 	{
+		if (USoundBase* Sound = SentenceErrorSound.LoadSynchronous())
+		{
+			UGameplayStatics::PlaySound2D(this, Sound);
+		}
+		if (!TXT_PuzzleFeedback)
+		{
+			return;
+		}
 		// A wrong-but-completed evidence photo surfaces its own declaration sentence's ResultText
 		// (see ValidateSentence) instead of the generic message.
 		TXT_PuzzleFeedback->SetText(
@@ -1718,6 +1938,443 @@ void UBalhwajeomTabletWidget::ValidateActivePuzzle(const bool bExplicitStatement
 			BuildSentenceBuilder(Sentence);
 			SetPhotoPuzzleErrorStyle(true);
 		}
+	}
+}
+
+void UBalhwajeomTabletWidget::NativeTick(const FGeometry& MyGeometry, const float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	if (PuzzleSuccessStage == EPuzzleSuccessStage::Inactive)
+	{
+		return;
+	}
+
+	PuzzleSuccessStageElapsed += InDeltaTime;
+	switch (PuzzleSuccessStage)
+	{
+	case EPuzzleSuccessStage::Flash:
+		if (PuzzleSuccessStageElapsed >= PuzzleSuccessFlashDuration)
+		{
+			PuzzleSuccessStage = EPuzzleSuccessStage::Hold;
+			PuzzleSuccessStageElapsed = 0.0f;
+		}
+		break;
+	case EPuzzleSuccessStage::Hold:
+		if (PuzzleSuccessStageElapsed >= PuzzleSuccessHoldDuration)
+		{
+			BeginPuzzleConvergeStage();
+		}
+		break;
+	case EPuzzleSuccessStage::Converge:
+		TickPuzzleConvergeStage();
+		if (PuzzleSuccessStageElapsed >= PuzzleSuccessConvergeDuration)
+		{
+			BeginResultRevealStage();
+		}
+		break;
+	case EPuzzleSuccessStage::Reveal:
+		TickResultRevealStage();
+		break;
+	case EPuzzleSuccessStage::Handoff:
+		TickHandoffStage();
+		break;
+	default:
+		break;
+	}
+}
+
+void UBalhwajeomTabletWidget::PlayPuzzleSuccessTransition(
+	const FText& ResultText, const FText& SentenceTemplate, const bool bApplyAnalysisResultStyle)
+{
+	PendingResultText = ResultText;
+	PendingSentenceTemplate = SentenceTemplate;
+	bPendingApplyAnalysisResultStyle = bApplyAnalysisResultStyle;
+	PuzzleSuccessStage = EPuzzleSuccessStage::Flash;
+	PuzzleSuccessStageElapsed = 0.0f;
+
+	// Gold flash for a solved photo-analysis puzzle, blue for a solved statement -- mirrors
+	// SetPhotoPuzzleErrorStyle's red wrong-answer tint but for the correct case, and gives the two
+	// sentence types visually distinct "correct" cues. Held by NativeTick's Flash/Hold stages until
+	// BeginPuzzleConvergeStage explodes these same words into the random-fade character grid (which
+	// reads FlashColor back off these same widgets, so it doesn't need to be picked again there).
+	static const FLinearColor GoldFlashColor = FLinearColor::FromSRGBColor(FColor(255, 209, 102, 255));
+	static const FLinearColor BlueFlashColor = FLinearColor::FromSRGBColor(FColor(102, 178, 255, 255));
+	const FLinearColor FlashColor = bApplyAnalysisResultStyle ? GoldFlashColor : BlueFlashColor;
+	for (const TObjectPtr<UTextBlock>& Segment : ActiveSentenceSegments)
+	{
+		if (Segment)
+		{
+			Segment->SetColorAndOpacity(FSlateColor(FlashColor));
+		}
+	}
+	for (const TPair<int32, TObjectPtr<UBalhwajeomTabletSentenceBlank>>& Pair : ActiveBlanksBySlot)
+	{
+		if (UBalhwajeomTabletSentenceBlank* Blank = Pair.Value)
+		{
+			Blank->SetSuccessStyle(true, FlashColor);
+		}
+	}
+}
+
+void UBalhwajeomTabletWidget::BeginPuzzleConvergeStage()
+{
+	PuzzleSuccessStage = EPuzzleSuccessStage::Converge;
+	PuzzleSuccessStageElapsed = 0.0f;
+
+	// Copy font/color off whatever's still on screen (a plain segment if there is one, else the
+	// first blank) so the character grid this builds reads as a seamless continuation of the flash
+	// rather than a style change.
+	FSlateFontInfo CharFont;
+	FSlateColor CharColor = FSlateColor(FLinearColor::White);
+	if (!ActiveSentenceSegments.IsEmpty() && ActiveSentenceSegments[0])
+	{
+		CharFont = ActiveSentenceSegments[0]->GetFont();
+		CharColor = ActiveSentenceSegments[0]->GetColorAndOpacity();
+	}
+	else
+	{
+		for (const TPair<int32, TObjectPtr<UBalhwajeomTabletSentenceBlank>>& Pair : ActiveBlanksBySlot)
+		{
+			if (Pair.Value)
+			{
+				CharFont = Pair.Value->GetDisplayFont();
+				CharColor = Pair.Value->GetDisplayColor();
+				break;
+			}
+		}
+	}
+
+	// Read while ActiveBlanksBySlot/ActiveSentenceSegments are still populated; BuildRandomFadeCharacters
+	// clears them (via WB_SentenceBuilder->ClearChildren) as its first step.
+	const FString FlatText = BuildFlatSolvedSentenceText(PendingSentenceTemplate);
+	// Matches BuildSentenceBuilder's own bStatementStyle ? HAlign_Left : HAlign_Center, so the grid
+	// this rebuilds starts out aligned exactly like the puzzle text it's replacing.
+	const bool bLeftAligned = !bPendingApplyAnalysisResultStyle;
+	// Matches BuildSentenceBuilder's own LineSpacing (const float LineSpacing = bStatementStyle ?
+	// 3.0f : 8.0f;) -- without it, a multi-line sentence's lines would visibly tighten up the moment
+	// this rebuilds the puzzle text into the random-fade grid.
+	const float LinePadding = bLeftAligned ? 3.0f : 8.0f;
+	BuildRandomFadeCharacters(
+		FlatText,
+		CharFont,
+		CharColor,
+		/*bStartVisible=*/true,
+		PuzzleSuccessConvergeDuration,
+		bLeftAligned,
+		LinePadding);
+}
+
+void UBalhwajeomTabletWidget::TickPuzzleConvergeStage()
+{
+	TickRandomFadeChars(/*bFadeIn=*/false);
+}
+
+void UBalhwajeomTabletWidget::BeginResultRevealStage()
+{
+	// Discards the Converge stage's per-character widgets (dead by now -- Converge already faded
+	// them all to 0).
+	ClearSentenceBuilder();
+	RandomFadeChars.Reset();
+
+	if (bPendingApplyAnalysisResultStyle)
+	{
+		// Sets Left justification plus the photo-analysis-specific result font/size.
+		ApplyPopupBodyResultStyle(true);
+	}
+	else if (TXT_PopupBody)
+	{
+		// A solved statement reads left-aligned too (like a written declaration), but keeps its own
+		// statement font from ShowPopup -- ApplyPopupBodyResultStyle(true) would swap in the
+		// photo-analysis font/size instead, which isn't right for this popup.
+		TXT_PopupBody->SetJustification(ETextJustify::Left);
+	}
+
+	PuzzleSuccessStage = EPuzzleSuccessStage::Reveal;
+	PuzzleSuccessStageElapsed = 0.0f;
+
+	// TXT_PopupBody's font/color are already correct here (ApplyPopupBodyResultStyle just above for
+	// a photo-analysis result, or whatever ShowPopup set for a statement popup, now left-justified
+	// either way) -- copy them onto the character grid so it matches exactly, then hand off to
+	// TXT_PopupBody itself once every character has finished fading in (see TickResultRevealStage).
+	FSlateFontInfo CharFont;
+	FSlateColor CharColor = FSlateColor(FLinearColor::Black);
+	constexpr bool bLeftAligned = true;
+	if (TXT_PopupBody)
+	{
+		CharFont = TXT_PopupBody->GetFont();
+		CharColor = TXT_PopupBody->GetColorAndOpacity();
+		TXT_PopupBody->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	BuildRandomFadeCharacters(
+		PendingResultText.ToString(),
+		CharFont,
+		CharColor,
+		/*bStartVisible=*/false,
+		PuzzleSuccessRevealFadeDuration,
+		bLeftAligned,
+		// 0 here (unlike Converge's LinePadding): this grid hands off to TXT_PopupBody, which spaces
+		// its own lines by font metrics alone, not BuildSentenceBuilder's puzzle-specific LineSpacing.
+		/*LinePadding=*/0.0f);
+}
+
+void UBalhwajeomTabletWidget::TickResultRevealStage()
+{
+	TickRandomFadeChars(/*bFadeIn=*/true);
+	if (PuzzleSuccessStageElapsed >= PuzzleSuccessRevealFadeDuration)
+	{
+		BeginHandoffStage();
+	}
+}
+
+void UBalhwajeomTabletWidget::BeginHandoffStage()
+{
+	PuzzleSuccessStage = EPuzzleSuccessStage::Handoff;
+	PuzzleSuccessStageElapsed = 0.0f;
+
+	// TXT_PopupBody starts invisible (opacity 0) and fades in while the character grid
+	// (WB_SentenceBuilder, still fully opaque from Reveal) fades out over it -- see
+	// TickHandoffStage -- instead of the grid being deleted and TXT_PopupBody snapping to full
+	// opacity in the same frame, which read as the finished sentence being "dropped into place."
+	if (TXT_PopupBody)
+	{
+		TXT_PopupBody->SetText(PendingResultText);
+		TXT_PopupBody->SetRenderOpacity(0.0f);
+		TXT_PopupBody->SetVisibility(ESlateVisibility::Visible);
+	}
+}
+
+void UBalhwajeomTabletWidget::TickHandoffStage()
+{
+	const float Alpha =
+		FMath::Clamp(PuzzleSuccessStageElapsed / PuzzleSuccessHandoffDuration, 0.0f, 1.0f);
+	if (WB_SentenceBuilder)
+	{
+		WB_SentenceBuilder->SetRenderOpacity(1.0f - Alpha);
+	}
+	if (TXT_PopupBody)
+	{
+		TXT_PopupBody->SetRenderOpacity(Alpha);
+	}
+
+	if (Alpha >= 1.0f)
+	{
+		// Every character has finished fading in and handed off -- swap to the plain TXT_PopupBody
+		// the rest of the class expects to hold the final text (reopening this popup, a
+		// wrong-then-right retry, etc. all just read TXT_PopupBody, not the transient character
+		// grid). WB_SentenceBuilder's own opacity is reset here since ClearSentenceBuilder only
+		// clears its children/visibility, and this same UWrapBox gets reused by the next puzzle.
+		ClearSentenceBuilder();
+		RandomFadeChars.Reset();
+		if (WB_SentenceBuilder)
+		{
+			WB_SentenceBuilder->SetRenderOpacity(1.0f);
+		}
+		if (TXT_PopupBody)
+		{
+			TXT_PopupBody->SetRenderOpacity(1.0f);
+		}
+		PuzzleSuccessStage = EPuzzleSuccessStage::Inactive;
+	}
+}
+
+FString UBalhwajeomTabletWidget::BuildFlatSolvedSentenceText(const FText& SentenceTemplate) const
+{
+	TArray<FString> Segments;
+	SentenceTemplate.ToString().ParseIntoArray(Segments, TEXT("[]"), false);
+
+	FString Flat;
+	int32 BlankSlotIndex = 0;
+	for (int32 SegmentIndex = 0; SegmentIndex < Segments.Num(); ++SegmentIndex)
+	{
+		// "\r\n" normalized to "\n" but otherwise kept as a real line break -- BuildRandomFadeCharacters
+		// splits on it, so the sentence's own authored line breaks survive into the random-fade grid
+		// instead of being reflowed into a single line.
+		Flat += Segments[SegmentIndex].Replace(TEXT("\r\n"), TEXT("\n"));
+		if (SegmentIndex < Segments.Num() - 1)
+		{
+			if (const TObjectPtr<UBalhwajeomTabletSentenceBlank>* Blank =
+					ActiveBlanksBySlot.Find(BlankSlotIndex))
+			{
+				if (*Blank)
+				{
+					// Bracketed so BuildRandomFadeCharacters (via ParseTextRuns) can reserve this
+					// word's blank's own minimum width instead of letting it shrink to bare text
+					// width -- see PuzzleBlankMinWidth's comment.
+					Flat += BlankWordRunStart;
+					Flat += (*Blank)->GetDisplayText().ToString();
+					Flat += BlankWordRunEnd;
+				}
+			}
+			++BlankSlotIndex;
+		}
+	}
+	return Flat;
+}
+
+void UBalhwajeomTabletWidget::BuildRandomFadeCharacters(
+	const FString& Text,
+	const FSlateFontInfo& Font,
+	const FSlateColor& Color,
+	const bool bStartVisible,
+	const float TotalWindow,
+	const bool bLeftAligned,
+	const float LinePadding)
+{
+	RandomFadeChars.Reset();
+	if (!WB_SentenceBuilder || !WidgetTree)
+	{
+		return;
+	}
+	WB_SentenceBuilder->ClearChildren();
+	if (Text.IsEmpty())
+	{
+		return;
+	}
+	WB_SentenceBuilder->SetVisibility(ESlateVisibility::Visible);
+
+	const float MaxStartDelay = FMath::Max(0.0f, TotalWindow - PuzzleSuccessCharFadeDuration);
+	const EHorizontalAlignment LineAlignment = bLeftAligned ? HAlign_Left : HAlign_Center;
+
+	// Preserves the sentence's own authored newlines -- BuildSentenceBuilder's convention is that
+	// every intended line break is placed by hand and a line never auto-wraps on its own -- so each
+	// line becomes its own non-wrapping UHorizontalBox of one-grapheme UTextBlocks (spaces included
+	// as their own blank-width grapheme, so word gaps need no extra handling), stacked in a
+	// UVerticalBox. Split via SplitIntoGraphemes, not FString::Mid(i, 1): the latter slices raw
+	// UTF-16 code units, which breaks a decomposed (NFD) Hangul syllable's Jamo apart into separate
+	// widgets that can no longer compose into one letter (see SplitIntoGraphemes's comment).
+	//
+	// Also normalizes "\r\n" and the Unicode Line/Paragraph Separator characters (codepoints 0x2028
+	// and 0x2029) to a plain newline before splitting: BuildFlatSolvedSentenceText already does the
+	// "\r\n" half for the Converge path, but BeginResultRevealStage passes
+	// PendingResultText.ToString() straight through, and a DataTable row's multi-line text field
+	// inserts a Line/Paragraph Separator (not "\n") when a line break is typed directly into it in
+	// the editor rather than arriving via CSV reimport -- so either could otherwise leave a line
+	// break this function's own line-splitting does not recognize.
+	const TCHAR LineSepBuf[2] = { (TCHAR)0x2028, 0 };
+	const TCHAR ParaSepBuf[2] = { (TCHAR)0x2029, 0 };
+	TArray<FString> Lines;
+	Text.Replace(TEXT("\r\n"), TEXT("\n"))
+		.Replace(LineSepBuf, TEXT("\n"))
+		.Replace(ParaSepBuf, TEXT("\n"))
+		.ParseIntoArray(Lines, TEXT("\n"), false);
+
+	// Builds one grapheme's UTextBlock into TargetBox and registers it for TickRandomFadeChars.
+	auto AddGrapheme = [this, &Font, &Color, bStartVisible, MaxStartDelay](
+						   UHorizontalBox* TargetBox, const FString& Grapheme)
+	{
+		UTextBlock* CharText = WidgetTree->ConstructWidget<UTextBlock>();
+		CharText->SetText(FText::FromString(Grapheme));
+		CharText->SetFont(Font);
+		CharText->SetColorAndOpacity(Color);
+		// UTextBlock defaults to a (1,1) drop shadow; every other text piece in this file clears it
+		// (see e.g. ArrowText/TitleText below), and TXT_PopupBody itself has none -- without this,
+		// each character reads with a faint shadow during the reveal that vanishes the instant
+		// TickResultRevealStage hands off to the real (shadow-less) TXT_PopupBody.
+		CharText->SetShadowOffset(FVector2D::ZeroVector);
+		CharText->SetRenderOpacity(bStartVisible ? 1.0f : 0.0f);
+		if (UHorizontalBoxSlot* CharSlot = TargetBox->AddChildToHorizontalBox(CharText))
+		{
+			CharSlot->SetVerticalAlignment(VAlign_Center);
+			// FSlateChildSize's default constructor is Fill, not Auto -- AddChildToHorizontalBox
+			// slots come out Fill by default. Left alone, a blank word's WordSizeBox (below) forcing
+			// extra width onto this character's row divides that space evenly across every Fill
+			// character slot, visibly spreading the letters apart instead of leaving them touching
+			// with the slack as trailing empty space.
+			CharSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+		}
+
+		FRandomFadeChar Entry;
+		Entry.TextBlock = CharText;
+		Entry.StartDelay = FMath::FRandRange(0.0f, MaxStartDelay);
+		RandomFadeChars.Add(Entry);
+	};
+
+	UVerticalBox* LinesBox = WidgetTree->ConstructWidget<UVerticalBox>();
+	for (const FString& Line : Lines)
+	{
+		UHorizontalBox* LineBox = WidgetTree->ConstructWidget<UHorizontalBox>();
+		// A blank authored line (paragraph gap) has no runs to iterate below, which would leave
+		// LineBox with zero children -- and a childless UHorizontalBox has zero height, collapsing
+		// the gap away entirely instead of reserving a normal line's worth of space the way
+		// TXT_PopupBody's native rendering of the same "\n\n" does. A single invisible space
+		// character gives it the font's ordinary line height without showing anything.
+		const TArray<FTextRun> Runs =
+			Line.IsEmpty() ? TArray<FTextRun>{FTextRun{TEXT(" "), false}} : ParseTextRuns(Line);
+		for (const FTextRun& Run : Runs)
+		{
+			// Every run (plain text or a former blank's word) is built into its own box first --
+			// graphemes inside it touch as normal text should, but the run itself is what gets
+			// spaced from its neighbors below, matching BuildSentenceBuilder's LineItemPadding
+			// (the gap it puts between every segment/blank on a line).
+			UHorizontalBox* RunBox = WidgetTree->ConstructWidget<UHorizontalBox>();
+			for (const FString& Grapheme : SplitIntoGraphemes(Run.Text))
+			{
+				AddGrapheme(RunBox, Grapheme);
+			}
+
+			UWidget* RunWidget = RunBox;
+			// UBalhwajeomTabletSentenceBlank::Configure only wraps a photo-analysis blank
+			// (bStatementStyle == false, i.e. bLeftAligned == false here -- see BeginPuzzleConvergeStage's
+			// bLeftAligned = !bPendingApplyAnalysisResultStyle) in a 60px-minimum SizeBox; a statement
+			// blank's root widget is just Background, no minimum width at all. Reserving 60px for every
+			// blank word regardless of type was inflating (not preserving) a statement's naturally
+			// narrower words the instant this grid replaced them, pushing everything after them further
+			// right than the original blank ever did.
+			if (Run.bIsBlankWord && !bLeftAligned)
+			{
+				// Reserve the same minimum width the blank's own box used to enforce (see
+				// PuzzleBlankMinWidth's comment) so the surrounding text doesn't slide over to meet
+				// it once the blank's box disappears.
+				USizeBox* WordSizeBox = WidgetTree->ConstructWidget<USizeBox>();
+				WordSizeBox->SetMinDesiredWidth(PuzzleBlankMinWidth);
+				WordSizeBox->SetContent(RunBox);
+				RunWidget = WordSizeBox;
+			}
+			if (UHorizontalBoxSlot* RunSlot = LineBox->AddChildToHorizontalBox(RunWidget))
+			{
+				RunSlot->SetVerticalAlignment(VAlign_Center);
+				RunSlot->SetPadding(FMargin(2.0f, 0.0f));
+				// Same Fill-by-default gotcha as CharSlot above -- keep every run at its own natural
+				// width instead of letting it stretch to share out whatever's left of LineBox.
+				RunSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+			}
+		}
+		if (UVerticalBoxSlot* LineSlot = LinesBox->AddChildToVerticalBox(LineBox))
+		{
+			LineSlot->SetHorizontalAlignment(LineAlignment);
+			LineSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, LinePadding));
+		}
+	}
+
+	// Matches BuildSentenceBuilder's own SentenceAreaWidth: without pinning LinesBox to the same
+	// fixed width the puzzle text was laid out in, its width would instead shrink to fit this
+	// particular piece of text, and every line's HAlign above would center/left-align against that
+	// different width -- visible as the whole block suddenly jumping sideways the moment this
+	// rebuilds WB_SentenceBuilder's children (Converge exploding the solved puzzle text, then Reveal
+	// swapping in ResultText).
+	float SentenceAreaWidth = bLeftAligned ? 350.0f : 560.0f;
+	if (const UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(WB_SentenceBuilder->Slot))
+	{
+		SentenceAreaWidth = CanvasSlot->GetSize().X;
+	}
+	USizeBox* LinesSizeBox = WidgetTree->ConstructWidget<USizeBox>();
+	LinesSizeBox->SetWidthOverride(SentenceAreaWidth);
+	LinesSizeBox->SetContent(LinesBox);
+	WB_SentenceBuilder->AddChild(LinesSizeBox);
+}
+
+void UBalhwajeomTabletWidget::TickRandomFadeChars(const bool bFadeIn)
+{
+	for (const FRandomFadeChar& Entry : RandomFadeChars)
+	{
+		UTextBlock* CharText = Entry.TextBlock.Get();
+		if (!CharText)
+		{
+			continue;
+		}
+		const float LocalAlpha = FMath::Clamp(
+			(PuzzleSuccessStageElapsed - Entry.StartDelay) / PuzzleSuccessCharFadeDuration, 0.0f, 1.0f);
+		CharText->SetRenderOpacity(bFadeIn ? LocalAlpha : (1.0f - LocalAlpha));
 	}
 }
 
@@ -1880,6 +2537,25 @@ bool UBalhwajeomTabletWidget::ShowPopup(
 		IMG_StatementIllustration->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	ClosePhotoPicker();
+	// Cancel any solved-puzzle transition still flashing/fading from whatever was open before --
+	// leaving PuzzleSuccessStage running would keep writing PendingResultText into this new popup's
+	// TXT_PopupBody once Reveal catches up. Any half-built RandomFadeChars widgets are cleaned up by
+	// HidePuzzleControls -> ClearSentenceBuilder just below (WB_SentenceBuilder->ClearChildren()).
+	PuzzleSuccessStage = EPuzzleSuccessStage::Inactive;
+	RandomFadeChars.Reset();
+	if (TXT_PopupBody)
+	{
+		// In case a Reveal/Handoff was interrupted mid-fade (see TickResultRevealStage/
+		// TickHandoffStage); otherwise this new popup's own text would start out partially
+		// transparent.
+		TXT_PopupBody->SetRenderOpacity(1.0f);
+	}
+	if (WB_SentenceBuilder)
+	{
+		// In case a Handoff was interrupted mid-crossfade; HidePuzzleControls below clears its
+		// children/visibility but not this, and it's the same UWrapBox the next puzzle reuses.
+		WB_SentenceBuilder->SetRenderOpacity(1.0f);
+	}
 	HidePuzzleControls();
 	if (TXT_PopupTitle)
 	{
@@ -2025,6 +2701,18 @@ UTexture2D* UBalhwajeomTabletWidget::GetOrLoadCapturedPhotoTexture(const FName P
 void UBalhwajeomTabletWidget::HidePopup()
 {
 	ClosePhotoPicker();
+	// See the matching comment in ShowPopup: don't let a solved puzzle's transition keep running
+	// (and eventually writing into TXT_PopupBody) after the popup itself has been closed.
+	PuzzleSuccessStage = EPuzzleSuccessStage::Inactive;
+	RandomFadeChars.Reset();
+	if (TXT_PopupBody)
+	{
+		TXT_PopupBody->SetRenderOpacity(1.0f);
+	}
+	if (WB_SentenceBuilder)
+	{
+		WB_SentenceBuilder->SetRenderOpacity(1.0f);
+	}
 	if (PopupLayer)
 	{
 		PopupLayer->SetVisibility(ESlateVisibility::Collapsed);
@@ -2163,19 +2851,21 @@ void UBalhwajeomTabletPhotoButton::Configure(
 	}
 	if (TXT_Label)
 	{
-		TXT_Label->SetText(InLabel);
-		TXT_Label->SetToolTipText(InLabel);
-		TXT_Label->SetJustification(ETextJustify::Center);
-		TXT_Label->SetMinDesiredWidth(0.0f);
-		TXT_Label->SetAutoWrapText(false);
-		TXT_Label->SetClipping(EWidgetClipping::ClipToBounds);
-		TXT_Label->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
 		FSlateFontInfo LabelFontInfo = TXT_Label->GetFont();
 		if (LabelFont)
 		{
 			LabelFontInfo.FontObject = LabelFont;
 		}
 		LabelFontInfo.Size = LabelFontSize;
+
+		// Center-justified by design, so the built-in Ellipsis overflow policy can't be used (see
+		// TruncateLabelToFit) -- pre-shorten the string ourselves against LabelWidth instead.
+		TXT_Label->SetText(TruncateLabelToFit(InLabel, LabelFontInfo, LabelWidth));
+		TXT_Label->SetToolTipText(InLabel);
+		TXT_Label->SetJustification(ETextJustify::Center);
+		TXT_Label->SetMinDesiredWidth(0.0f);
+		TXT_Label->SetAutoWrapText(false);
+		TXT_Label->SetClipping(EWidgetClipping::ClipToBounds);
 		TXT_Label->SetFont(LabelFontInfo);
 	}
 	if (BTN_File)
@@ -2252,6 +2942,10 @@ void UBalhwajeomTabletFolderButton::Configure(
 	if (TXT_FolderLabel)
 	{
 		TXT_FolderLabel->SetText(InLabel);
+		// Single line, truncated with "..." like a real folder's filename label, instead of
+		// wrapping or overflowing once a long CharacterID.FolderName is used.
+		TXT_FolderLabel->SetAutoWrapText(false);
+		TXT_FolderLabel->SetTextOverflowPolicy(ETextOverflowPolicy::Ellipsis);
 		if (InLabelFont.FontObject || InLabelFont.Size > 0)
 		{
 			FSlateFontInfo Font = InLabelFont;
@@ -2619,7 +3313,7 @@ void UBalhwajeomTabletSentenceBlank::Configure(
 	FSlateFontInfo Font = DisplayText->GetFont();
 	// 24 matches WBP_CapturePhoto's AnalysisSentenceFontSize (see BuildSentenceBuilder's
 	// SegmentFontSize) so a blank's filled keyword reads at the same size as its surrounding text.
-	Font.Size = bStatementStyle ? InStatementFontSize : 24;
+	Font.Size = bStatementStyle ? InStatementFontSize : 20;
 	if (bStatementStyle)
 	{
 		Font.FontObject = InStatementFont;
@@ -2682,6 +3376,30 @@ void UBalhwajeomTabletSentenceBlank::SetErrorStyle(const bool bInError)
 	}
 }
 
+void UBalhwajeomTabletSentenceBlank::SetSuccessStyle(const bool bInSuccess, const FLinearColor& FlashColor)
+{
+	// FlashColor matches whatever UBalhwajeomTabletWidget::PlayPuzzleSuccessTransition picked for the
+	// surrounding sentence's segments (gold for a solved photo-analysis puzzle, blue for a solved
+	// statement).
+	// SetFilled always paints a filled blank's text black regardless of style, so that's the color
+	// to fall back to once the flash ends (this blank is destroyed by ClearSentenceBuilder shortly
+	// after anyway, but keeping the two in sync avoids a stray flash-colored frame if that ever
+	// changes).
+	if (DisplayText)
+	{
+		DisplayText->SetColorAndOpacity(FSlateColor(bInSuccess ? FlashColor : FLinearColor::Black));
+	}
+	if (Background)
+	{
+		// Drop the blank's own box the instant it flashes, so only the glowing word is left --
+		// otherwise the box (white for a photo blank, translucent pink for a statement blank; see
+		// Configure) would still be visible fading out underneath the text.
+		Background->SetBrushColor(bInSuccess
+			? FLinearColor(1.0f, 1.0f, 1.0f, 0.0f)
+			: (bStatementStyle ? FLinearColor(1.0f, 0.72f, 0.72f, 0.72f) : FLinearColor::White));
+	}
+}
+
 void UBalhwajeomTabletSentenceBlank::SetFilled(const FName InWordID, const FText& WordText)
 {
 	FilledWordID = InWordID;
@@ -2691,6 +3409,21 @@ void UBalhwajeomTabletSentenceBlank::SetFilled(const FName InWordID, const FText
 	}
 	DisplayText->SetText(WordText);
 	DisplayText->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
+}
+
+FText UBalhwajeomTabletSentenceBlank::GetDisplayText() const
+{
+	return DisplayText ? DisplayText->GetText() : FText::GetEmpty();
+}
+
+FSlateFontInfo UBalhwajeomTabletSentenceBlank::GetDisplayFont() const
+{
+	return DisplayText ? DisplayText->GetFont() : FSlateFontInfo();
+}
+
+FSlateColor UBalhwajeomTabletSentenceBlank::GetDisplayColor() const
+{
+	return DisplayText ? DisplayText->GetColorAndOpacity() : FSlateColor(FLinearColor::White);
 }
 
 bool UBalhwajeomTabletSentenceBlank::NativeOnDrop(

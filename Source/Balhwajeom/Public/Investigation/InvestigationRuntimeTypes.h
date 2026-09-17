@@ -4,6 +4,8 @@
 #include "Investigation/InvestigationEnums.h"
 #include "InvestigationRuntimeTypes.generated.h"
 
+class UUserWidget;
+
 USTRUCT(BlueprintType)
 struct BALHWAJEOM_API FEvidenceRuntimeState
 {
@@ -92,6 +94,12 @@ struct BALHWAJEOM_API FEvidenceInteractionViewData
 
 	UPROPERTY(BlueprintReadOnly, Category = "Investigation|Interaction")
 	FName KeywordDocumentID = NAME_None;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Investigation|Interaction")
+	TSoftClassPtr<UUserWidget> InteractionWidgetClass;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Investigation|Interaction")
+	bool bPlayWorldStoryAfterPresentation = false;
 };
 
 USTRUCT(BlueprintType)

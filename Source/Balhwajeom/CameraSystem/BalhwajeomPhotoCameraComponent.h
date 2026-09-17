@@ -17,6 +17,7 @@ class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UTexture2D;
 class USoundBase;
+struct FScreenshotCaptureDiskFallbackTestAccessor;
 
 enum class EBalhwajeomPhotoCaptureResult : uint8
 {
@@ -41,6 +42,7 @@ struct FBalhwajeomResolvedPhotoTarget
     bool bCanCapture = false;
     float MinimumFocusDistanceOffset = 0.0f;
     float MaximumFocusDistanceOffset = 0.0f;
+    float MinimumCaptureScreenOccupancyRatioOverride = -1.0f;
 };
 
 struct FBalhwajeomStrictFocusTarget
@@ -73,6 +75,8 @@ class BALHWAJEOM_API UBalhwajeomPhotoCameraComponent
     : public UActorComponent
 {
     GENERATED_BODY()
+
+    friend struct FScreenshotCaptureDiskFallbackTestAccessor;
 
 public:
     UBalhwajeomPhotoCameraComponent();
@@ -141,6 +145,15 @@ public:
     UFUNCTION(BlueprintPure, Category = "Photo Camera")
     bool IsCaptureResultBlockingInput() const;
 
+    /**
+     * Narrower than IsCaptureResultBlockingInput: the card's exit animation is excluded.
+     * Shutter and zoom stay refused for the whole span (a held click would otherwise stack
+     * flashes under the card), but leaving camera mode is harmless once the card is on its
+     * way out, and refusing it there left TAB dead for the length of that animation.
+     */
+    UFUNCTION(BlueprintPure, Category = "Photo Camera")
+    bool IsCaptureResultLockingCameraMode() const;
+
     /** Returns the currently focused target's screen guide and object-authored response. */
     UFUNCTION(BlueprintPure, Category = "Photo Camera|Focus")
     bool GetActiveFocusGuide(
@@ -155,6 +168,10 @@ public:
     /** Target that owns the currently rendered (possibly frozen) HUD guide. */
     UFUNCTION(BlueprintPure, Category = "Photo Camera|Focus")
     AActor* GetDisplayedFocusTarget() const { return DisplayedFocusTarget.Get(); }
+
+    /** True when the displayed capture target is focused but below its required screen size. */
+    UFUNCTION(BlueprintPure, Category = "Photo Camera|Focus")
+    bool IsDisplayedFocusTargetTooSmallForCapture() const;
 
     UFUNCTION(BlueprintCallable, Category = "Evidence", meta = (DeprecatedFunction, DeprecationMessage = "Use BalhwajeomInvestigationSubsystem.RegisterCapturedPhoto."))
     bool AddEvidence(const FBalhwajeomEvidenceData& NewEvidence);
@@ -182,7 +199,13 @@ protected:
     bool GetEffectiveCameraView(FVector& OutLocation, FVector& OutForward) const;
     bool TraceViewportCenter(FHitResult& OutHit) const;
     bool IsViewportCenterOverTarget(const AActor* Target) const;
-    bool CalculateTargetFrameCoverage(const AActor* Target, float& OutCoverageRatio) const;
+    bool CalculateTargetScreenFrameMetrics(
+        const AActor* Target,
+        FBalhwajeomScreenFrameMetrics& OutMetrics) const;
+    bool IsTargetScreenOccupancySufficient(
+        const AActor* Target,
+        const FBalhwajeomCameraTargetInfo& TargetInfo,
+        FBalhwajeomScreenFrameMetrics* OutMetrics = nullptr) const;
     bool FindStrictFocusTarget(FBalhwajeomStrictFocusTarget& OutTarget) const;
     void ApplyFocusBlur(float DeltaTime, const FBalhwajeomFocusRegion& DesiredRegion);
     void InitializeFocusBlurMaterials();
@@ -230,6 +253,10 @@ protected:
     /** Global inclusive maximum camera-to-CameraFocusPoint distance for focus and capture. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Distance", meta = (ClampMin = "0.0", Units = "cm"))
     float MaximumFocusDistance = 1000.0f;
+
+    /** Minimum fraction of the viewport that a capture target's visible projected bounds must occupy. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Framing", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float MinimumCaptureScreenOccupancyRatio = 0.04f;
 
     /** Half-width of the sharp region on either side of a focused target. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Evidence Focus|Blur", meta = (ClampMin = "0.0", Units = "cm"))
@@ -338,6 +365,12 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.1"))
     float CameraTransitionDuration = 0.5f;
 
+    /** Retained so existing assets deserialize cleanly; the first-person camera is no longer translated on entry. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Legacy",
+        meta = (ClampMin = "0.0", Units = "cm", DeprecatedProperty,
+            DeprecationMessage = "The first-person camera now remains at its authored eye position."))
+    float MaximumEntryViewAlignmentOffset = 150.0f;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Audio")
     TSoftObjectPtr<USoundBase> CameraEnterSound;
 
@@ -389,6 +422,10 @@ protected:
     FRotator SavedExplorationControlRotation = FRotator::ZeroRotator;
     float SavedFirstPersonFieldOfView = 90.0f;
     bool bHasSavedExplorationControlRotation = false;
+    bool bSavedUseControllerRotationYaw = false;
+    bool bSavedOrientRotationToMovement = true;
+    bool bSavedUseControllerDesiredRotation = false;
+    bool bHasSavedFirstPersonMovementMode = false;
 
     FPostProcessSettings SavedPhotoPostProcessSettings;
     float SavedPostProcessBlendWeight = 1.0f;

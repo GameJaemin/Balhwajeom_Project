@@ -15,10 +15,12 @@
 #include "Engine/Texture2D.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
 #include "ImageUtils.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
+#include "Tutorial/BalhwajeomTutorialOverlayTriggers.h"
 #include "Investigation/EvidenceDefinitions.h"
 #include "Investigation/InvestigationRuntimeTypes.h"
 #include "Investigation/PhotoDefinitions.h"
@@ -425,12 +427,33 @@ bool UBalhwajeomPhotoCameraComponent::IsCaptureResultBlockingInput() const
 	return false;
 }
 
+bool UBalhwajeomPhotoCameraComponent::IsCaptureResultLockingCameraMode() const
+{
+	if (PendingCapture.IsSet())
+	{
+		return true;
+	}
+
+	if (const APlayerController* PlayerController =
+		Cast<APlayerController>(GetOwningController(this)))
+	{
+		if (const ABalhwajeomEvidenceCameraHUD* CameraHUD =
+			Cast<ABalhwajeomEvidenceCameraHUD>(PlayerController->GetHUD()))
+		{
+			return CameraHUD->IsCapturePhotoPresentationLockingCameraMode();
+		}
+	}
+
+	return false;
+}
+
 void UBalhwajeomPhotoCameraComponent::ToggleCameraMode()
 {
 	if (BalhwajeomItemInspection::IsOpen(GetOwner())) return;
 
-	// Raising or lowering the camera under the result card would strand it mid-flight.
-	if (IsCaptureResultBlockingInput())
+	// Raising or lowering the camera while the card still awaits acknowledgement would strand
+	// it mid-flight. Once it is leaving, the exit is free.
+	if (IsCaptureResultLockingCameraMode())
 	{
 		return;
 	}
@@ -527,6 +550,8 @@ void UBalhwajeomPhotoCameraComponent::ZoomCamera(float Value)
 
 void UBalhwajeomPhotoCameraComponent::TakePhoto()
 {
+	// Dismissing the result card is no longer the shutter's job: FCapturePhotoDismissInputProcessor
+	// intercepts every press while the card is up, so left click never reaches this function then.
 	if (!bIsInCameraMode || bIsCameraTransitioning || !PhotoCamera || !GetWorld())
 	{
 		return;
@@ -629,6 +654,30 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 		return;
 	}
 
+	// Entry alignment can move the attached camera in world space. Capture its authored
+	// transform first so leaving photo mode always puts it back at the character's eyes.
+	SavedFirstPersonRelativeTransform = PhotoCamera->GetRelativeTransform();
+	SavedFirstPersonFieldOfView = PhotoCamera->FieldOfView;
+	SavedPhotoPostProcessSettings = PhotoCamera->PostProcessSettings;
+	SavedPostProcessBlendWeight = PhotoCamera->PostProcessBlendWeight;
+
+	// A first-person view must rotate with control yaw. Leaving orient-to-movement
+	// enabled makes A/D rotate the capsule, which swings an attached eye camera
+	// sideways and feels like non-linear acceleration.
+	if (ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner()))
+	{
+		bSavedUseControllerRotationYaw = OwnerCharacter->bUseControllerRotationYaw;
+		if (UCharacterMovementComponent* Movement = OwnerCharacter->GetCharacterMovement())
+		{
+			bSavedOrientRotationToMovement = Movement->bOrientRotationToMovement;
+			bSavedUseControllerDesiredRotation = Movement->bUseControllerDesiredRotation;
+			Movement->bOrientRotationToMovement = false;
+			Movement->bUseControllerDesiredRotation = false;
+		}
+		OwnerCharacter->bUseControllerRotationYaw = true;
+		bHasSavedFirstPersonMovementMode = true;
+	}
+
 	APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
 	if (PlayerController)
 	{
@@ -639,9 +688,9 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 		FRotator OutgoingViewRotation;
 		PlayerController->GetPlayerViewPoint(OutgoingViewLocation, OutgoingViewRotation);
 
-		// Aim the first-person camera at the world point under the third-person screen center.
-		// The cameras have different origins, so copying only their rotation causes parallax and
-		// pushes the object sideways on entry.
+		// Aim the eye camera at the world point under the outgoing screen centre. Never move
+		// the attached camera in world space: a lateral attachment offset rotates around the
+		// capsule while walking/turning and makes ordinary WASD movement feel unstable.
 		const FVector OutgoingViewDirection = OutgoingViewRotation.Vector();
 		FVector CenterTarget = OutgoingViewLocation + OutgoingViewDirection * WORLD_MAX;
 		bool bFoundCenterTarget = false;
@@ -685,10 +734,6 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 		}
 	}
 	SetWorldInspectionLabelsSuppressed(true);
-	SavedFirstPersonRelativeTransform = PhotoCamera->GetRelativeTransform();
-	SavedFirstPersonFieldOfView = PhotoCamera->FieldOfView;
-	SavedPhotoPostProcessSettings = PhotoCamera->PostProcessSettings;
-	SavedPostProcessBlendWeight = PhotoCamera->PostProcessBlendWeight;
 	NormalCamera->SetActive(false);
 	PhotoCamera->SetActive(true);
 
@@ -740,6 +785,18 @@ void UBalhwajeomPhotoCameraComponent::ExitCameraMode()
 	}
 	bHasSavedExplorationControlRotation = false;
 
+	if (ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
+		OwnerCharacter && bHasSavedFirstPersonMovementMode)
+	{
+		OwnerCharacter->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+		if (UCharacterMovementComponent* Movement = OwnerCharacter->GetCharacterMovement())
+		{
+			Movement->bOrientRotationToMovement = bSavedOrientRotationToMovement;
+			Movement->bUseControllerDesiredRotation = bSavedUseControllerDesiredRotation;
+		}
+	}
+	bHasSavedFirstPersonMovementMode = false;
+
 	if (PhotoCamera)
 	{
 		PhotoCamera->SetRelativeTransform(SavedFirstPersonRelativeTransform);
@@ -773,6 +830,19 @@ void UBalhwajeomPhotoCameraComponent::ExitCameraMode()
 					BalhwajeomGameplayTags::Runtime_Player_Mode_Exploration
 				);
 			}
+		}
+	}
+
+	// Only a trip that produced a photo counts as having finished photographing; raising
+	// and lowering the camera without shooting teaches the player nothing to follow up on.
+	if (const UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem())
+	{
+		TArray<FCapturedPhotoRecord> CapturedPhotos;
+		Investigation->GetCapturedPhotos(CapturedPhotos);
+		if (!CapturedPhotos.IsEmpty())
+		{
+			BalhwajeomTutorialOverlayTriggers::Set(
+				this, BalhwajeomGameplayTags::Tutorial_Trigger_PhotoCaptureCompleted);
 		}
 	}
 	if (ActivePhotoWorldStory.IsValid())
@@ -896,6 +966,17 @@ bool UBalhwajeomPhotoCameraComponent::GetActiveFocusGuide(
 	OutTargetInfo = DisplayedFocusTargetInfo;
 	OutOpacity = 1.0f;
 	return true;
+}
+
+bool UBalhwajeomPhotoCameraComponent::IsDisplayedFocusTargetTooSmallForCapture() const
+{
+	const AActor* Target = DisplayedFocusTarget.Get();
+	if (!Target)
+	{
+		return false;
+	}
+
+	return !IsTargetScreenOccupancySufficient(Target, DisplayedFocusTargetInfo);
 }
 
 void UBalhwajeomPhotoCameraComponent::RefreshDisplayedGuideSnapshot()
@@ -1036,11 +1117,11 @@ bool UBalhwajeomPhotoCameraComponent::IsViewportCenterOverTarget(const AActor* T
 	return TraceViewportCenter(Hit) && ResolveCameraTargetFromHit(Hit.GetActor()) == Target;
 }
 
-bool UBalhwajeomPhotoCameraComponent::CalculateTargetFrameCoverage(
+bool UBalhwajeomPhotoCameraComponent::CalculateTargetScreenFrameMetrics(
 	const AActor* Target,
-	float& OutCoverageRatio) const
+	FBalhwajeomScreenFrameMetrics& OutMetrics) const
 {
-	OutCoverageRatio = 0.0f;
+	OutMetrics = FBalhwajeomScreenFrameMetrics{};
 	APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
 	if (!Target || !PlayerController ||
 		!Target->GetClass()->ImplementsInterface(UBalhwajeomCameraTargetInterface::StaticClass()))
@@ -1099,26 +1180,39 @@ bool UBalhwajeomPhotoCameraComponent::CalculateTargetFrameCoverage(
 		ScreenMax.Y = FMath::Max(ScreenMax.Y, ScreenCorner.Y);
 	}
 
-	const float FullWidth = ScreenMax.X - ScreenMin.X;
-	const float FullHeight = ScreenMax.Y - ScreenMin.Y;
-	const float FullArea = FullWidth * FullHeight;
-	if (FullWidth <= KINDA_SMALL_NUMBER || FullHeight <= KINDA_SMALL_NUMBER ||
-		FullArea <= KINDA_SMALL_NUMBER)
+	return FBalhwajeomCameraFocusModel::CalculateScreenFrameMetrics(
+		ScreenMin,
+		ScreenMax,
+		FVector2D(ViewportWidth, ViewportHeight),
+		OutMetrics);
+}
+
+bool UBalhwajeomPhotoCameraComponent::IsTargetScreenOccupancySufficient(
+	const AActor* Target,
+	const FBalhwajeomCameraTargetInfo& TargetInfo,
+	FBalhwajeomScreenFrameMetrics* OutMetrics) const
+{
+	FBalhwajeomScreenFrameMetrics Metrics;
+	if (!CalculateTargetScreenFrameMetrics(Target, Metrics))
 	{
+		if (OutMetrics)
+		{
+			*OutMetrics = Metrics;
+		}
 		return false;
 	}
 
-	const float VisibleMinX = FMath::Clamp(ScreenMin.X, 0.0f, static_cast<float>(ViewportWidth));
-	const float VisibleMinY = FMath::Clamp(ScreenMin.Y, 0.0f, static_cast<float>(ViewportHeight));
-	const float VisibleMaxX = FMath::Clamp(ScreenMax.X, 0.0f, static_cast<float>(ViewportWidth));
-	const float VisibleMaxY = FMath::Clamp(ScreenMax.Y, 0.0f, static_cast<float>(ViewportHeight));
-	const float VisibleWidth = FMath::Max(VisibleMaxX - VisibleMinX, 0.0f);
-	const float VisibleHeight = FMath::Max(VisibleMaxY - VisibleMinY, 0.0f);
-	OutCoverageRatio = FMath::Clamp(
-		(VisibleWidth * VisibleHeight) / FullArea,
-		0.0f,
-		1.0f);
-	return true;
+	if (OutMetrics)
+	{
+		*OutMetrics = Metrics;
+	}
+
+	float RequiredRatio = 0.0f;
+	return FBalhwajeomCameraFocusModel::IsScreenOccupancySufficient(
+		Metrics.ScreenOccupancyRatio,
+		MinimumCaptureScreenOccupancyRatio,
+		TargetInfo.MinimumCaptureScreenOccupancyRatioOverride,
+		RequiredRatio);
 }
 
 void UBalhwajeomPhotoCameraComponent::UpdateEvidenceFocus(float DeltaTime)
@@ -1199,6 +1293,8 @@ bool UBalhwajeomPhotoCameraComponent::FindStrictFocusTarget(
 		TargetInfo.bCanCapture = ResolvedTarget.bCanCapture;
 		TargetInfo.MinimumFocusDistanceOffset = ResolvedTarget.MinimumFocusDistanceOffset;
 		TargetInfo.MaximumFocusDistanceOffset = ResolvedTarget.MaximumFocusDistanceOffset;
+		TargetInfo.MinimumCaptureScreenOccupancyRatioOverride =
+			ResolvedTarget.MinimumCaptureScreenOccupancyRatioOverride;
 		MinimumOffset = ResolvedTarget.MinimumFocusDistanceOffset;
 		MaximumOffset = ResolvedTarget.MaximumFocusDistanceOffset;
 	}
@@ -1421,6 +1517,11 @@ bool UBalhwajeomPhotoCameraComponent::TryCaptureActiveFocusTarget()
 			return false;
 		}
 
+		if (!IsTargetScreenOccupancySufficient(Target, TargetInfo))
+		{
+			return false;
+		}
+
 		return BeginInvestigationImageCapture(ResolvedTarget);
 	}
 
@@ -1436,6 +1537,11 @@ bool UBalhwajeomPhotoCameraComponent::TryCaptureActiveFocusTarget()
 	if (CapturedFocusTargets.Contains(Target) || TargetInfo.EvidenceData.bAlreadyCollected)
 	{
 		ShowPhotoFeedback(TEXT("이미 기록한 대상이다."), FColor::Yellow);
+		return false;
+	}
+
+	if (!IsTargetScreenOccupancySufficient(Target, TargetInfo))
+	{
 		return false;
 	}
 
@@ -1498,6 +1604,8 @@ bool UBalhwajeomPhotoCameraComponent::ResolveInvestigationTarget(
 	OutTarget.bCanCapture = StateDefinition.bCanCapture;
 	OutTarget.MinimumFocusDistanceOffset = StateDefinition.MinimumFocusDistanceOffset;
 	OutTarget.MaximumFocusDistanceOffset = StateDefinition.MaximumFocusDistanceOffset;
+	OutTarget.MinimumCaptureScreenOccupancyRatioOverride =
+		StateDefinition.MinimumCaptureScreenOccupancyRatioOverride;
 	return true;
 }
 
@@ -1639,6 +1747,30 @@ void UBalhwajeomPhotoCameraComponent::HandleScreenshotProcessed()
 	const FString AbsolutePath = PendingCapture->AbsolutePath;
 	SetCameraUIHiddenForScreenshot(false);
 	ClearScreenshotDelegates();
+
+	// When the screenshot delegate is disabled, the engine writes the requested
+	// PNG itself and only sends the processed notification. That is still a
+	// successful capture, even though HandleScreenshotCaptured never received
+	// the in-memory pixels.
+	const int64 SavedFileSize = IFileManager::Get().FileSize(*AbsolutePath);
+	if (SavedFileSize > 0)
+	{
+		PendingCapturePreviewTexture = FImageUtils::ImportFileAsTexture2D(AbsolutePath);
+		UE_LOG(
+			LogTemp,
+			Display,
+			TEXT("Photo screenshot completed through engine disk save: %s (%lld bytes)."),
+			*AbsolutePath,
+			SavedFileSize);
+		CompleteImageSave(RequestID, true, AbsolutePath);
+		return;
+	}
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("Photo screenshot processed without pixels or a saved image: %s."),
+		*AbsolutePath);
 	CompleteImageSave(RequestID, false, AbsolutePath);
 }
 

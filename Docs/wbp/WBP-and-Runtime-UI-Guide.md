@@ -331,18 +331,31 @@ SB_ViewportScale (ScaleToFit)
 └─ SB_Design1920x1080
    └─ ViewportRoot
       ├─ ScreenDimmer
-      ├─ CardRoot (928 × 721)
-      │  ├─ CardBackground
-      │  ├─ CapturedPhotoImage
-      │  ├─ SentenceBackground
-      │  │  └─ SentenceOverlay
-      │  │     ├─ SentenceTextBlock
-      │  │     └─ SentenceBuilder
-      │  └─ KeywordList
-      └─ TabFlyTarget
+      ├─ CardRoot (928 × 721, 고정 배치 컨테이너)
+      │  ├─ CardComposite (RetainerBox, 카드 통합 애니메이션 대상)
+      │  │  └─ CardVisualRoot
+      │  │     ├─ CardBackground
+      │  │     ├─ CapturedPhotoImage
+      │  │     └─ SentenceBackground
+      │  │        └─ SentenceOverlay
+      │  │           ├─ SentenceTextBlock
+      │  │           └─ SentenceBuilder
+      │  └─ KeywordList (키워드별 순차 애니메이션 대상)
+      └─ TabFlyTarget (기존 호환용, 현재 런타임에서는 사용하지 않음)
 ```
 
-`TabFlyTarget`은 실제 TAB 그림이 아니라 사진과 키워드가 날아갈 목적지 좌표를 제공하는 투명 마커다.
+`CardComposite`는 배경·사진·문장을 한 장의 렌더 결과로 합성한다. 진입 이동·회전과 퇴장 페이드는
+중심 피벗 `(0.5, 0.5)`을 사용하는 이 위젯 하나에만 적용한다. 따라서 내부 요소가 같은 축을 공유하고,
+페이드 중 겹친 영역이 각각 비치는 현상을 막는다. 에펙의 스케일 값은 사용하지 않아 크기는 항상 유지된다.
+
+애니메이션은 에펙의 60fps 기준 37~110프레임을 잘라 총 73프레임(약 1.217초)으로 재현한다.
+카드는 오른쪽에서 90도 회전된 상태로 들어와 20프레임에 자리 잡는다. 키워드는 첫 카드보다 5프레임 늦게
+시작하며, 추가 키워드도 5프레임 간격으로 같은 동작을 반복한다. 53프레임부터 `CardRoot`가 아래로 이동하므로
+카드와 모든 키워드가 함께 움직이고, 63~73프레임에는 카드 합성 결과와 각 키워드가 사라진다.
+퇴장 위치는 에펙 시간 베지어의 앞 키프레임 `Speed 0 / Influence 90%`, 뒤 키프레임
+`Speed 0 / Influence 0%`를 사용한다. 이 베지어는 위치에만 적용하며 63~73프레임의 투명도는 선형이다.
+`ScreenDimmer`는 이동하지 않고 63~73프레임에 투명도만 낮아진다. 촬영 순간의 기존 HUD 흰색 플래시는
+그대로 사용하며, 에펙의 `그냥 배경`과 별도 촬영 이펙트는 재현하지 않는다.
 
 ### 분석문장/자연어 분기
 
@@ -639,8 +652,7 @@ C++의 `BindWidgetOptional`은 이름으로 연결된다. 아래와 같은 위�
 - `SentenceTextBlock`
 - `SentenceBuilder`
 - `KeywordList`
-- `CardRoot`, `CardBackground`, `SentenceBackground`
-- `TabFlyTarget`
+- `CardRoot`, `CardComposite`, `CardBackground`, `SentenceBackground`
 - `BTN_Start`
 - `IMG_Video`
 

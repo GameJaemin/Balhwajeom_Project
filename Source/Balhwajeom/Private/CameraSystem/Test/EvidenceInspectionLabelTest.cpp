@@ -114,18 +114,6 @@ struct FEvidenceActorTestAccessor
 			&ABalhwajeomEvidenceActor::HandlePhotoCaptured);
 	}
 
-	static void SetRequiredActivationTag(
-		ABalhwajeomEvidenceActor* Evidence,
-		FGameplayTag RequiredTag)
-	{
-		Evidence->RequiredActivationTag = RequiredTag;
-	}
-
-	static void RefreshProgressionAvailability(ABalhwajeomEvidenceActor* Evidence)
-	{
-		Evidence->RefreshProgressionAvailability();
-	}
-
 	static bool IsProgressionAvailable(const ABalhwajeomEvidenceActor* Evidence)
 	{
 		return Evidence->bProgressionAvailable;
@@ -175,6 +163,23 @@ bool FEvidenceState3DInspectionPolicyTest::RunTest(const FString& Parameters)
 	TestFalse(
 		TEXT("State allowance cannot bypass progression locks"),
 		ABalhwajeomEvidenceActor::ShouldEnable3DInspectionForState(true, false, false));
+
+	TestTrue(
+		TEXT("A user-completed 3D inspection can start its queued world story"),
+		ABalhwajeomEvidenceActor::ShouldPlayWorldStoryAfterInspectionClose(
+			EJMItemInspectionCloseReason::User));
+	TestTrue(
+		TEXT("The inspector close button can start its queued world story"),
+		ABalhwajeomEvidenceActor::ShouldPlayWorldStoryAfterInspectionClose(
+			EJMItemInspectionCloseReason::CloseButton));
+	TestFalse(
+		TEXT("A failed 3D inspection must discard its queued world story"),
+		ABalhwajeomEvidenceActor::ShouldPlayWorldStoryAfterInspectionClose(
+			EJMItemInspectionCloseReason::Failed));
+	TestFalse(
+		TEXT("World teardown must not start a queued world story"),
+		ABalhwajeomEvidenceActor::ShouldPlayWorldStoryAfterInspectionClose(
+			EJMItemInspectionCloseReason::WorldTearDown));
 	return true;
 }
 
@@ -632,13 +637,8 @@ bool FEvidenceProgressionGateTest::RunTest(const FString& Parameters)
 	{
 		Evidence->DispatchBeginPlay();
 	}
-	FEvidenceActorTestAccessor::SetRequiredActivationTag(
-		Evidence,
-		BalhwajeomGameplayTags::Story_Chapter_01_Phase_01_Completed);
-	FEvidenceActorTestAccessor::RefreshProgressionAvailability(Evidence);
-
 	TestFalse(
-		TEXT("Evidence requiring an absent phase tag should be progression-locked"),
+		TEXT("A configured phase 02 object should be locked before phase 02 unlock"),
 		FEvidenceActorTestAccessor::IsProgressionAvailable(Evidence));
 	TestTrue(
 		TEXT("A progression lock should keep the visible mesh enabled"),
@@ -669,9 +669,9 @@ bool FEvidenceProgressionGateTest::RunTest(const FString& Parameters)
 	{
 		FEditorScriptExecutionGuard ScriptExecutionGuard;
 		TestTrue(
-			TEXT("The required phase completion tag should be newly added"),
+			TEXT("The required phase 02 unlock tag should be newly added"),
 			StoryState->AddStateTag(
-				BalhwajeomGameplayTags::Story_Chapter_01_Phase_01_Completed));
+				BalhwajeomGameplayTags::Story_Chapter_01_Phase_02_Unlocked));
 	}
 
 	TestTrue(

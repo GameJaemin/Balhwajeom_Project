@@ -15,6 +15,7 @@
 #include "Story/StoryStateSubsystem.h"
 #include "Story/StoryStateTags.h"
 #include "Tablet/BalhwajeomTabletWidget.h"
+#include "Tutorial/BalhwajeomTutorialOverlayTriggers.h"
 
 UBalhwajeomTabletComponent::UBalhwajeomTabletComponent()
 {
@@ -56,6 +57,7 @@ void UBalhwajeomTabletComponent::EndPlay(const EEndPlayReason::Type EndPlayReaso
 	if (TabletWidget)
 	{
 		TabletWidget->OnTabletCloseAnimationFinished.RemoveAll(this);
+		TabletWidget->OnStatementSolved.RemoveAll(this);
 		TabletWidget->RemoveFromParent();
 		TabletWidget = nullptr;
 	}
@@ -295,6 +297,18 @@ void UBalhwajeomTabletComponent::SetTabletInteractionEnabled(bool bEnabled)
 	}
 }
 
+void UBalhwajeomTabletComponent::SetTabletToggleLocked(bool bLocked)
+{
+	// Deliberately just the gate ToggleTablet() checks -- unlike SetTabletInteractionEnabled(false),
+	// this never force-closes an already-open tablet.
+	bTabletInteractionEnabled = !bLocked;
+}
+
+void UBalhwajeomTabletComponent::HandleStatementSolved()
+{
+	OnStatementSolved.Broadcast();
+}
+
 void UBalhwajeomTabletComponent::RequestOpenTabletToStatement()
 {
 	if (bTabletOpen && TabletWidget)
@@ -322,6 +336,15 @@ void UBalhwajeomTabletComponent::RequestOpenTablet()
 	RefreshPhotoCameraBinding();
 	if (UBalhwajeomPhotoCameraComponent* PhotoCamera = BoundPhotoCamera.Get())
 	{
+		// Arming the pending open while the camera is refusing to leave would block gameplay
+		// input with nothing able to release it: the retry in ProcessPendingPhotoExit is
+		// refused for the same reason, and the blocked input keeps the card from ever being
+		// dismissed. Refuse the request instead of entering that state.
+		if (PhotoCamera->IsCaptureResultLockingCameraMode())
+		{
+			return;
+		}
+
 		if (PhotoCamera->IsInCameraMode() || PhotoCamera->IsCameraTransitioning())
 		{
 			bPendingOpenAfterPhotoMode = true;
@@ -392,6 +415,7 @@ void UBalhwajeomTabletComponent::OpenTabletNow()
 			TabletWidget->OnTabletCloseAnimationFinished.AddUObject(
 				this,
 				&ThisClass::HandleTabletCloseAnimationFinished);
+			TabletWidget->OnStatementSolved.AddUObject(this, &ThisClass::HandleStatementSolved);
 		}
 	}
 
@@ -421,6 +445,13 @@ void UBalhwajeomTabletComponent::OpenTabletNow()
 			}
 		}
 	}
+
+	// Paired with the close below rather than left set forever: the intro already opens
+	// the tablet once, long before the tutorial asks the player to open it themselves.
+	BalhwajeomTutorialOverlayTriggers::Set(
+		this, BalhwajeomGameplayTags::Tutorial_Trigger_TabletOpened);
+	BalhwajeomTutorialOverlayTriggers::Clear(
+		this, BalhwajeomGameplayTags::Tutorial_Trigger_TabletClosed);
 	SetGameplayInputBlocked(true);
 
 	TabletWidget->SetVisibility(ESlateVisibility::Visible);
@@ -495,6 +526,13 @@ void UBalhwajeomTabletComponent::FinishCloseTablet()
 	bTabletOpen = false;
 	if (bWasTabletOpen)
 	{
+		BalhwajeomTutorialOverlayTriggers::Clear(
+			this, BalhwajeomGameplayTags::Tutorial_Trigger_TabletOpened);
+		BalhwajeomTutorialOverlayTriggers::Clear(
+			this, BalhwajeomGameplayTags::Tutorial_Trigger_SisterFolderOpened);
+		BalhwajeomTutorialOverlayTriggers::Set(
+			this, BalhwajeomGameplayTags::Tutorial_Trigger_TabletClosed);
+
 		if (UWorld* World = GetWorld())
 		{
 			if (UGameInstance* GameInstance = World->GetGameInstance())

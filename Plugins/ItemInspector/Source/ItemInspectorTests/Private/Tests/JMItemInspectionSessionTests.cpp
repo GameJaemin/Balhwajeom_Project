@@ -76,4 +76,38 @@ bool FJMInspectionSessionTest::RunTest(const FString& Parameters)
 	PC->Destroy(); Actor->Destroy();
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FJMItemInspectionRenderTargetAspectTest,
+	"JM.ItemInspector.Rendering.RenderTargetMatchesViewportAspect",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FJMItemInspectionRenderTargetAspectTest::RunTest(const FString& Parameters)
+{
+	TestEqual(
+		TEXT("Default widescreen preview uses the balanced 1600-pixel quality envelope"),
+		UJMItemInspectionSubsystem::CalculateAspectMatchedRenderTargetSize(
+			FIntPoint(1920, 1080),
+			UItemInspectorSettings::Get()->DefaultRenderTargetSize),
+		FIntPoint(1600, 900));
+	TestEqual(
+		TEXT("Landscape viewport uses a landscape render target"),
+		UJMItemInspectionSubsystem::CalculateAspectMatchedRenderTargetSize(
+			FIntPoint(1920, 1080),
+			FIntPoint(1024, 1024)),
+		FIntPoint(1024, 576));
+	TestEqual(
+		TEXT("Portrait viewport uses a portrait render target"),
+		UJMItemInspectionSubsystem::CalculateAspectMatchedRenderTargetSize(
+			FIntPoint(1080, 1920),
+			FIntPoint(1024, 1024)),
+		FIntPoint(576, 1024));
+	TestEqual(
+		TEXT("Small quality envelopes preserve viewport aspect ratio"),
+		UJMItemInspectionSubsystem::CalculateAspectMatchedRenderTargetSize(
+			FIntPoint(1920, 1080),
+			FIntPoint(64, 64)),
+		FIntPoint(64, 36));
+	return true;
+}
 #endif

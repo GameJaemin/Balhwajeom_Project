@@ -101,3 +101,58 @@ float FBalhwajeomCameraFocusModel::CalculateBlurStrength(
 		1.0f);
 	return Progress * Progress * SafeMaximum;
 }
+
+bool FBalhwajeomCameraFocusModel::CalculateScreenFrameMetrics(
+	const FVector2D& ScreenMin,
+	const FVector2D& ScreenMax,
+	const FVector2D& ViewportSize,
+	FBalhwajeomScreenFrameMetrics& OutMetrics)
+{
+	OutMetrics = FBalhwajeomScreenFrameMetrics{};
+	if (ViewportSize.X <= UE_KINDA_SMALL_NUMBER ||
+		ViewportSize.Y <= UE_KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	const float FullWidth = ScreenMax.X - ScreenMin.X;
+	const float FullHeight = ScreenMax.Y - ScreenMin.Y;
+	const float FullArea = FullWidth * FullHeight;
+	if (FullWidth <= UE_KINDA_SMALL_NUMBER ||
+		FullHeight <= UE_KINDA_SMALL_NUMBER ||
+		FullArea <= UE_KINDA_SMALL_NUMBER)
+	{
+		return false;
+	}
+
+	const FVector2D VisibleMin(
+		FMath::Clamp(ScreenMin.X, 0.0f, ViewportSize.X),
+		FMath::Clamp(ScreenMin.Y, 0.0f, ViewportSize.Y));
+	const FVector2D VisibleMax(
+		FMath::Clamp(ScreenMax.X, 0.0f, ViewportSize.X),
+		FMath::Clamp(ScreenMax.Y, 0.0f, ViewportSize.Y));
+	const float VisibleWidth = FMath::Max(VisibleMax.X - VisibleMin.X, 0.0f);
+	const float VisibleHeight = FMath::Max(VisibleMax.Y - VisibleMin.Y, 0.0f);
+	const float VisibleArea = VisibleWidth * VisibleHeight;
+
+	OutMetrics.VisibleFraction = FMath::Clamp(VisibleArea / FullArea, 0.0f, 1.0f);
+	OutMetrics.ScreenOccupancyRatio = FMath::Clamp(
+		VisibleArea / (ViewportSize.X * ViewportSize.Y),
+		0.0f,
+		1.0f);
+	return true;
+}
+
+bool FBalhwajeomCameraFocusModel::IsScreenOccupancySufficient(
+	const float ScreenOccupancyRatio,
+	const float GlobalMinimumRatio,
+	const float OverrideMinimumRatio,
+	float& OutRequiredRatio)
+{
+	OutRequiredRatio = FMath::Clamp(
+		OverrideMinimumRatio >= 0.0f ? OverrideMinimumRatio : GlobalMinimumRatio,
+		0.0f,
+		1.0f);
+	return FMath::Clamp(ScreenOccupancyRatio, 0.0f, 1.0f) + UE_KINDA_SMALL_NUMBER >=
+		OutRequiredRatio;
+}

@@ -8,6 +8,7 @@
 
 class UNiagaraSystem;
 class UStaticMesh;
+class UUserWidget;
 
 USTRUCT(BlueprintType)
 struct BALHWAJEOM_API FEvidenceDefinition : public FTableRowBase
@@ -62,8 +63,32 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction", meta = (MultiLine = "true"))
 	FText InteractionText;
 
+	/**
+	 * Short action shown next to the interaction key while this state is focused.
+	 * Enter only the action (for example "먼지 털기"); WBP_Interact adds "[ F ]".
+	 * Empty preserves the prompt widget's authored default text.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
+	FText InteractionPromptText;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
 	FName KeywordDocumentID = NAME_None;
+
+	/** Full-screen content opened when InteractionPresentation is ModalWidget. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
+	TSoftClassPtr<UUserWidget> InteractionWidgetClass;
+
+	/**
+	 * Plays this evidence's world story only after its modal or rotating 3D inspection closes.
+	 * This separates the blocking object presentation from the follow-up narration instead of
+	 * forcing both jobs into the mutually exclusive InteractionPresentation enum.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
+	bool bPlayWorldStoryAfterPresentation = false;
+
+	/** Keywords granted once when this interaction successfully completes. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
+	TArray<FName> GrantedWordIDs;
 
 	/**
 	 * Static mesh shown while this state is active, i.e. the "object" the evidence turns into.
@@ -110,6 +135,10 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture")
 	bool bCanCapture = false;
 
+	/** Camera guide text shown while this state itself does not permit capture. Empty uses the generic message. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture")
+	FText CaptureBlockedLabel;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture")
 	FName PhotoID = NAME_None;
 
@@ -128,6 +157,10 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 	/** Added to the photo camera's global maximum focus/capture distance. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture|Focus", meta = (Units = "cm"))
 	float MaximumFocusDistanceOffset = 0.0f;
+
+	/** Minimum viewport area the target must occupy. Negative uses the camera's global value; zero disables the size check. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture|Focus", meta = (ClampMin = "-1.0", ClampMax = "1.0"))
+	float MinimumCaptureScreenOccupancyRatioOverride = -1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Capture|Legacy", meta = (ClampMin = "1.0", DeprecatedProperty, DeprecationMessage = "Focus distance is now owned by the photo camera. Use MinimumFocusDistanceOffset and MaximumFocusDistanceOffset for per-state variation."))
 	float PreferredFocusDistance = 700.0f;
