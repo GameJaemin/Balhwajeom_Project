@@ -14,6 +14,23 @@ class AJMItemInspectionPreviewActor;
 class APlayerController;
 class UJMInteractionComponent;
 
+namespace JMItemInspectionFocus
+{
+	/**
+	 * Whether the open inspector should take keyboard focus back.
+	 *
+	 * Only the game viewport is worth taking focus from: it grabs focus by itself whenever a click
+	 * reaches it, and it has nothing to do with the focus while a modal inspector is up. The console,
+	 * an editor window, or another UMG widget owns its focus legitimately, so leave those alone.
+	 * Kept free of Slate so the policy is testable.
+	 */
+	ITEMINSPECTORRUNTIME_API bool ShouldRestoreWidgetFocus(
+		bool bInspectionOpen,
+		bool bWidgetInViewport,
+		bool bWidgetOwnsFocus,
+		bool bGameViewportOwnsFocus);
+}
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FJMItemInspectionOpenedSignature, UJMItemInspectionData*, InspectionData);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FJMItemInspectionClosedSignature, EJMItemInspectionCloseReason, Reason);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FJMItemInspectionFailedSignature, UJMItemInspectionData*, InspectionData, FText, Reason);
@@ -65,6 +82,7 @@ public:
 
 protected:
 	bool TickSessionHealth(float DeltaTime);
+	void RestoreWidgetFocusIfNeeded();
 	bool CreateInspectionWidget(const FJMItemInspectionRequest& Request);
 	bool CreatePreviewResources(const FJMItemInspectionRequest& Request);
 	void DestroyPreviewResources();
