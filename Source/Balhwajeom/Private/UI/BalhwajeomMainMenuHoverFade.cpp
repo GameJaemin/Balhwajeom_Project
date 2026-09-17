@@ -6,7 +6,8 @@
 float BalhwajeomMainMenuHoverFade::EaseInOut(const float Alpha)
 {
 	const float Clamped = FMath::Clamp(Alpha, 0.0f, 1.0f);
-	return Clamped * Clamped * (3.0f - 2.0f * Clamped);
+	const float Remaining = 1.0f - Clamped;
+	return 1.0f - Remaining * Remaining * Remaining;
 }
 
 
