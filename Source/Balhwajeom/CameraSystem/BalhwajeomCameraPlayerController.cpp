@@ -247,6 +247,10 @@ void ABalhwajeomCameraPlayerController::CloseInteractionModal()
 	// third person, which is exactly what the tutorial waits for.
 	BalhwajeomTutorialOverlayTriggers::Set(
 		this, BalhwajeomGameplayTags::Tutorial_Trigger_InteractCompleted);
+
+	// Deferred evidence stories subscribe here so popup content never overlaps the
+	// world-locked 3D text. Broadcast only after the modal and its input mode are gone.
+	OnInteractionModalClosed.Broadcast();
 }
 
 void ABalhwajeomCameraPlayerController::HandleInteractionModalCloseRequested()

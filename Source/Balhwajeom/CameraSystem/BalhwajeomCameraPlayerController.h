@@ -196,6 +196,7 @@ private:
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FBedMemoryTestAccessor;
 	friend struct FInteractionReticleTestAccessor;
+	friend struct FInteractionModalTestAccessor;
 #endif
 
 	void HandleMouseYaw(float Value);
