@@ -9,6 +9,7 @@
 #include "BalhwajeomCameraTargetInterface.h"
 #include "Investigation/InvestigationRuntimeTypes.h"
 #include "Interaction/PlayerInteractionTypes.h"
+#include "ItemInspection/JMItemInspectionTypes.h"
 #include "BalhwajeomEvidenceActor.generated.h"
 
 class APhotoWorldStoryActor;
@@ -22,6 +23,7 @@ class USceneComponent;
 class UInspectionComponent;
 class UJMInspectableComponent;
 class UJMItemInspectionData;
+class UJMItemInspectionSubsystem;
 class UTexture2D;
 class UTextRenderComponent;
 class UWidgetComponent;
@@ -66,6 +68,12 @@ public:
 	/** Executes the current F-interaction. Single-choice keyword documents award their word immediately. */
 	UFUNCTION(BlueprintCallable, Category = "Evidence|Investigation")
 	bool RequestInvestigationInteraction(FText& OutDisplayText);
+
+	/** Item-inspection entry point: queues world text until the rotating view has closed. */
+	bool RequestInvestigationInteractionForItemInspection(FText& OutDisplayText);
+
+	/** Connects a queued story to the inspector close event, or flushes it if opening failed. */
+	void ResolveDeferredItemInspection(bool bInspectionOpened);
 
 	/** Read-only availability check used by the player's interaction prompt. */
 	UFUNCTION(BlueprintPure, Category = "Evidence|Investigation")
@@ -113,6 +121,10 @@ public:
 		bool bInspectionRequested,
 		bool bProgressionAllowsInspection,
 		bool bStateDisablesInspection);
+
+	/** Only player-completed inspector exits may start a queued world story. */
+	static bool ShouldPlayWorldStoryAfterInspectionClose(
+		EJMItemInspectionCloseReason Reason);
 
 	/** Per-object distance thresholds and text used by the normal inspection system. */
 	UFUNCTION(BlueprintPure, Category = "Inspection")
@@ -181,6 +193,16 @@ protected:
 	virtual void BeginProgressionRemoval_Implementation();
 
 	bool PlayWorldStoryForState(FName StateID);
+	bool RequestInvestigationInteractionInternal(
+		FText& OutDisplayText,
+		bool bDeferWorldStoryForItemInspection);
+	void QueueWorldStory(FName StateID);
+	void PlayQueuedWorldStory();
+	void ClearQueuedWorldStory();
+	void HandleInteractionModalClosed();
+
+	UFUNCTION()
+	void HandleItemInspectionClosed(EJMItemInspectionCloseReason Reason);
 	/** Warns only when the current state actually asks for a WorldStory, so ordinary states stay quiet. */
 	void LogBlockedWorldStory(const TCHAR* Reason) const;
 	void SetInspectionLabel(const FText& LabelText, bool bVisible);
@@ -319,6 +341,13 @@ protected:
 
 	UPROPERTY(Transient)
 	TWeakObjectPtr<APhotoWorldStoryActor> ActiveWorldStory;
+
+	/** State whose 3D text waits for the current modal/inspection to fully close. */
+	FName QueuedWorldStoryStateID = NAME_None;
+	bool bQueuedStoryWaitsForModal = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UJMItemInspectionSubsystem> QueuedStoryInspectionSubsystem;
 
 	/** Weak because a finished one-shot system destroys its own component. */
 	TWeakObjectPtr<UNiagaraComponent> ActiveStateEffect;

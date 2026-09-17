@@ -78,6 +78,14 @@ struct BALHWAJEOM_API FEvidenceStateDefinition : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
 	TSoftClassPtr<UUserWidget> InteractionWidgetClass;
 
+	/**
+	 * Plays this evidence's world story only after its modal or rotating 3D inspection closes.
+	 * This separates the blocking object presentation from the follow-up narration instead of
+	 * forcing both jobs into the mutually exclusive InteractionPresentation enum.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
+	bool bPlayWorldStoryAfterPresentation = false;
+
 	/** Keywords granted once when this interaction successfully completes. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
 	TArray<FName> GrantedWordIDs;

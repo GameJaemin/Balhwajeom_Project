@@ -18,6 +18,8 @@ class UBalhwajeomInteractionModalWidget;
 class UBalhwajeomKeywordCounterWidget;
 class UStoryStateSubsystem;
 
+DECLARE_MULTICAST_DELEGATE(FOnBalhwajeomInteractionModalClosed);
+
 /** Owns mouse-look input and forwards it to the possessed Project Self character. */
 UCLASS(Blueprintable)
 class BALHWAJEOM_API ABalhwajeomCameraPlayerController : public APlayerController
@@ -93,6 +95,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "UI|Interaction")
 	void CloseInteractionModal();
+
+	/** Native completion point for presentations that must start after the modal is gone. */
+	FOnBalhwajeomInteractionModalClosed OnInteractionModalClosed;
 
 protected:
 	virtual void BeginPlay() override;
@@ -191,6 +196,7 @@ private:
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FBedMemoryTestAccessor;
 	friend struct FInteractionReticleTestAccessor;
+	friend struct FInteractionModalTestAccessor;
 #endif
 
 	void HandleMouseYaw(float Value);

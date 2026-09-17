@@ -163,6 +163,23 @@ bool FEvidenceState3DInspectionPolicyTest::RunTest(const FString& Parameters)
 	TestFalse(
 		TEXT("State allowance cannot bypass progression locks"),
 		ABalhwajeomEvidenceActor::ShouldEnable3DInspectionForState(true, false, false));
+
+	TestTrue(
+		TEXT("A user-completed 3D inspection can start its queued world story"),
+		ABalhwajeomEvidenceActor::ShouldPlayWorldStoryAfterInspectionClose(
+			EJMItemInspectionCloseReason::User));
+	TestTrue(
+		TEXT("The inspector close button can start its queued world story"),
+		ABalhwajeomEvidenceActor::ShouldPlayWorldStoryAfterInspectionClose(
+			EJMItemInspectionCloseReason::CloseButton));
+	TestFalse(
+		TEXT("A failed 3D inspection must discard its queued world story"),
+		ABalhwajeomEvidenceActor::ShouldPlayWorldStoryAfterInspectionClose(
+			EJMItemInspectionCloseReason::Failed));
+	TestFalse(
+		TEXT("World teardown must not start a queued world story"),
+		ABalhwajeomEvidenceActor::ShouldPlayWorldStoryAfterInspectionClose(
+			EJMItemInspectionCloseReason::WorldTearDown));
 	return true;
 }
 

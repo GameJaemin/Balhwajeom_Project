@@ -53,7 +53,8 @@ CSV 헤더 = Row Struct의 `UPROPERTY` 이름이다. Row Name(CSV 첫 컬럼)은
 | `ObjectID` | Name (참조: `DT_EvidenceDefinitions.ObjectID`) | 이 상태가 속한 증거 오브젝트 |
 | `StateName` | Text | 상태 이름(에디터/디버그 표기용) |
 | `InteractionBehavior` | Enum(`None`/`Once`/`Repeatable`/`ChangeState`) | F 상호작용 동작 방식. `None`=상호작용 불가, `Once`=1회만 성공, `Repeatable`=매번 성공, `ChangeState`=성공 시 `NextStateID`로 상태 전환 |
-| `InteractionPresentation` | Enum(`None`/`SimpleText`/`KeywordSelectionWindow`/`WorldStory`) | 상호작용 결과를 어떻게 보여줄지. `SimpleText`=문구만 표시, `KeywordSelectionWindow`=`KeywordDocumentID` 문서의 선택창을 연다, `WorldStory`=같은 행의 `PhotoID`가 가리키는 `DT_Photos.WorldStoryCues`를 Evidence Actor의 `StoryAnchor` 위치에 3D 텍스트로 띄운다(2D 문구는 표시하지 않는다) |
+| `InteractionPresentation` | Enum(`None`/`SimpleText`/`KeywordSelectionWindow`/`ModalWidget`/`WorldStory`) | 상호작용의 1차 표시 방식을 정한다. `SimpleText`=문구, `KeywordSelectionWindow`=키워드 문서, `ModalWidget`=상태에 지정한 전체 화면 위젯, `WorldStory`=같은 행의 `PhotoID`가 가리키는 3D 텍스트다. 3D inspector가 함께 열리는 `WorldStory`는 inspector 종료 뒤 재생된다. |
+| `bPlayWorldStoryAfterPresentation` | Bool | `ModalWidget` 같은 차단형 1차 연출이 닫힌 뒤 3D 텍스트를 이어서 재생한다. 일기장처럼 팝업과 WorldStory가 모두 필요한 상태에 사용한다. |
 | `NextStateID` | Name (참조: `DT_EvidenceStates.StateID`) | `ChangeState`일 때 전환할 다음 상태. 같은 `ObjectID` 소속이어야 한다 |
 | `PostCaptureStateID` | Name (참조: `DT_EvidenceStates.StateID`) | 이 상태의 사진을 촬영하면 전환할 상태. 같은 `ObjectID` 소속이어야 한다. 비워두면 촬영해도 상태가 유지된다. 값이 있으면 **촬영 직후의 월드 스토리 연출을 생략**하고, 전환된 상태의 상호작용이 스토리를 담당한다 |
 | `bDisable3DInspection` | Bool | 이 State가 활성화된 동안 Evidence Actor의 3D 회전 인스펙션을 비활성화한다. 촬영 이후 회전뷰를 막으려면 `PostCaptureStateID`가 가리키는 State에서 체크한다 |
