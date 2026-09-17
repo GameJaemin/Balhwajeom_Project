@@ -47,6 +47,58 @@ namespace BalhwajeomGameplayTags
 	);
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Tutorial_Trigger,
+		"Tutorial.Trigger",
+		"Root for the moments a tutorial overlay waits for. A DT_TutorialOverlay row lists "
+		"these in RequiredTags alongside the previous row's Tutorial.Overlay.Seen tag."
+	);
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Tutorial_Trigger_GameplayStarted,
+		"Tutorial.Trigger.GameplayStarted",
+		"The intro has faded out and the player has control. One-shot."
+	);
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Tutorial_Trigger_InteractPromptShown,
+		"Tutorial.Trigger.InteractPromptShown",
+		"The [F] prompt has become visible for the first time. One-shot."
+	);
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Tutorial_Trigger_InteractCompleted,
+		"Tutorial.Trigger.InteractCompleted",
+		"An interaction modal has closed and the player is back in third person. One-shot."
+	);
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Tutorial_Trigger_PhotoCaptureCompleted,
+		"Tutorial.Trigger.PhotoCaptureCompleted",
+		"The player has left camera mode having taken at least one photo. One-shot."
+	);
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Tutorial_Trigger_TabletOpened,
+		"Tutorial.Trigger.TabletOpened",
+		"The tablet is open right now. Paired with the close, because the intro already "
+		"opens the tablet once and a one-shot tag would be satisfied before the tutorial "
+		"ever asks for it."
+	);
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Tutorial_Trigger_TabletClosed,
+		"Tutorial.Trigger.TabletClosed",
+		"The tablet has been closed and the player is looking at the world again. The "
+		"inverse of TabletOpened, so only one of the two is ever present."
+	);
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
+		Tutorial_Trigger_SisterFolderOpened,
+		"Tutorial.Trigger.SisterFolderOpened",
+		"The sister's tablet folder page is open right now. Paired, as above."
+	);
+
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(
 		Story_Chapter_01_Phase_01_Completed,
 		"Story.Chapter.01.Phase.01.Completed",
 		"All required photo sentences in chapter 01 phase 01 are solved."

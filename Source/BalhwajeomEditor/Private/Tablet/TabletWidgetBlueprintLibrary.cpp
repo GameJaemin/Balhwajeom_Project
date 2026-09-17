@@ -62,6 +62,8 @@
 #include "Investigation/PhotoDefinitions.h"
 #include "Investigation/SentenceDefinitions.h"
 #include "Tablet/BalhwajeomTabletWidget.h"
+#include "Tutorial/BalhwajeomTutorialOverlayLayout.h"
+#include "Tutorial/BalhwajeomTutorialOverlayWidget.h"
 #include "CameraSystem/PhotoWorldStoryWidget.h"
 #include "CameraSystem/BalhwajeomCapturePhotoWidget.h"
 #include "Intro/BalhwajeomIntroFlowActor.h"
@@ -4457,4 +4459,59 @@ bool UTabletWidgetBlueprintLibrary::RedesignMessengerWidget()
 {
 	using namespace TabletDesigner;
 	return BuildMessengerWidgetBlueprints(true);
+}
+bool UTabletWidgetBlueprintLibrary::CreateTutorialOverlayWidgetBlueprint()
+{
+	static const TCHAR* OverlayFolderPath = TEXT("/Game/Balhwajeom/UI/HUD");
+	static const TCHAR* OverlayAssetName = TEXT("WBP_TutorialOverlay");
+	static const TCHAR* OverlayAssetPath =
+		TEXT("/Game/Balhwajeom/UI/HUD/WBP_TutorialOverlay.WBP_TutorialOverlay");
+
+	UWidgetBlueprint* Blueprint = LoadObject<UWidgetBlueprint>(nullptr, OverlayAssetPath);
+	if (!Blueprint)
+	{
+		FAssetToolsModule& AssetToolsModule =
+			FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools"));
+		UWidgetBlueprintFactory* Factory = NewObject<UWidgetBlueprintFactory>();
+		Factory->ParentClass = UBalhwajeomTutorialOverlayWidget::StaticClass();
+		Blueprint = Cast<UWidgetBlueprint>(AssetToolsModule.Get().CreateAsset(
+			OverlayAssetName,
+			OverlayFolderPath,
+			UWidgetBlueprint::StaticClass(),
+			Factory));
+	}
+	if (!Blueprint || !Blueprint->WidgetTree)
+	{
+		return false;
+	}
+
+	// The asset was authored empty on UUserWidget, so reparenting is the normal path here
+	// rather than an error the way it is for the already-typed capture widgets.
+	if (Blueprint->ParentClass != UBalhwajeomTutorialOverlayWidget::StaticClass())
+	{
+		Blueprint->ParentClass = UBalhwajeomTutorialOverlayWidget::StaticClass();
+		FBlueprintEditorUtils::RefreshAllNodes(Blueprint);
+	}
+
+	if (Blueprint->WidgetTree->RootWidget && !TabletDesigner::ClearWidgetTree(Blueprint))
+	{
+		return false;
+	}
+
+	BalhwajeomTutorialOverlayLayout::FBoundWidgets Widgets;
+	if (!BalhwajeomTutorialOverlayLayout::Build(*Blueprint->WidgetTree, Widgets) ||
+		!Widgets.IsComplete())
+	{
+		return false;
+	}
+
+	// Only the bound widgets become Blueprint variables; BindWidgetOptional cannot find a
+	// widget that is not one, and everything else is pure presentation the runtime never
+	// touches.
+	for (const TPair<const TCHAR*, UWidget*>& Bound : Widgets.AsNamedPairs())
+	{
+		Bound.Value->bIsVariable = true;
+	}
+
+	return TabletDesigner::SaveAndCompile(Blueprint);
 }

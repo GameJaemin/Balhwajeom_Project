@@ -581,69 +581,6 @@ bool FTutorialDirectorSetLockActiveTest::RunTest(const FString& Parameters)
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FTutorialDimModeTest,
-	"Balhwajeom.Tutorial.Director.DimMode",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FTutorialDimModeTest::RunTest(const FString& Parameters)
-{
-	TutorialDirectorTests::FFixture Fixture;
-	ABalhwajeomCameraCharacter* Character = Fixture.SpawnCharacter();
-	UStoryStateSubsystem* StoryState = Fixture.GetStoryState();
-	if (!TestNotNull(TEXT("Character should spawn"), Character) ||
-		!TestNotNull(TEXT("Story state subsystem should exist"), StoryState))
-	{
-		return false;
-	}
-
-	UBalhwajeomTutorialFlow* Flow = NewObject<UBalhwajeomTutorialFlow>();
-	FBalhwajeomTutorialStep Step;
-	Step.StepID = TEXT("Dim");
-	Step.DimMode = EBalhwajeomTutorialDimMode::Always;
-	Step.DimOpacity = 0.5f;
-	Step.HintTarget = EBalhwajeomTutorialHintTarget::PhotoCameraIcon;
-	Flow->Steps.Add(Step);
-
-	ABalhwajeomTutorialDirector* Director = Fixture.SpawnDirector(Flow);
-	if (!TestNotNull(TEXT("Director should spawn"), Director))
-	{
-		return false;
-	}
-
-	Director->StartFlow();
-
-	TestEqual(TEXT("An Always step dims at its authored opacity"),
-		ABalhwajeomTutorialDirector::GetTutorialDimOpacity(Character), 0.5f);
-	TestTrue(TEXT("The step's hint target is reported"),
-		ABalhwajeomTutorialDirector::GetTutorialHintTarget(Character) ==
-			EBalhwajeomTutorialHintTarget::PhotoCameraIcon);
-
-	// Entering a mode that owns the whole screen must clear the dim regardless of the step,
-	// so a stalled director can never leave a dim hanging over camera mode or the tablet.
-	StoryState->SetPlayerModeTag(BalhwajeomGameplayTags::Runtime_Player_Mode_PhotoCamera);
-	TestEqual(TEXT("Photo camera mode suppresses the dim"),
-		ABalhwajeomTutorialDirector::GetTutorialDimOpacity(Character), 0.0f);
-	TestTrue(TEXT("Photo camera mode suppresses the icon highlight"),
-		ABalhwajeomTutorialDirector::GetTutorialHintTarget(Character) ==
-			EBalhwajeomTutorialHintTarget::None);
-
-	StoryState->SetPlayerModeTag(BalhwajeomGameplayTags::Runtime_Player_Mode_Tablet);
-	TestEqual(TEXT("Tablet mode suppresses the dim"),
-		ABalhwajeomTutorialDirector::GetTutorialDimOpacity(Character), 0.0f);
-
-	StoryState->SetPlayerModeTag(BalhwajeomGameplayTags::Runtime_Player_Mode_Exploration);
-	TestEqual(TEXT("Returning to exploration restores the dim"),
-		ABalhwajeomTutorialDirector::GetTutorialDimOpacity(Character), 0.5f);
-
-	Director->AbortFlow();
-	TestEqual(TEXT("No active step means no dim"),
-		ABalhwajeomTutorialDirector::GetTutorialDimOpacity(Character), 0.0f);
-
-	return true;
-}
-
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FTutorialNoDirectorIsSafeTest,
 	"Balhwajeom.Tutorial.Director.NoDirectorIsSafe",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -660,15 +597,6 @@ bool FTutorialNoDirectorIsSafeTest::RunTest(const FString& Parameters)
 	// Every level without a director goes down this path, including the whole main game.
 	TestNull(TEXT("No director is found in a level without one"),
 		ABalhwajeomTutorialDirector::GetTutorialDirector(Character));
-	TestEqual(TEXT("No director means no dim"),
-		ABalhwajeomTutorialDirector::GetTutorialDimOpacity(Character), 0.0f);
-	// Presenters multiply by the pulse unconditionally, so a level with no tutorial must
-	// get full brightness back rather than a blink or a zero.
-	TestEqual(TEXT("No director means no blink"),
-		ABalhwajeomTutorialDirector::GetTutorialHighlightPulse(Character), 1.0f);
-	TestTrue(TEXT("No director means no highlight"),
-		ABalhwajeomTutorialDirector::GetTutorialHintTarget(Character) ==
-			EBalhwajeomTutorialHintTarget::None);
 
 	return true;
 }
@@ -711,52 +639,5 @@ bool FTutorialEvidenceStateTagTest::RunTest(const FString& Parameters)
 
 	return true;
 }
-
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FTutorialHighlightPulseTest,
-	"Balhwajeom.Tutorial.HighlightPulse",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FTutorialHighlightPulseTest::RunTest(const FString& Parameters)
-{
-	using FDirector = ABalhwajeomTutorialDirector;
-
-	const float Rate = 1.0f;
-	const float Min = 0.0f;
-	const float Max = 1.0f;
-
-	// The icon must be bright the instant the step starts, or the first thing the player
-	// sees is the highlight already faded out.
-	TestEqual(TEXT("The pulse starts bright"),
-		FDirector::CalculatePulseOpacity(0.0f, Rate, Min, Max), Max, KINDA_SMALL_NUMBER);
-	TestEqual(TEXT("Half a cycle is the dark end"),
-		FDirector::CalculatePulseOpacity(0.5f, Rate, Min, Max), Min, KINDA_SMALL_NUMBER);
-	TestEqual(TEXT("A full cycle returns to bright"),
-		FDirector::CalculatePulseOpacity(1.0f, Rate, Min, Max), Max, KINDA_SMALL_NUMBER);
-
-	// The point of the effect is that it actually changes; a constant value would read
-	// as a plain highlight rather than a blinking one.
-	const float Quarter = FDirector::CalculatePulseOpacity(0.25f, Rate, Min, Max);
-	TestTrue(TEXT("A quarter cycle sits between the two ends"),
-		Quarter > Min + KINDA_SMALL_NUMBER && Quarter < Max - KINDA_SMALL_NUMBER);
-
-	// Authoring mistakes should degrade to something visible, never to an invisible icon.
-	TestEqual(TEXT("A swapped min/max still starts at the brighter value"),
-		FDirector::CalculatePulseOpacity(0.0f, Rate, 1.0f, 0.25f), 1.0f, KINDA_SMALL_NUMBER);
-	TestEqual(TEXT("A zero rate holds the icon fully bright"),
-		FDirector::CalculatePulseOpacity(3.7f, 0.0f, Min, Max), Max, KINDA_SMALL_NUMBER);
-
-	for (const float Seconds : { 0.0f, 0.13f, 0.5f, 0.77f, 1.0f, 12.3f })
-	{
-		const float Value = FDirector::CalculatePulseOpacity(Seconds, 1.7f, 0.2f, 0.9f);
-		TestTrue(
-			FString::Printf(TEXT("t=%.2f stays inside the authored range"), Seconds),
-			Value >= 0.2f - KINDA_SMALL_NUMBER && Value <= 0.9f + KINDA_SMALL_NUMBER);
-	}
-
-	return true;
-}
-
 
 #endif // WITH_DEV_AUTOMATION_TESTS

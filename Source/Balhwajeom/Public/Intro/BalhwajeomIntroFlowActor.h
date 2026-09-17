@@ -120,6 +120,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Timing", meta = (ClampMin = "0.0", Units = "s"))
 	float TitleStartRevealFadeDuration = 0.2f;
 
+	/** Cuts the TitleStart clip short after this many seconds instead of waiting for its own
+	 * OnEndReached (the authored clip may run longer than this). 0 disables the cutoff and lets the
+	 * clip play to its full length as before. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Timing", meta = (ClampMin = "0.0", Units = "s"))
+	float TitleStartCutoffDuration = 2.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Intro|Timing", meta = (ClampMin = "0.0", Units = "s"))
 	float BGMFadeDuration = 0.8f;
 
@@ -184,6 +190,10 @@ private:
 	UFUNCTION()
 	void HandleMediaEndReached();
 
+	/** Bound to a timer started in HandleMediaOpened (TitleStart branch only); ends the clip early at
+	 * TitleStartCutoffDuration instead of letting it play to its own OnEndReached. */
+	void HandleTitleStartCutoff();
+
 	UFUNCTION()
 	void HandleSkipRequested();
 
@@ -238,4 +248,7 @@ private:
 
 	/** Runs TriggerEndingSequence() after EndingAutoTriggerDelay once every statement is solved. */
 	FTimerHandle EndingAutoTriggerTimerHandle;
+
+	/** Runs HandleTitleStartCutoff() after TitleStartCutoffDuration once the TitleStart clip starts playing. */
+	FTimerHandle TitleStartCutoffTimerHandle;
 };

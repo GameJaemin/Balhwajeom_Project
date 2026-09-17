@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "GameplayTagContainer.h"
+#include "Interaction/GateDoorLockedFeedback.h"
 #include "Interaction/PlayerInteractionTypes.h"
 #include "BalhwajeomGateDoorActor.generated.h"
 
@@ -45,6 +46,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Gate Door")
 	UStaticMeshComponent* GetDoorMesh() const { return DoorMesh; }
 
+	const TArray<FGateDoorLockedFeedbackStage>& GetLockedFeedbackStages() const
+	{
+		return LockedFeedbackStages;
+	}
+
 	/** Label for the current lock/open state. Exposed so tests do not need a widget. */
 	UFUNCTION(BlueprintPure, Category = "Gate Door")
 	FText ResolveCurrentLabel() const;
@@ -67,9 +73,14 @@ protected:
 	void HandleLockedInteractionRequested();
 
 	UFUNCTION()
+	void AdvanceLockedFeedbackFade();
+
+	void BeginLockedFeedbackFade();
 	void HideLockedFeedback();
 
 	TSubclassOf<UUserWidget> ResolveLockedFeedbackWidgetClass() const;
+	FText ResolveLockedFeedbackMessage() const;
+	void ApplyLockedFeedbackMessage(const FText& Message);
 	void ApplyInspectionDistanceState(EPlayerInspectionDistanceState DistanceState);
 	void SetInspectionLabel(const FText& LabelText, bool bVisible);
 	void RefreshLabelForLockState();
@@ -107,9 +118,22 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback")
 	TSubclassOf<UUserWidget> LockedFeedbackWidgetClass;
 
+	/** Ordered guidance. The first entry whose required tags are incomplete is shown. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback")
+	TArray<FGateDoorLockedFeedbackStage> LockedFeedbackStages;
+
+	/** How long the message stays fully opaque, i.e. excluding the two fades around it. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback",
 		meta = (ClampMin = "0.1", UIMin = "0.1", Units = "s"))
 	float LockedFeedbackDisplayDuration = 2.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback",
+		meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	float LockedFeedbackFadeInDuration = 0.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback",
+		meta = (ClampMin = "0.0", UIMin = "0.0", Units = "s"))
+	float LockedFeedbackFadeOutDuration = 0.4f;
 
 	/** Above the tutorial dim and interaction prompt, below modal screens. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gate Door|Locked Feedback")
@@ -130,5 +154,8 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UUserWidget> LockedFeedbackWidget;
 
-	FTimerHandle LockedFeedbackTimerHandle;
+	/** Seconds into the current fade-in/hold/fade-out cycle. */
+	float LockedFeedbackElapsedSeconds = 0.0f;
+
+	FTimerHandle LockedFeedbackFadeTimerHandle;
 };

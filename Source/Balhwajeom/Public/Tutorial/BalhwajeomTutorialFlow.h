@@ -6,39 +6,6 @@
 #include "BalhwajeomTutorialFlow.generated.h"
 
 
-/** HUD element a tutorial step asks the tutorial focus layer to raise above the dim. */
-UENUM(BlueprintType)
-enum class EBalhwajeomTutorialHintTarget : uint8
-{
-	/** Nothing pulses. The [F] prompt still stays readable because of its ZOrder. */
-	None,
-	PhotoCameraIcon,
-	TabletIcon,
-
-	/** The [F] interaction prompt itself, which only appears while looking at a target. */
-	InteractPrompt
-};
-
-
-/** How a tutorial step darkens the screen. */
-UENUM(BlueprintType)
-enum class EBalhwajeomTutorialDimMode : uint8
-{
-	/** No dim. */
-	Off,
-
-	/** Dim for the whole step. Use this to point at a HUD icon. */
-	Always,
-
-	/**
-	 * Dim only while the [F] interaction prompt is faded in, and exactly as much.
-	 * The prompt appears only when the player is looking at a close, interactable
-	 * target, so this is the "highlight what I am looking at" mode.
-	 */
-	FollowInteractPrompt
-};
-
-
 USTRUCT(BlueprintType)
 struct BALHWAJEOM_API FBalhwajeomTutorialStep
 {
@@ -98,24 +65,6 @@ struct BALHWAJEOM_API FBalhwajeomTutorialStep
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Step",
 		meta = (ClampMin = "0.0", Units = "s"))
 	float AutoAdvanceAfterSeconds = 0.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Step|Presentation")
-	EBalhwajeomTutorialDimMode DimMode = EBalhwajeomTutorialDimMode::Off;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Step|Presentation")
-	EBalhwajeomTutorialHintTarget HintTarget = EBalhwajeomTutorialHintTarget::None;
-
-	/**
-	 * Optional line shown next to HintTarget's highlighted icon, for example explaining a
-	 * key. Empty shows nothing, matching every existing step (icon-only, no text).
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Step|Presentation")
-	FText HintMessage;
-
-	/** Dim strength at full opacity. FollowInteractPrompt scales this by the prompt's alpha. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Tutorial Step|Presentation",
-		meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0"))
-	float DimOpacity = 0.65f;
 };
 
 

@@ -17,6 +17,7 @@ class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class UTexture2D;
 class USoundBase;
+struct FScreenshotCaptureDiskFallbackTestAccessor;
 
 enum class EBalhwajeomPhotoCaptureResult : uint8
 {
@@ -74,6 +75,8 @@ class BALHWAJEOM_API UBalhwajeomPhotoCameraComponent
     : public UActorComponent
 {
     GENERATED_BODY()
+
+    friend struct FScreenshotCaptureDiskFallbackTestAccessor;
 
 public:
     UBalhwajeomPhotoCameraComponent();
