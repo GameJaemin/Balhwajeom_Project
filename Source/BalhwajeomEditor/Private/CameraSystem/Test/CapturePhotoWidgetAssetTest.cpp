@@ -11,7 +11,7 @@
 #include "Components/RetainerBox.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
-#include "Components/VerticalBox.h"
+#include "Components/HorizontalBox.h"
 #include "Components/WrapBox.h"
 #include "MultiShadowText.h"
 #include "WidgetBlueprint.h"
@@ -98,7 +98,7 @@ bool FCapturePhotoWidgetAssetTest::RunTest(const FString& Parameters)
 	TestNotNull(TEXT("analysis sentence builder exists"),
 		Cast<UWrapBox>(Blueprint->WidgetTree->FindWidget(TEXT("SentenceBuilder"))));
 	TestNotNull(TEXT("keyword list exists"),
-		Cast<UVerticalBox>(Blueprint->WidgetTree->FindWidget(TEXT("KeywordList"))));
+		Cast<UHorizontalBox>(Blueprint->WidgetTree->FindWidget(TEXT("KeywordList"))));
 	const UCanvasPanel* Card = Cast<UCanvasPanel>(
 		Blueprint->WidgetTree->FindWidget(TEXT("CardRoot")));
 	const UCanvasPanelSlot* CardSlot = Card ? Cast<UCanvasPanelSlot>(Card->Slot) : nullptr;
@@ -118,6 +118,33 @@ bool FCapturePhotoWidgetAssetTest::RunTest(const FString& Parameters)
 		CardVisualRoot && SentenceBackground && SentenceBackground->GetParent() == CardVisualRoot);
 	TestTrue(TEXT("keywords remain outside the card composite"),
 		Card && KeywordList && KeywordList->GetParent() == Card);
+
+	// The keyword row is authored onto the bottom centre of the captured photo. These
+	// stay asserted because the row is a caption for the photo, not free-floating card
+	// decoration, and a hand-drag in the designer would silently detach the two.
+	const UCanvasPanelSlot* PhotoSlot = CapturedPhoto
+		? Cast<UCanvasPanelSlot>(CapturedPhoto->Slot)
+		: nullptr;
+	const UCanvasPanelSlot* KeywordSlot = KeywordList
+		? Cast<UCanvasPanelSlot>(KeywordList->Slot)
+		: nullptr;
+	if (TestNotNull(TEXT("captured photo sits on a canvas slot"), PhotoSlot) &&
+		TestNotNull(TEXT("keyword row sits on a canvas slot"), KeywordSlot))
+	{
+		TestTrue(TEXT("keyword row auto-sizes to its pills"), KeywordSlot->GetAutoSize());
+		TestTrue(TEXT("keyword row is aligned from its bottom centre"),
+			KeywordSlot->GetAlignment().Equals(FVector2D(0.5f, 1.0f)));
+
+		constexpr float ExpectedBottomMargin = 18.0f;
+		const FVector2D PhotoPosition = PhotoSlot->GetPosition();
+		const FVector2D PhotoSize = PhotoSlot->GetSize();
+		const FVector2D ExpectedKeywordPosition(
+			PhotoPosition.X + PhotoSize.X * 0.5f,
+			PhotoPosition.Y + PhotoSize.Y - ExpectedBottomMargin);
+		TestTrue(
+			TEXT("keyword row is centred just above the photo's bottom edge"),
+			KeywordSlot->GetPosition().Equals(ExpectedKeywordPosition, 0.5f));
+	}
 
 	return !HasAnyErrors();
 }

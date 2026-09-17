@@ -3696,12 +3696,26 @@ bool UTabletWidgetBlueprintLibrary::CreateCapturePhotoWidgetBlueprint()
 	SentenceBuilderSlot->SetHorizontalAlignment(HAlign_Center);
 	SentenceBuilderSlot->SetVerticalAlignment(VAlign_Center);
 
-	UVerticalBox* Keywords = Tree->ConstructWidget<UVerticalBox>(
-		UVerticalBox::StaticClass(), TEXT("KeywordList"));
+	// Keywords read as a caption sitting on the photo, so they run left to right.
+	// A photo grants at most two words today; a UWrapBox would only be needed once
+	// a row can no longer fit the photo's width.
+	UHorizontalBox* Keywords = Tree->ConstructWidget<UHorizontalBox>(
+		UHorizontalBox::StaticClass(), TEXT("KeywordList"));
 	Keywords->bIsVariable = true;
 	UCanvasPanelSlot* KeywordsSlot = Card->AddChildToCanvas(Keywords);
-	KeywordsSlot->SetPosition(FVector2D(760.0f, 40.0f));
-	KeywordsSlot->SetSize(FVector2D(120.0f, 200.0f));
+
+	// Anchored to the bottom centre of the captured photo, read back from the photo's
+	// own slot so the row follows it if that rect is ever changed. Auto-size plus a
+	// bottom-centre alignment keeps the row centred for any number of keywords, with
+	// no width arithmetic here.
+	constexpr float KeywordBottomMargin = 18.0f;
+	const FVector2D PhotoRectPosition = PhotoSlot->GetPosition();
+	const FVector2D PhotoRectSize = PhotoSlot->GetSize();
+	KeywordsSlot->SetAutoSize(true);
+	KeywordsSlot->SetAlignment(FVector2D(0.5f, 1.0f));
+	KeywordsSlot->SetPosition(FVector2D(
+		PhotoRectPosition.X + PhotoRectSize.X * 0.5f,
+		PhotoRectPosition.Y + PhotoRectSize.Y - KeywordBottomMargin));
 	KeywordsSlot->SetZOrder(2);
 
 	// Invisible layout marker matching the TAB HUD position. Runtime animation uses

@@ -10,7 +10,7 @@ class UImage;
 class URetainerBox;
 class UTextBlock;
 class UTexture2D;
-class UVerticalBox;
+class UHorizontalBox;
 class UWrapBox;
 class UFont;
 class UWidget;
@@ -51,7 +51,7 @@ protected:
 	TObjectPtr<UWrapBox> SentenceBuilder;
 
 	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<UVerticalBox> KeywordList;
+	TObjectPtr<UHorizontalBox> KeywordList;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UCanvasPanel> CardRoot;
@@ -133,6 +133,11 @@ protected:
 	/** When set, each keyword pill uses this texture instead of KeywordBackgroundColor. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Keyword Style")
 	TObjectPtr<UTexture2D> KeywordBackgroundTexture;
+
+	/** Horizontal gap between adjacent keyword pills. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Keyword Style",
+		meta = (ClampMin = "0.0"))
+	float KeywordGap = 7.0f;
 
 	/** Background used when the captured photo has a keyword-analysis sentence. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Capture Photo|Theme")
