@@ -86,8 +86,12 @@ bool FDiaryInteractionAssetsTest::RunTest(const FString& Parameters)
 	const FEvidenceStateDefinition* OpenState =
 		EvidenceStates->FindRow<FEvidenceStateDefinition>(
 			TEXT("STATE_01_004_OPEN"), TEXT("DiaryInteractionAssetsTest"));
+	const FEvidenceStateDefinition* MemoryState =
+		EvidenceStates->FindRow<FEvidenceStateDefinition>(
+			TEXT("STATE_01_004_MEMORY"), TEXT("DiaryInteractionAssetsTest"));
 	if (!TestNotNull(TEXT("closed diary state exists"), ClosedState) ||
-		!TestNotNull(TEXT("open diary state exists"), OpenState))
+		!TestNotNull(TEXT("open diary state exists"), OpenState) ||
+		!TestNotNull(TEXT("memory diary state exists"), MemoryState))
 	{
 		return false;
 	}
@@ -102,6 +106,10 @@ bool FDiaryInteractionAssetsTest::RunTest(const FString& Parameters)
 		ClosedState->GrantedWordIDs.Num(), 2);
 	TestTrue(TEXT("closed diary modal class resolves"),
 		ClosedState->InteractionWidgetClass.LoadSynchronous() != nullptr);
+	TestTrue(TEXT("closed diary defers its world story until the modal closes"),
+		ClosedState->bPlayWorldStoryAfterPresentation);
+	TestEqual(TEXT("closed diary can resolve the shared story photo"),
+		ClosedState->PhotoID, FName(TEXT("PHOTO_01_004")));
 
 	TestEqual(TEXT("open diary remains repeatable"), OpenState->InteractionBehavior,
 		EEvidenceInteractionBehavior::Repeatable);
@@ -109,6 +117,22 @@ bool FDiaryInteractionAssetsTest::RunTest(const FString& Parameters)
 		EEvidenceInteractionPresentation::ModalWidget);
 	TestTrue(TEXT("open diary does not grant duplicate keywords"),
 		OpenState->GrantedWordIDs.IsEmpty());
+	TestTrue(TEXT("open diary defers its world story until the modal closes"),
+		OpenState->bPlayWorldStoryAfterPresentation);
+
+	TestEqual(TEXT("memory diary also opens the modal"),
+		MemoryState->InteractionPresentation,
+		EEvidenceInteractionPresentation::ModalWidget);
+	TestTrue(TEXT("memory diary uses the same modal class"),
+		MemoryState->InteractionWidgetClass.LoadSynchronous() ==
+		ClosedState->InteractionWidgetClass.LoadSynchronous());
+	TestTrue(TEXT("memory diary plays its world story only after the modal closes"),
+		MemoryState->bPlayWorldStoryAfterPresentation);
+	TestEqual(TEXT("memory diary remains repeatable"),
+		MemoryState->InteractionBehavior,
+		EEvidenceInteractionBehavior::Repeatable);
+	TestEqual(TEXT("memory diary resolves the shared story photo"),
+		MemoryState->PhotoID, FName(TEXT("PHOTO_01_004")));
 	return !HasAnyErrors();
 }
 

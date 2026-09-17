@@ -1152,6 +1152,8 @@ bool UBalhwajeomInvestigationSubsystem::BeginEvidenceInteraction(
 	OutViewData.InteractionText = StateDefinition->InteractionText;
 	OutViewData.KeywordDocumentID = StateDefinition->KeywordDocumentID;
 	OutViewData.InteractionWidgetClass = StateDefinition->InteractionWidgetClass;
+	OutViewData.bPlayWorldStoryAfterPresentation =
+		StateDefinition->bPlayWorldStoryAfterPresentation;
 	return true;
 }
 

@@ -224,6 +224,8 @@ void ABalhwajeomCameraPlayerController::CloseInteractionModal()
 		InputMode.SetConsumeCaptureMouseDown(false);
 		SetInputMode(InputMode);
 	}
+
+	OnInteractionModalClosed.Broadcast();
 }
 
 void ABalhwajeomCameraPlayerController::HandleInteractionModalCloseRequested()

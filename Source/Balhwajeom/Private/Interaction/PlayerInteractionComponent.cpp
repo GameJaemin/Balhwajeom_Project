@@ -463,10 +463,12 @@ bool UPlayerInteractionComponent::RequestInspect()
 
 	if (HasFocusedItemInspection())
 	{
-		if (Cast<ABalhwajeomEvidenceActor>(FocusedItemActor.Get()) && IsValid(FocusedInspection))
+		if (ABalhwajeomEvidenceActor* Evidence =
+			Cast<ABalhwajeomEvidenceActor>(FocusedItemActor.Get());
+			Evidence && IsValid(FocusedInspection))
 		{
 			FText InspectionText;
-			if (TryInspect(InspectionText))
+			if (Evidence->RequestInvestigationInteractionForItemInspection(InspectionText))
 			{
 				if (!InspectionText.IsEmpty())
 				{
@@ -474,14 +476,14 @@ bool UPlayerInteractionComponent::RequestInspect()
 					RestoreGameInputAfterInspectionMessage(this);
 				}
 
-				// Reaching this branch already means the actor explicitly opted into item
-				// inspection (HasFocusedItemInspection). Complete its investigation-side
-				// progression first, then open the 3D inspector with the same input. Returning
-				// here used to make configured evidence behave differently depending on whether
-				// its ObjectID had a valid investigation interaction.
-				return BalhwajeomItemInspection::TryInspect(
+				// Complete the investigation-side action first, but defer its world story until
+				// the rotating inspector has fully closed. A state-authored modal (the diary)
+				// wins over the inspector and owns the same deferred completion point.
+				const bool bInspectionOpened = BalhwajeomItemInspection::TryInspect(
 					FocusedItemActor.Get(),
 					Cast<APawn>(GetOwner()));
+				Evidence->ResolveDeferredItemInspection(bInspectionOpened);
+				return true;
 			}
 		}
 		return BalhwajeomItemInspection::TryInspect(FocusedItemActor.Get(), Cast<APawn>(GetOwner()));

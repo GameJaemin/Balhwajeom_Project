@@ -97,6 +97,9 @@ struct BALHWAJEOM_API FEvidenceInteractionViewData
 
 	UPROPERTY(BlueprintReadOnly, Category = "Investigation|Interaction")
 	TSoftClassPtr<UUserWidget> InteractionWidgetClass;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Investigation|Interaction")
+	bool bPlayWorldStoryAfterPresentation = false;
 };
 
 USTRUCT(BlueprintType)

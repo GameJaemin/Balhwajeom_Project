@@ -14,6 +14,7 @@
 #include "Interaction/InspectionComponent.h"
 #include "ItemInspection/JMInspectableComponent.h"
 #include "ItemInspection/JMItemInspectionData.h"
+#include "ItemInspection/JMItemInspectionSubsystem.h"
 #include "Blueprint/UserWidget.h"
 #include "UObject/ConstructorHelpers.h"
 #include "CameraSystem/BalhwajeomEvidenceFocusGuideLayout.h"
@@ -28,6 +29,7 @@
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
 #include "Story/StoryStateSubsystem.h"
 #include "Engine/GameInstance.h"
+#include "Engine/LocalPlayer.h"
 #include "Engine/Texture2D.h"
 #include "Environment/BalhwajeomCeilingFrameSinkComponent.h"
 
@@ -438,6 +440,7 @@ void ABalhwajeomEvidenceActor::ConfigureItemInspection()
 
 void ABalhwajeomEvidenceActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	ClearQueuedWorldStory();
 	if (UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem())
 	{
 		Investigation->OnEvidenceStateChanged.RemoveDynamic(
@@ -472,6 +475,23 @@ void ABalhwajeomEvidenceActor::ConfigureInvestigationObject(FName InObjectID)
 
 bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplayText)
 {
+	return RequestInvestigationInteractionInternal(
+		OutDisplayText,
+		/*bDeferWorldStoryForItemInspection*/ false);
+}
+
+bool ABalhwajeomEvidenceActor::RequestInvestigationInteractionForItemInspection(
+	FText& OutDisplayText)
+{
+	return RequestInvestigationInteractionInternal(
+		OutDisplayText,
+		/*bDeferWorldStoryForItemInspection*/ true);
+}
+
+bool ABalhwajeomEvidenceActor::RequestInvestigationInteractionInternal(
+	FText& OutDisplayText,
+	const bool bDeferWorldStoryForItemInspection)
+{
 	OutDisplayText = FText::GetEmpty();
 	if (!bProgressionAvailable || bProgressionCleared || bProgressionRemovalPending)
 	{
@@ -504,6 +524,7 @@ bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplay
 	ABalhwajeomCameraPlayerController* ModalController = nullptr;
 	TSubclassOf<UUserWidget> ModalContentClass;
 	FText ModalDocumentText = ViewData.InteractionText;
+	bool bModalOpened = false;
 	if (ViewData.Presentation == EEvidenceInteractionPresentation::ModalWidget)
 	{
 		ModalController = Cast<ABalhwajeomCameraPlayerController>(
@@ -569,8 +590,9 @@ bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplay
 				NewlyGrantedKeywordTexts.Add(Word.DisplayWord);
 			}
 		}
-		if (!ModalController->ShowInteractionModal(
-			ModalContentClass, ModalDocumentText, NewlyGrantedKeywordTexts))
+		bModalOpened = ModalController->ShowInteractionModal(
+			ModalContentClass, ModalDocumentText, NewlyGrantedKeywordTexts);
+		if (!bModalOpened)
 		{
 			UE_LOG(LogTemp, Error,
 				TEXT("%s: interaction completed but state '%s' failed to open its modal."),
@@ -578,12 +600,133 @@ bool ABalhwajeomEvidenceActor::RequestInvestigationInteraction(FText& OutDisplay
 		}
 	}
 
-	if (ViewData.Presentation == EEvidenceInteractionPresentation::WorldStory)
+	const bool bShouldPlayWorldStory =
+		ViewData.Presentation == EEvidenceInteractionPresentation::WorldStory ||
+		ViewData.bPlayWorldStoryAfterPresentation;
+	if (bShouldPlayWorldStory)
 	{
-		// Uses the state we interacted with, which matters when the interaction also changed state.
-		PlayWorldStoryForState(ViewData.StateID);
+		// A modal may change state before it opens (the closed diary becomes open). Follow-up
+		// stories use that resulting state, while a plain WorldStory preserves the state that
+		// was actually interacted with.
+		const FName StoryStateID = ViewData.bPlayWorldStoryAfterPresentation
+			? CurrentStateID
+			: ViewData.StateID;
+		if (bModalOpened)
+		{
+			QueueWorldStory(StoryStateID);
+			bQueuedStoryWaitsForModal = true;
+			ModalController->OnInteractionModalClosed.RemoveAll(this);
+			ModalController->OnInteractionModalClosed.AddUObject(
+				this, &ThisClass::HandleInteractionModalClosed);
+		}
+		else if (bDeferWorldStoryForItemInspection)
+		{
+			QueueWorldStory(StoryStateID);
+		}
+		else
+		{
+			PlayWorldStoryForState(StoryStateID);
+		}
 	}
 	return true;
+}
+
+void ABalhwajeomEvidenceActor::QueueWorldStory(const FName StateID)
+{
+	ClearQueuedWorldStory();
+	QueuedWorldStoryStateID = StateID;
+}
+
+void ABalhwajeomEvidenceActor::ResolveDeferredItemInspection(
+	const bool bInspectionOpened)
+{
+	if (QueuedWorldStoryStateID.IsNone() || bQueuedStoryWaitsForModal)
+	{
+		return;
+	}
+
+	if (!bInspectionOpened)
+	{
+		PlayQueuedWorldStory();
+		return;
+	}
+
+	const APlayerController* PlayerController = GetWorld()
+		? GetWorld()->GetFirstPlayerController()
+		: nullptr;
+	const ULocalPlayer* LocalPlayer = PlayerController
+		? PlayerController->GetLocalPlayer()
+		: nullptr;
+	QueuedStoryInspectionSubsystem = LocalPlayer
+		? LocalPlayer->GetSubsystem<UJMItemInspectionSubsystem>()
+		: nullptr;
+	if (!QueuedStoryInspectionSubsystem)
+	{
+		PlayQueuedWorldStory();
+		return;
+	}
+
+	QueuedStoryInspectionSubsystem->OnInspectionClosed.RemoveDynamic(
+		this, &ThisClass::HandleItemInspectionClosed);
+	QueuedStoryInspectionSubsystem->OnInspectionClosed.AddUniqueDynamic(
+		this, &ThisClass::HandleItemInspectionClosed);
+}
+
+void ABalhwajeomEvidenceActor::HandleInteractionModalClosed()
+{
+	bQueuedStoryWaitsForModal = false;
+	PlayQueuedWorldStory();
+}
+
+void ABalhwajeomEvidenceActor::HandleItemInspectionClosed(
+	const EJMItemInspectionCloseReason Reason)
+{
+	if (ShouldPlayWorldStoryAfterInspectionClose(Reason))
+	{
+		PlayQueuedWorldStory();
+		return;
+	}
+
+	// A failed/replaced session or a world teardown is not a completed player presentation.
+	ClearQueuedWorldStory();
+}
+
+bool ABalhwajeomEvidenceActor::ShouldPlayWorldStoryAfterInspectionClose(
+	const EJMItemInspectionCloseReason Reason)
+{
+	return Reason == EJMItemInspectionCloseReason::User ||
+		Reason == EJMItemInspectionCloseReason::CloseButton ||
+		Reason == EJMItemInspectionCloseReason::ExternalRequest;
+}
+
+void ABalhwajeomEvidenceActor::PlayQueuedWorldStory()
+{
+	const FName StoryStateID = QueuedWorldStoryStateID;
+	ClearQueuedWorldStory();
+	if (!StoryStateID.IsNone())
+	{
+		PlayWorldStoryForState(StoryStateID);
+	}
+}
+
+void ABalhwajeomEvidenceActor::ClearQueuedWorldStory()
+{
+	if (QueuedStoryInspectionSubsystem)
+	{
+		QueuedStoryInspectionSubsystem->OnInspectionClosed.RemoveDynamic(
+			this, &ThisClass::HandleItemInspectionClosed);
+	}
+	QueuedStoryInspectionSubsystem = nullptr;
+
+	if (ABalhwajeomCameraPlayerController* ModalController =
+		Cast<ABalhwajeomCameraPlayerController>(
+			GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr))
+	{
+		ModalController->OnInteractionModalClosed.RemoveAll(this);
+	}
+
+	QueuedWorldStoryStateID = NAME_None;
+	bQueuedStoryWaitsForModal = false;
 }
 
 void ABalhwajeomEvidenceActor::LogBlockedWorldStory(const TCHAR* Reason) const
@@ -609,6 +752,7 @@ bool ABalhwajeomEvidenceActor::PlayWorldStory()
 
 void ABalhwajeomEvidenceActor::StopWorldStory()
 {
+	ClearQueuedWorldStory();
 	if (ActiveWorldStory.IsValid())
 	{
 		ActiveWorldStory->StopStory();
