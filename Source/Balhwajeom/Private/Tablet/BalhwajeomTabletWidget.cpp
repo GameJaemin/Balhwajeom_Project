@@ -1480,6 +1480,15 @@ void UBalhwajeomTabletWidget::BuildPhotoSlots(const FSentenceDefinition& Sentenc
 void UBalhwajeomTabletWidget::HandleSentenceBlankDropped(
 	const int32 SlotIndex, const FName WordID, const int32 OriginSlotIndex)
 {
+	// The solved sentence is still on screen through the Flash/Hold stages (its candidate lists are
+	// hidden, but the blanks themselves are live widgets until Converge replaces them), so this is
+	// reachable while the success transition runs -- and acting on it would strip the flashed word
+	// back out and undo the flash styling, which Converge would then copy into its character grid.
+	// Same reasoning as ValidateActivePuzzle's own guard.
+	if (PuzzleSuccessStage != EPuzzleSuccessStage::Inactive)
+	{
+		return;
+	}
 	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
 	FSentenceDefinition Sentence;
 	if (!Investigation || !Investigation->GetSentenceDefinition(ActiveSentenceID, Sentence) ||
@@ -1560,6 +1569,11 @@ void UBalhwajeomTabletWidget::HandleSentenceBlankDropped(
 
 void UBalhwajeomTabletWidget::HandleWordChipClicked(const FName WordID)
 {
+	// Ignored while a success transition is running -- see HandleSentenceBlankDropped.
+	if (PuzzleSuccessStage != EPuzzleSuccessStage::Inactive)
+	{
+		return;
+	}
 	if (WordID.IsNone() || ActiveBlanksBySlot.IsEmpty())
 	{
 		// No active blank puzzle to place it into (e.g. the folder's plain acquired-word list).
@@ -1584,6 +1598,11 @@ void UBalhwajeomTabletWidget::HandleWordChipClicked(const FName WordID)
 
 void UBalhwajeomTabletWidget::HandleSentenceBlankClicked(const int32 SlotIndex)
 {
+	// Ignored while a success transition is running -- see HandleSentenceBlankDropped.
+	if (PuzzleSuccessStage != EPuzzleSuccessStage::Inactive)
+	{
+		return;
+	}
 	UBalhwajeomTabletSentenceBlank* Blank = ActiveBlanksBySlot.FindRef(SlotIndex);
 	if (!Blank || !Blank->IsFilled())
 	{
@@ -1614,6 +1633,11 @@ void UBalhwajeomTabletWidget::HandleSentenceBlankClicked(const int32 SlotIndex)
 
 void UBalhwajeomTabletWidget::HandlePhotoSlotDropped(const int32 SlotIndex, const FName PhotoID)
 {
+	// Ignored while a success transition is running -- see HandleSentenceBlankDropped.
+	if (PuzzleSuccessStage != EPuzzleSuccessStage::Inactive)
+	{
+		return;
+	}
 	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
 	FSentenceDefinition Sentence;
 	if (!Investigation || !Investigation->GetSentenceDefinition(ActiveSentenceID, Sentence) ||
@@ -1674,6 +1698,11 @@ void UBalhwajeomTabletWidget::HandlePhotoSlotDropped(const int32 SlotIndex, cons
 
 void UBalhwajeomTabletWidget::HandlePhotoSlotClicked(const int32 SlotIndex)
 {
+	// Ignored while a success transition is running -- see HandleSentenceBlankDropped.
+	if (PuzzleSuccessStage != EPuzzleSuccessStage::Inactive)
+	{
+		return;
+	}
 	OpenPhotoPicker(SlotIndex);
 }
 
