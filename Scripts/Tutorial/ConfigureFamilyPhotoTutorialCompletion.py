@@ -91,12 +91,9 @@ def configure_flow():
         "complete_when_all_tags", tag_container(FAMILY_PHOTO_SOLVED_TAG)
     )
     analysis_step.set_editor_property("complete_when_any_tags", tag_container())
-    analysis_step.set_editor_property(
-        "dim_mode", unreal.BalhwajeomTutorialDimMode.ALWAYS
-    )
-    analysis_step.set_editor_property(
-        "hint_target", unreal.BalhwajeomTutorialHintTarget.TABLET_ICON
-    )
+    # The step's dim/hint presentation properties were removed from
+    # FBalhwajeomTutorialStep when the old tutorial staging was deleted, so this
+    # script only authors the step's identity and its completion condition.
 
     # The tablet must open while the analysis step is active, not after it finishes.
     done_step.set_editor_property("remove_on_enter", tag_container())
