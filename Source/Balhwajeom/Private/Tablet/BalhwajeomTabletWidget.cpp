@@ -1323,11 +1323,19 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 				SegmentText->SetText(FText::FromString(Lines[LineIndex]));
 				FSlateFontInfo Font = SegmentText->GetFont();
 				Font.Size = SegmentFontSize;
-				if (bStatementStyle)
+				// Only when the detail widget actually supplies one: assigning a null UFont leaves an
+				// invalid FSlateFontInfo, which Slate measures as zero-sized (every glyph then draws
+				// on top of the last, collapsing the whole sentence into an unreadable clump) instead
+				// of falling back to this UTextBlock's own Designer/default font.
+				if (bStatementStyle && StatementFont)
 				{
 					Font.FontObject = StatementFont;
 				}
 				SegmentText->SetFont(Font);
+				// UTextBlock defaults to a (1,1) drop shadow, which BuildRandomFadeCharacters clears
+				// on every character it builds -- leaving it on here made the whole sentence read
+				// visibly thinner the moment Converge swapped in that grid.
+				SegmentText->SetShadowOffset(FVector2D::ZeroVector);
 				SegmentText->SetColorAndOpacity(FSlateColor(
 					bStatementStyle ? FLinearColor::Black : FLinearColor::White));
 				ActiveSentenceSegments.Add(SegmentText);
@@ -1999,14 +2007,14 @@ void UBalhwajeomTabletWidget::PlayPuzzleSuccessTransition(
 	PuzzleSuccessStage = EPuzzleSuccessStage::Flash;
 	PuzzleSuccessStageElapsed = 0.0f;
 
-	// Gold flash for a solved photo-analysis puzzle, blue for a solved statement -- mirrors
+	// Gold flash for a solved photo-analysis puzzle; a solved statement keeps its own black text
+	// (the cue there is its blanks' boxes vanishing under SetSuccessStyle, not a colour change) -- mirrors
 	// SetPhotoPuzzleErrorStyle's red wrong-answer tint but for the correct case, and gives the two
 	// sentence types visually distinct "correct" cues. Held by NativeTick's Flash/Hold stages until
 	// BeginPuzzleConvergeStage explodes these same words into the random-fade character grid (which
 	// reads FlashColor back off these same widgets, so it doesn't need to be picked again there).
 	static const FLinearColor GoldFlashColor = FLinearColor::FromSRGBColor(FColor(255, 209, 102, 255));
-	static const FLinearColor BlueFlashColor = FLinearColor::FromSRGBColor(FColor(102, 178, 255, 255));
-	const FLinearColor FlashColor = bApplyAnalysisResultStyle ? GoldFlashColor : BlueFlashColor;
+	const FLinearColor FlashColor = bApplyAnalysisResultStyle ? GoldFlashColor : FLinearColor::Black;
 	for (const TObjectPtr<UTextBlock>& Segment : ActiveSentenceSegments)
 	{
 		if (Segment)
@@ -2068,7 +2076,10 @@ void UBalhwajeomTabletWidget::BeginPuzzleConvergeStage()
 		/*bStartVisible=*/true,
 		PuzzleSuccessConvergeDuration,
 		bLeftAligned,
-		LinePadding);
+		LinePadding,
+		// Matches BuildSentenceBuilder's own LineItemPadding (FMargin(2, 0) on every segment/blank
+		// slot), so the runs this grid rebuilds sit exactly where the puzzle text's pieces did.
+		/*RunPadding=*/2.0f);
 }
 
 void UBalhwajeomTabletWidget::TickPuzzleConvergeStage()
@@ -2121,7 +2132,12 @@ void UBalhwajeomTabletWidget::BeginResultRevealStage()
 		bLeftAligned,
 		// 0 here (unlike Converge's LinePadding): this grid hands off to TXT_PopupBody, which spaces
 		// its own lines by font metrics alone, not BuildSentenceBuilder's puzzle-specific LineSpacing.
-		/*LinePadding=*/0.0f);
+		/*LinePadding=*/0.0f,
+		// 0 for the same reason: ResultText has no blanks, so every line is a single run and
+		// Converge's 2px item gap would just inset the whole block 2px right of where the
+		// left-justified TXT_PopupBody draws the identical text -- which read as the finished
+		// sentence sliding left the moment BeginHandoffStage crossfaded to it.
+		/*RunPadding=*/0.0f);
 }
 
 void UBalhwajeomTabletWidget::TickResultRevealStage()
@@ -2225,7 +2241,8 @@ void UBalhwajeomTabletWidget::BuildRandomFadeCharacters(
 	const bool bStartVisible,
 	const float TotalWindow,
 	const bool bLeftAligned,
-	const float LinePadding)
+	const float LinePadding,
+	const float RunPadding)
 {
 	RandomFadeChars.Reset();
 	if (!WB_SentenceBuilder || !WidgetTree)
@@ -2334,13 +2351,31 @@ void UBalhwajeomTabletWidget::BuildRandomFadeCharacters(
 				// it once the blank's box disappears.
 				USizeBox* WordSizeBox = WidgetTree->ConstructWidget<USizeBox>();
 				WordSizeBox->SetMinDesiredWidth(PuzzleBlankMinWidth);
-				WordSizeBox->SetContent(RunBox);
+				if (USizeBoxSlot* WordSlot = Cast<USizeBoxSlot>(WordSizeBox->SetContent(RunBox)))
+				{
+					// USizeBoxSlot defaults to HAlign_Fill, which stretches RunBox across the whole
+					// 60px and leaves its Automatic character slots packed against the left edge --
+					// but the blank being replaced centred its word (Configure gives DisplayText
+					// ETextJustify::Center inside a Fill-aligned Border), so a word shorter than 60px
+					// visibly jumped left the instant Converge rebuilt it, opening a gap after it.
+					WordSlot->SetHorizontalAlignment(HAlign_Center);
+					// The same FMargin(4, 1) the blank's own Background Border put around its text, so
+					// a word wider than PuzzleBlankMinWidth keeps the exact width it had as a blank
+					// instead of shrinking by those 8px.
+					WordSlot->SetPadding(FMargin(4.0f, 1.0f));
+				}
 				RunWidget = WordSizeBox;
 			}
 			if (UHorizontalBoxSlot* RunSlot = LineBox->AddChildToHorizontalBox(RunWidget))
 			{
 				RunSlot->SetVerticalAlignment(VAlign_Center);
-				RunSlot->SetPadding(FMargin(2.0f, 0.0f));
+				// A statement blank has no SizeBox of its own (Configure roots it at Background), so
+				// there is nothing above to carry its Border's 4px horizontal padding -- fold it into
+				// the run's own padding here, or every word after it slides 8px left at the start of
+				// Converge. Photo-analysis blanks get it from WordSlot above instead.
+				const float RunHorizontalPadding =
+					(Run.bIsBlankWord && bLeftAligned) ? RunPadding + 4.0f : RunPadding;
+				RunSlot->SetPadding(FMargin(RunHorizontalPadding, 0.0f));
 				// Same Fill-by-default gotcha as CharSlot above -- keep every run at its own natural
 				// width instead of letting it stretch to share out whatever's left of LineBox.
 				RunSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
@@ -2573,7 +2608,12 @@ bool UBalhwajeomTabletWidget::ShowPopup(
 		if (bStatementDetail && ActiveDetailWidget)
 		{
 			FSlateFontInfo Font = TXT_PopupBody->GetFont();
-			Font.FontObject = ActiveDetailWidget->GetStatementTextFont();
+			// Guarded like BuildSentenceBuilder's segments: a null StatementTextFont would otherwise
+			// leave this an invalid (zero-measuring) font instead of keeping the authored one.
+			if (UFont* StatementFont = ActiveDetailWidget->GetStatementTextFont())
+			{
+				Font.FontObject = StatementFont;
+			}
 			Font.Size = ActiveDetailWidget->GetStatementTextFontSize();
 			TXT_PopupBody->SetFont(Font);
 		}
@@ -3157,7 +3197,8 @@ void UBalhwajeomTabletWordChip::Configure(
 		bStatementStyle ? FLinearColor::White : FLinearColor(0.96f, 0.91f, 0.82f, 1.0f)));
 	FSlateFontInfo Font = LabelText->GetFont();
 	Font.Size = bStatementStyle ? InStatementFontSize : 20;
-	if (bStatementStyle)
+	// Same null-font guard as BuildSentenceBuilder's segments.
+	if (bStatementStyle && InStatementFont)
 	{
 		Font.FontObject = InStatementFont;
 	}
@@ -3321,11 +3362,15 @@ void UBalhwajeomTabletSentenceBlank::Configure(
 	// 24 matches WBP_CapturePhoto's AnalysisSentenceFontSize (see BuildSentenceBuilder's
 	// SegmentFontSize) so a blank's filled keyword reads at the same size as its surrounding text.
 	Font.Size = bStatementStyle ? InStatementFontSize : 20;
-	if (bStatementStyle)
+	// Same null-font guard as BuildSentenceBuilder's segments.
+	if (bStatementStyle && InStatementFont)
 	{
 		Font.FontObject = InStatementFont;
 	}
 	DisplayText->SetFont(Font);
+	// Matches BuildSentenceBuilder's own segments and BuildRandomFadeCharacters' characters: no
+	// drop shadow, so a filled blank's word doesn't change weight when Converge rebuilds it.
+	DisplayText->SetShadowOffset(FVector2D::ZeroVector);
 	Background->SetContent(DisplayText);
 
 	if (bStatementStyle)
@@ -3386,8 +3431,8 @@ void UBalhwajeomTabletSentenceBlank::SetErrorStyle(const bool bInError)
 void UBalhwajeomTabletSentenceBlank::SetSuccessStyle(const bool bInSuccess, const FLinearColor& FlashColor)
 {
 	// FlashColor matches whatever UBalhwajeomTabletWidget::PlayPuzzleSuccessTransition picked for the
-	// surrounding sentence's segments (gold for a solved photo-analysis puzzle, blue for a solved
-	// statement).
+	// surrounding sentence's segments (gold for a solved photo-analysis puzzle, plain black for a
+	// solved statement, which reads on its own paper-white background).
 	// SetFilled always paints a filled blank's text black regardless of style, so that's the color
 	// to fall back to once the flash ends (this blank is destroyed by ClearSentenceBuilder shortly
 	// after anyway, but keeping the two in sync avoids a stray flash-colored frame if that ever
