@@ -4,10 +4,10 @@
 
 #include "Blueprint/WidgetTree.h"
 #include "Components/Overlay.h"
-#include "Components/TextBlock.h"
 #include "Editor.h"
 #include "Engine/DataTable.h"
 #include "Investigation/EvidenceDefinitions.h"
+#include "Investigation/PhotoDefinitions.h"
 #include "UI/BalhwajeomInteractionModalWidget.h"
 #include "WidgetBlueprint.h"
 
@@ -37,34 +37,15 @@ bool FDiaryInteractionAssetsTest::RunTest(const FString& Parameters)
 	if (TestNotNull(TEXT("native interaction modal can be created"), Modal))
 	{
 		Modal->AddToRoot();
-		TArray<FText> Keywords{
-			FText::FromString(TEXT("엄마와")),
-			FText::FromString(TEXT("다투었다."))};
 		const TSubclassOf<UUserWidget> DiaryClass = DiaryBlueprint->GeneratedClass.Get();
 		TestTrue(TEXT("WBP_Diary can be hosted by the native modal"),
-			Modal->Present(DiaryClass, FText::GetEmpty(), Keywords));
+			Modal->Present(DiaryClass, FText::GetEmpty(), {}));
 		const UOverlay* ModalRoot = Cast<UOverlay>(
 			Modal->GetWidgetFromName(TEXT("InteractionModalRoot")));
 		const UUserWidget* DiaryWidget = ModalRoot && ModalRoot->GetChildrenCount() == 1
 			? Cast<UUserWidget>(ModalRoot->GetChildAt(0))
 			: nullptr;
-		if (TestNotNull(TEXT("modal contains only the authored diary widget"), DiaryWidget))
-		{
-			const UTextBlock* Keyword1 = Cast<UTextBlock>(
-				DiaryWidget->GetWidgetFromName(TEXT("Text_Keyword1")));
-			const UTextBlock* Keyword2 = Cast<UTextBlock>(
-				DiaryWidget->GetWidgetFromName(TEXT("Text_Keyword2")));
-			if (TestNotNull(TEXT("WBP_Diary has Text_Keyword1"), Keyword1))
-			{
-				TestTrue(TEXT("first keyword is written to Text_Keyword1"),
-					Keyword1->GetText().EqualTo(Keywords[0]));
-			}
-			if (TestNotNull(TEXT("WBP_Diary has Text_Keyword2"), Keyword2))
-			{
-				TestTrue(TEXT("second keyword is written to Text_Keyword2"),
-					Keyword2->GetText().EqualTo(Keywords[1]));
-			}
-		}
+		TestNotNull(TEXT("modal contains only the authored diary widget"), DiaryWidget);
 		TestNull(TEXT("modal no longer creates a hard-coded close button"),
 			Modal->GetWidgetFromName(TEXT("BTN_Close")));
 		TestNull(TEXT("modal no longer creates a hard-coded keyword list"),
@@ -75,7 +56,11 @@ bool FDiaryInteractionAssetsTest::RunTest(const FString& Parameters)
 	const UDataTable* EvidenceStates = LoadObject<UDataTable>(
 		nullptr,
 		TEXT("/Game/Balhwajeom/Data/Investigation/DT_EvidenceStates.DT_EvidenceStates"));
-	if (!TestNotNull(TEXT("DT_EvidenceStates exists"), EvidenceStates))
+	const UDataTable* Photos = LoadObject<UDataTable>(
+		nullptr,
+		TEXT("/Game/Balhwajeom/Data/Investigation/DT_Photos.DT_Photos"));
+	if (!TestNotNull(TEXT("DT_EvidenceStates exists"), EvidenceStates) ||
+		!TestNotNull(TEXT("DT_Photos exists"), Photos))
 	{
 		return false;
 	}
@@ -89,9 +74,12 @@ bool FDiaryInteractionAssetsTest::RunTest(const FString& Parameters)
 	const FEvidenceStateDefinition* MemoryState =
 		EvidenceStates->FindRow<FEvidenceStateDefinition>(
 			TEXT("STATE_01_004_MEMORY"), TEXT("DiaryInteractionAssetsTest"));
+	const FPhotoDefinition* DiaryPhoto = Photos->FindRow<FPhotoDefinition>(
+		TEXT("PHOTO_01_004"), TEXT("DiaryInteractionAssetsTest"));
 	if (!TestNotNull(TEXT("closed diary state exists"), ClosedState) ||
 		!TestNotNull(TEXT("open diary state exists"), OpenState) ||
-		!TestNotNull(TEXT("memory diary state exists"), MemoryState))
+		!TestNotNull(TEXT("memory diary state exists"), MemoryState) ||
+		!TestNotNull(TEXT("diary photo exists"), DiaryPhoto))
 	{
 		return false;
 	}
@@ -102,8 +90,8 @@ bool FDiaryInteractionAssetsTest::RunTest(const FString& Parameters)
 		EEvidenceInteractionPresentation::ModalWidget);
 	TestEqual(TEXT("closed diary transitions to open"), ClosedState->NextStateID,
 		FName(TEXT("STATE_01_004_OPEN")));
-	TestEqual(TEXT("closed diary grants both keywords"),
-		ClosedState->GrantedWordIDs.Num(), 2);
+	TestTrue(TEXT("closed diary interaction grants no keywords"),
+		ClosedState->GrantedWordIDs.IsEmpty());
 	TestTrue(TEXT("closed diary modal class resolves"),
 		ClosedState->InteractionWidgetClass.LoadSynchronous() != nullptr);
 	TestTrue(TEXT("closed diary defers its world story until the modal closes"),
@@ -131,8 +119,19 @@ bool FDiaryInteractionAssetsTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("memory diary remains repeatable"),
 		MemoryState->InteractionBehavior,
 		EEvidenceInteractionBehavior::Repeatable);
+	TestTrue(TEXT("memory diary interaction grants no keywords"),
+		MemoryState->GrantedWordIDs.IsEmpty());
 	TestEqual(TEXT("memory diary resolves the shared story photo"),
 		MemoryState->PhotoID, FName(TEXT("PHOTO_01_004")));
+
+	TestEqual(TEXT("capturing the diary grants exactly three keywords"),
+		DiaryPhoto->GrantedWordIDs.Num(), 3);
+	TestTrue(TEXT("diary photo grants WORD_01_004"),
+		DiaryPhoto->GrantedWordIDs.Contains(FName(TEXT("WORD_01_004"))));
+	TestTrue(TEXT("diary photo grants WORD_01_005"),
+		DiaryPhoto->GrantedWordIDs.Contains(FName(TEXT("WORD_01_005"))));
+	TestTrue(TEXT("diary photo grants WORD_01_028"),
+		DiaryPhoto->GrantedWordIDs.Contains(FName(TEXT("WORD_01_028"))));
 	return !HasAnyErrors();
 }
 
