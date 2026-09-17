@@ -37,6 +37,7 @@
 #include "UnrealClient.h"
 #include "BalhwajeomEvidenceActor.h"
 #include "BalhwajeomEvidenceCameraHUD.h"
+#include "BalhwajeomCameraExitYaw.h"
 #include "BalhwajeomCameraTargetInterface.h"
 #include "BalhwajeomPhotoCameraZoom.h"
 #include "BalhwajeomPhotoCaptureAvailability.h"
@@ -369,6 +370,14 @@ void UBalhwajeomPhotoCameraComponent::BeginDestroy()
 	Super::BeginDestroy();
 }
 
+void UBalhwajeomPhotoCameraComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// A transition torn down mid-flight never reaches FinishCameraTransition(), so the
+	// character would keep the camera-mode rotation flags into whatever comes next.
+	CancelExplorationYawSettle();
+	Super::EndPlay(EndPlayReason);
+}
+
 void UBalhwajeomPhotoCameraComponent::TickComponent(
 	float DeltaTime,
 	ELevelTick TickType,
@@ -380,6 +389,11 @@ void UBalhwajeomPhotoCameraComponent::TickComponent(
 	{
 		UpdateEvidenceFocus(DeltaTime);
 		RefreshDisplayedGuideSnapshot();
+	}
+
+	if (bIsSettlingExplorationYaw)
+	{
+		UpdateExplorationYawSettle(DeltaTime);
 	}
 
 	UpdatePendingAutoExit();
@@ -785,6 +799,10 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 	// left over from the previous session must not pull it straight back down.
 	bAutoExitAfterCapturePresentation = false;
 
+	// A settle still running would fight the first-person rotation flags set below, and
+	// would hand the character back to orient-to-movement from inside camera mode.
+	CancelExplorationYawSettle();
+
 	// Entry alignment can move the attached camera in world space. Capture its authored
 	// transform first so leaving photo mode always puts it back at the character's eyes.
 	SavedFirstPersonRelativeTransform = PhotoCamera->GetRelativeTransform();
@@ -844,10 +862,20 @@ void UBalhwajeomPhotoCameraComponent::EnterCameraMode()
 		}
 
 		const FVector PhotoViewDirection = CenterTarget - PhotoCamera->GetComponentLocation();
-		PlayerController->SetControlRotation(
-			!bFoundCenterTarget || PhotoViewDirection.IsNearlyZero()
-				? OutgoingViewRotation
-				: PhotoViewDirection.Rotation());
+		const FRotator AlignedRotation = !bFoundCenterTarget || PhotoViewDirection.IsNearlyZero()
+			? OutgoingViewRotation
+			: PhotoViewDirection.Rotation();
+
+		// Remember how far the alignment turned the view. The exit subtracts exactly this,
+		// which is what lets the player's own look input come back out with them without
+		// the correction accumulating on every RMB press.
+		EntryAlignmentYawDelta =
+			FMath::UnwindDegrees(AlignedRotation.Yaw - SavedExplorationControlRotation.Yaw);
+		PlayerController->SetControlRotation(AlignedRotation);
+	}
+	else
+	{
+		EntryAlignmentYawDelta = 0.0f;
 	}
 
 	bIsInCameraMode = true;
@@ -906,27 +934,47 @@ void UBalhwajeomPhotoCameraComponent::ExitCameraMode()
 		return;
 	}
 
-	// Restore the exploration rotation captured before center-target alignment. Without this,
-	// entering and leaving camera mode repeatedly feeds the parallax correction back into the
-	// third-person view and makes it drift on every RMB press.
+	// Carry the yaw the player looked around by back into exploration, minus the alignment
+	// the entry applied. Subtracting that delta is what keeps the old drift fixed: a trip
+	// with no look input restores the saved yaw exactly, so the parallax correction can not
+	// feed back into the third-person view on repeated RMB presses. Pitch and roll stay on
+	// their saved values — camera-mode pitch is free-look, third-person pitch is boom angle,
+	// so carrying it would tilt the third-person camera at whatever the player last framed.
 	if (APlayerController* PlayerController = Cast<APlayerController>(GetOwningController(this));
 		PlayerController && bHasSavedExplorationControlRotation)
 	{
-		PlayerController->SetControlRotation(SavedExplorationControlRotation);
+		const float ExplorationYaw = bCarryCameraLookYawToExploration
+			? BalhwajeomCameraExitYaw::ResolveExplorationYaw(
+				PlayerController->GetControlRotation().Yaw, EntryAlignmentYawDelta)
+			: SavedExplorationControlRotation.Yaw;
+
+		PlayerController->SetControlRotation(FRotator(
+			SavedExplorationControlRotation.Pitch,
+			ExplorationYaw,
+			SavedExplorationControlRotation.Roll));
 	}
 	bHasSavedExplorationControlRotation = false;
+	EntryAlignmentYawDelta = 0.0f;
 
-	if (ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
-		OwnerCharacter && bHasSavedFirstPersonMovementMode)
+	// Orient-to-movement stays off until FinishCameraTransition(), so for that span nothing
+	// owns the character's facing but the settle. Handing back here would instead start the
+	// turn as the screen clears rather than finishing it while the screen is still dark.
+	ACharacter* ExitingCharacter = Cast<ACharacter>(GetOwner());
+	bIsSettlingExplorationYaw = bHasSavedFirstPersonMovementMode && ExitingCharacter != nullptr;
+	if (bIsSettlingExplorationYaw)
 	{
-		OwnerCharacter->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
-		if (UCharacterMovementComponent* Movement = OwnerCharacter->GetCharacterMovement())
-		{
-			Movement->bOrientRotationToMovement = bSavedOrientRotationToMovement;
-			Movement->bUseControllerDesiredRotation = bSavedUseControllerDesiredRotation;
-		}
+		// Controller yaw has to go now, not with the rest. APawn::FaceRotation snaps the
+		// pawn onto the control rotation every tick while it is set, which would overwrite
+		// the settle each frame and, with the carry turned off, land the whole turn as one
+		// instant spin at the fade's midpoint.
+		ExitingCharacter->bUseControllerRotationYaw = false;
+		ExplorationYawSettleRemaining = CameraTransitionDuration * 0.5f;
 	}
-	bHasSavedFirstPersonMovementMode = false;
+	else
+	{
+		ExplorationYawSettleRemaining = 0.0f;
+		RestoreExplorationMovementRotation();
+	}
 
 	if (PhotoCamera)
 	{
@@ -946,7 +994,9 @@ void UBalhwajeomPhotoCameraComponent::ExitCameraMode()
 	}
 	FocusGuideTraceElapsed = 0.0f;
 	EarlyGuideRescanElapsed = 0.0f;
-	SetComponentTickEnabled(false);
+	// The settle needs the tick for the rest of the transition; FinishCameraTransition()
+	// takes it down once the character has been handed back to the movement component.
+	SetComponentTickEnabled(bIsSettlingExplorationYaw);
 	ResetEvidenceFocus();
 
 	bIsInCameraMode = false;
@@ -1050,8 +1100,107 @@ void UBalhwajeomPhotoCameraComponent::SwitchCameraAtFadeOut()
 
 void UBalhwajeomPhotoCameraComponent::FinishCameraTransition()
 {
+	// The settle has spent its whole budget by now, so it is sitting on the angle
+	// orient-to-movement would pick. Handing back here is a continuation, not a second jump.
+	CancelExplorationYawSettle();
+	if (!bIsInCameraMode)
+	{
+		SetComponentTickEnabled(false);
+	}
+
 	bIsCameraTransitioning = false;
 	OnCameraTransitionFinished.Broadcast();
+}
+
+void UBalhwajeomPhotoCameraComponent::RestoreExplorationMovementRotation()
+{
+	if (!bHasSavedFirstPersonMovementMode)
+	{
+		return;
+	}
+	bHasSavedFirstPersonMovementMode = false;
+
+	ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
+	if (!OwnerCharacter)
+	{
+		return;
+	}
+
+	OwnerCharacter->bUseControllerRotationYaw = bSavedUseControllerRotationYaw;
+	if (UCharacterMovementComponent* Movement = OwnerCharacter->GetCharacterMovement())
+	{
+		Movement->bOrientRotationToMovement = bSavedOrientRotationToMovement;
+		Movement->bUseControllerDesiredRotation = bSavedUseControllerDesiredRotation;
+	}
+}
+
+void UBalhwajeomPhotoCameraComponent::CancelExplorationYawSettle()
+{
+	if (!bIsSettlingExplorationYaw)
+	{
+		return;
+	}
+
+	bIsSettlingExplorationYaw = false;
+	ExplorationYawSettleRemaining = 0.0f;
+
+	// Leaving the settle without this would strand the character with both rotation modes
+	// off, so it would walk sideways with a frozen facing for the rest of the level.
+	RestoreExplorationMovementRotation();
+}
+
+bool UBalhwajeomPhotoCameraComponent::ResolveExplorationSettleTargetYaw(float& OutYaw) const
+{
+	const ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
+	const UCharacterMovementComponent* Movement =
+		OwnerCharacter ? OwnerCharacter->GetCharacterMovement() : nullptr;
+	if (!Movement)
+	{
+		return false;
+	}
+
+	// The same value and the same threshold orient-to-movement uses, so the angle the
+	// settle lands on is the angle the movement component would have been heading for.
+	// By now MoveForward/MoveRight are already reading the restored control yaw (or the
+	// zone's planar axes), so this is the direction W will actually push after the exit.
+	const FVector Acceleration = Movement->GetCurrentAcceleration();
+	if (Acceleration.SizeSquared2D() < KINDA_SMALL_NUMBER)
+	{
+		// No input means no turn. A character standing still must not spin on the spot.
+		return false;
+	}
+
+	OutYaw = Acceleration.Rotation().Yaw;
+	return true;
+}
+
+void UBalhwajeomPhotoCameraComponent::UpdateExplorationYawSettle(const float DeltaTime)
+{
+	ACharacter* OwnerCharacter = Cast<ACharacter>(GetOwner());
+	if (!OwnerCharacter)
+	{
+		CancelExplorationYawSettle();
+		return;
+	}
+
+	// Resolved every tick rather than once: an activating FixedCameraZone can still be
+	// swinging its own yaw, and the player is free to change WASD mid-fade.
+	float TargetYaw = 0.0f;
+	if (ResolveExplorationSettleTargetYaw(TargetYaw))
+	{
+		const FRotator CurrentRotation = OwnerCharacter->GetActorRotation();
+		const float NewYaw = BalhwajeomCameraExitYaw::StepSettleYaw(
+			CurrentRotation.Yaw,
+			TargetYaw,
+			DeltaTime,
+			ExplorationYawSettleRemaining,
+			ExplorationYawSettleEaseExponent);
+
+		OwnerCharacter->SetActorRotation(
+			FRotator(CurrentRotation.Pitch, NewYaw, CurrentRotation.Roll));
+	}
+
+	ExplorationYawSettleRemaining -= DeltaTime;
 }
 
 void UBalhwajeomPhotoCameraComponent::ShowPhotoFeedback(const FString& Message, const FColor& Color) const
