@@ -92,6 +92,7 @@ void ABalhwajeomIntroFlowActor::BeginPlay()
 		BGMTriggerDoor->OnDoorFullyOpened.AddUniqueDynamic(this, &ThisClass::HandleBGMTriggerDoorOpened);
 	}
 	State = EBalhwajeomIntroState::Title;
+	PrerollTitleStart();
 	ScreenFadeWidget->FadeFromBlack(InitialFadeDuration);
 }
 
@@ -113,6 +114,15 @@ void ABalhwajeomIntroFlowActor::EndPlay(const EEndPlayReason::Type EndPlayReason
 		EndingMediaPlayer->OnEndReached.RemoveAll(this);
 		EndingMediaPlayer->Close();
 	}
+	if (TitleStartMediaPlayer)
+	{
+		// Opened as early as BeginPlay now (see PrerollTitleStart), so it can still be sitting open on
+		// frame 0 having never been played.
+		TitleStartMediaPlayer->OnMediaOpened.RemoveAll(this);
+		TitleStartMediaPlayer->OnMediaOpenFailed.RemoveAll(this);
+		TitleStartMediaPlayer->OnEndReached.RemoveAll(this);
+		TitleStartMediaPlayer->Close();
+	}
 	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
 	APawn* Pawn = PC ? PC->GetPawn() : nullptr;
 	if (UBalhwajeomTabletComponent* Tablet = Pawn
@@ -124,6 +134,7 @@ void ABalhwajeomIntroFlowActor::EndPlay(const EEndPlayReason::Type EndPlayReason
 	}
 	GetWorldTimerManager().ClearTimer(EndingAutoTriggerTimerHandle);
 	GetWorldTimerManager().ClearTimer(TitleStartCutoffTimerHandle);
+	GetWorldTimerManager().ClearTimer(TitleStartPrerollParkTimerHandle);
 	if (CinematicVideoWidget) CinematicVideoWidget->RemoveFromParent();
 	if (MainMenuWidget) MainMenuWidget->RemoveFromParent();
 	if (ScreenFadeWidget) ScreenFadeWidget->RemoveFromParent();
@@ -234,12 +245,92 @@ void ABalhwajeomIntroFlowActor::HandleFadeProgress(float Opacity)
 	SetCinematicAudioVolume(FMath::Clamp(1.0f - Opacity, 0.0f, 1.0f));
 }
 
+void ABalhwajeomIntroFlowActor::PrerollTitleStart()
+{
+	if (!TitleStartMediaSource || !TitleStartMediaPlayer || !TitleStartMediaTexture)
+	{
+		return;
+	}
+
+	// Opened here, while the looping title screen is the only thing on screen, rather than when Start
+	// is clicked: OpenSource is asynchronous and the decoder needs longer still to hand over a first
+	// frame, so opening it on the click left TitleStartMediaTexture empty -- drawing its black clear
+	// colour -- for the whole reveal. That empty texture over the title screen is the black blink; by
+	// the time the player clicks, this has real picture sitting on it instead.
+	TitleStartMediaTexture->SetMediaPlayer(TitleStartMediaPlayer);
+	TitleStartMediaPlayer->OnMediaOpened.RemoveAll(this);
+	TitleStartMediaPlayer->OnMediaOpenFailed.RemoveAll(this);
+	TitleStartMediaPlayer->OnEndReached.RemoveAll(this);
+	TitleStartMediaPlayer->OnMediaOpened.AddDynamic(this, &ThisClass::HandleTitleStartPrerolled);
+	TitleStartMediaPlayer->SetLooping(false);
+	// The clip has to wait on frame 0 until Start is clicked, so opening it must not start playback.
+	// StartTitleStart's own Play() is what rolls it, and its fallback path relies on HandleMediaOpened
+	// calling Play() explicitly, so leaving this false is safe either way.
+	TitleStartMediaPlayer->PlayOnOpen = false;
+	TitleStartMediaPlayer->OpenSource(TitleStartMediaSource);
+}
+
+void ABalhwajeomIntroFlowActor::HandleTitleStartPrerolled(FString OpenedUrl)
+{
+	(void)OpenedUrl;
+	if (!TitleStartMediaPlayer)
+	{
+		return;
+	}
+	// Opening alone (and a seek at rate 0) does not make every player backend decode a frame, so warm
+	// it up by actually rolling the clip for a moment -- silently, since none of this is meant to be
+	// seen or heard -- and rewind it in ParkTitleStartPreroll once there is picture on the texture.
+	SetCinematicAudioVolume(0.0f);
+	TitleStartMediaPlayer->SetNativeVolume(0.0f);
+	TitleStartMediaPlayer->Play();
+	GetWorldTimerManager().SetTimer(
+		TitleStartPrerollParkTimerHandle,
+		this,
+		&ThisClass::ParkTitleStartPreroll,
+		TitleStartPrerollWarmupDuration,
+		false);
+}
+
+void ABalhwajeomIntroFlowActor::ParkTitleStartPreroll()
+{
+	if (!TitleStartMediaPlayer)
+	{
+		return;
+	}
+	if (State != EBalhwajeomIntroState::Title)
+	{
+		// Start was clicked inside the warm-up window -- StartTitleStart already owns the player now,
+		// so pausing/rewinding it here would stop the clip the player is watching.
+		return;
+	}
+	TitleStartMediaPlayer->Pause();
+	TitleStartMediaPlayer->Seek(FTimespan::Zero());
+}
+
+void ABalhwajeomIntroFlowActor::StartTitleStartCutoff()
+{
+	if (TitleStartCutoffDuration <= 0.0f)
+	{
+		return;
+	}
+	GetWorldTimerManager().SetTimer(
+		TitleStartCutoffTimerHandle,
+		this,
+		&ThisClass::HandleTitleStartCutoff,
+		TitleStartCutoffDuration,
+		false);
+}
+
 void ABalhwajeomIntroFlowActor::StartTitleStart()
 {
 	// MainMenuWidget is deliberately left on screen (unlike StartCinematic, which removes it) --
 	// the ripple effect plays layered on top of the still-visible title screen, and StartCinematic
 	// (called once this step finishes or is skipped) removes it when the cinematic actually needs
 	// the screen to itself.
+
+	// The preroll warm-up may still be mid-flight; its Pause()/Seek() must not land on the clip now
+	// that it is about to be the one the player is watching.
+	GetWorldTimerManager().ClearTimer(TitleStartPrerollParkTimerHandle);
 
 	// Any of the three unset: skip this step entirely, exactly as if it never existed.
 	if (!TitleStartMediaSource || !TitleStartMediaPlayer || !TitleStartMediaTexture)
@@ -266,11 +357,21 @@ void ABalhwajeomIntroFlowActor::StartTitleStart()
 
 	TitleStartMediaTexture->SetMediaPlayer(TitleStartMediaPlayer);
 	CinematicVideoWidget->SetMediaTexture(TitleStartMediaTexture);
+	// This clip plays over the title screen, which stays up underneath it, so the WBP's opaque black
+	// VideoBackground plate has to go: whatever the movie's own picture does not cover should show the
+	// title screen, not black. The cinematic and the ending both keep it -- they play from an already
+	// black screen -- and each gets its own fresh widget, so this only affects the title-start step.
+	CinematicVideoWidget->SetBackgroundVisible(false);
 	CinematicVideoWidget->AddToPlayerScreen(2000);
-	// Start invisible: OpenSource()/Play() below take a frame or more to actually produce a real
-	// frame, and this widget is opaque, so showing it immediately would blank the title screen
-	// underneath for that gap. HandleMediaOpened() reveals it (via FadeIn) once a frame is imminent.
-	CinematicVideoWidget->SetRenderOpacity(0.0f);
+
+	// PrerollTitleStart opened this clip back on the title screen and parked it on frame 0, so the
+	// texture already holds real picture and the widget can simply appear -- which is the point of the
+	// preroll, and what "the clip is up the moment Start is clicked" needs. GetWidth() is the check
+	// that a frame genuinely landed; if it did not (preroll skipped, open still in flight, open
+	// failed) fall through to the original path -- open now, start invisible, let HandleMediaOpened
+	// ease the widget in -- so the worst case is what it was before rather than an instant black plate.
+	const bool bPrerolled = TitleStartMediaPlayer->IsReady() && TitleStartMediaTexture->GetWidth() > 0;
+	CinematicVideoWidget->SetRenderOpacity(bPrerolled ? 1.0f : 0.0f);
 	// Always plays to completion -- no BTN_Skip for this clip.
 	CinematicVideoWidget->SetSkipEnabled(false);
 	TitleStartMediaPlayer->OnMediaOpened.RemoveAll(this);
@@ -281,7 +382,20 @@ void ABalhwajeomIntroFlowActor::StartTitleStart()
 	TitleStartMediaPlayer->OnEndReached.AddDynamic(this, &ThisClass::HandleMediaEndReached);
 	TitleStartMediaPlayer->SetLooping(false);
 	bFadeCinematicAudioWithScreen = false;
+	// Undoes PrerollTitleStart's silent warm-up (SetCinematicAudioVolume alone does not reach this
+	// player, which is not one of the two it knows about).
 	SetCinematicAudioVolume(1.0f);
+	TitleStartMediaPlayer->SetNativeVolume(1.0f);
+	if (bPrerolled)
+	{
+		// Already open with picture on the texture -- just roll it. Re-opening would throw that frame
+		// away and put the black gap straight back. The seek covers the case where Start was clicked
+		// inside the warm-up window, before ParkTitleStartPreroll had rewound the clip.
+		TitleStartMediaPlayer->Seek(FTimespan::Zero());
+		TitleStartMediaPlayer->Play();
+		StartTitleStartCutoff();
+		return;
+	}
 	if (!TitleStartMediaPlayer->OpenSource(TitleStartMediaSource))
 	{
 		HandleMediaOpenFailed(TitleStartMediaSource->GetUrl());
@@ -377,17 +491,13 @@ void ABalhwajeomIntroFlowActor::HandleMediaOpened(FString OpenedUrl)
 		// about to play, instead of popping straight to fully visible.
 		if (CinematicVideoWidget)
 		{
-			CinematicVideoWidget->FadeIn(TitleStartRevealFadeDuration);
+			// Not FadeIn(): this fires when the source finished opening, which is before the first
+			// frame exists, so fading in here is what put a black plate over the title screen. Hold at
+			// 0 opacity until TitleStartMediaTexture actually has picture on it.
+			CinematicVideoWidget->FadeInWhenMediaReady(
+				TitleStartMediaTexture, TitleStartRevealFadeDuration);
 		}
-		if (TitleStartCutoffDuration > 0.0f)
-		{
-			GetWorldTimerManager().SetTimer(
-				TitleStartCutoffTimerHandle,
-				this,
-				&ThisClass::HandleTitleStartCutoff,
-				TitleStartCutoffDuration,
-				false);
-		}
+		StartTitleStartCutoff();
 		return;
 	}
 	ScreenFadeWidget->FadeFromBlack(TransitionFadeDuration);
