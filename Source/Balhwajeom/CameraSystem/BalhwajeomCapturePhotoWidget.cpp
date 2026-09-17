@@ -8,8 +8,8 @@
 #include "Components/SizeBox.h"
 #include "Components/Spacer.h"
 #include "Components/TextBlock.h"
-#include "Components/VerticalBox.h"
-#include "Components/VerticalBoxSlot.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/WrapBox.h"
 #include "Components/WrapBoxSlot.h"
 #include "Engine/Font.h"
@@ -240,10 +240,14 @@ void UBalhwajeomCapturePhotoWidget::PresentCapture(
 				KeywordBackgroundColor,
 				KeywordBackgroundTexture);
 
-			if (UVerticalBoxSlot* KeywordSlot = KeywordList->AddChildToVerticalBox(Chip))
+			if (UHorizontalBoxSlot* KeywordSlot = KeywordList->AddChildToHorizontalBox(Chip))
 			{
-				KeywordSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 8.0f));
-				KeywordSlot->SetHorizontalAlignment(HAlign_Fill);
+				// Automatic keeps every pill at its own text width; filling would make
+				// the pills share the row instead of hugging their keyword.
+				KeywordSlot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+				KeywordSlot->SetVerticalAlignment(VAlign_Center);
+				const float HalfGap = FMath::Max(0.0f, KeywordGap) * 0.5f;
+				KeywordSlot->SetPadding(FMargin(HalfGap, 0.0f, HalfGap, 0.0f));
 			}
 		}
 		KeywordList->SetVisibility(
