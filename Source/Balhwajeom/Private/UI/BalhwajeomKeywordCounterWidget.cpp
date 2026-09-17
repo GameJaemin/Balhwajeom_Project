@@ -78,11 +78,13 @@ void UBalhwajeomKeywordCounterWidget::RefreshCount()
 	}
 
 	TArray<FAcquiredWordRecord> AcquiredWords;
-	TArray<FWordDefinition> AllWords;
 	Investigation->GetAcquiredWords(AcquiredWords);
-	Investigation->GetAllWordDefinitions(AllWords);
+	// Clamped to the same fixed total the denominator uses, so a save carrying more acquired words
+	// than the design count can never read as e.g. "18/14".
+	const int32 AcquiredCount = FMath::Min(
+		AcquiredWords.Num(), UBalhwajeomInvestigationSubsystem::DisplayedTotalKeywordCount);
 	CountText->SetText(FText::Format(
 		NSLOCTEXT("HUD", "GameplayKeywordCount", "{0}/{1}"),
-		FText::AsNumber(AcquiredWords.Num()),
-		FText::AsNumber(AllWords.Num())));
+		FText::AsNumber(AcquiredCount),
+		FText::AsNumber(UBalhwajeomInvestigationSubsystem::DisplayedTotalKeywordCount)));
 }

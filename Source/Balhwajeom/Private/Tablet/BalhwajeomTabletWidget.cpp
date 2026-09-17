@@ -1145,10 +1145,14 @@ void UBalhwajeomTabletWidget::RefreshPuzzleControls()
 			}
 			if (TXT_PuzzleKeywordCount)
 			{
+				// Fixed design total, not OrderedWords.Num() -- see DisplayedTotalKeywordCount. The
+				// acquired half is clamped to it so the readout can never exceed its own total.
 				TXT_PuzzleKeywordCount->SetText(FText::Format(
 					NSLOCTEXT("Tablet", "StatementKeywordCount", "{0}/{1}"),
-					AvailablePuzzleWordIDs.Num(),
-					OrderedWords.Num()));
+					FMath::Min(
+						AvailablePuzzleWordIDs.Num(),
+						UBalhwajeomInvestigationSubsystem::DisplayedTotalKeywordCount),
+					UBalhwajeomInvestigationSubsystem::DisplayedTotalKeywordCount));
 				TXT_PuzzleKeywordCount->SetVisibility(ESlateVisibility::HitTestInvisible);
 			}
 		}
@@ -2715,10 +2719,12 @@ void UBalhwajeomTabletWidget::RefreshAcquiredWordsDisplay()
 				WB_PuzzleWords->AddChild(Chip);
 			}
 		}
+		// Same fixed total as the gameplay HUD counter and the statement popup; OrderedWords is still
+		// what builds the grid itself, only the number shown is pinned. See DisplayedTotalKeywordCount.
 		TXT_PuzzleKeywordCount->SetText(FText::Format(
 			NSLOCTEXT("Tablet", "StatementKeywordCount", "{0}/{1}"),
-			AcquiredCount,
-			OrderedWords.Num()));
+			FMath::Min(AcquiredCount, UBalhwajeomInvestigationSubsystem::DisplayedTotalKeywordCount),
+			UBalhwajeomInvestigationSubsystem::DisplayedTotalKeywordCount));
 		TXT_PuzzleKeywordCount->SetVisibility(ESlateVisibility::HitTestInvisible);
 		WB_PuzzleWords->SetVisibility(
 			OrderedWords.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);

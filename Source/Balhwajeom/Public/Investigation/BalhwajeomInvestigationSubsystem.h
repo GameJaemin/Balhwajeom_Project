@@ -40,6 +40,13 @@ class BALHWAJEOM_API UBalhwajeomInvestigationSubsystem : public UGameInstanceSub
 	GENERATED_BODY()
 
 public:
+	/** The denominator every "acquired / total" keyword readout shows -- the gameplay HUD counter
+	 * (UBalhwajeomKeywordCounterWidget), the folder/photo popup's keyword grid and the statement
+	 * popup's (UBalhwajeomTabletWidget). Deliberately a fixed design number rather than
+	 * GetAllWordDefinitions().Num(): DT_Words carries more rows than the player is meant to end up
+	 * with, so counting the table would show a total nobody can reach. */
+	static constexpr int32 DisplayedTotalKeywordCount = 14;
+
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
