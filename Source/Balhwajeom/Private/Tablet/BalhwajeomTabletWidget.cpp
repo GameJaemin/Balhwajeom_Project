@@ -1285,6 +1285,13 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 		{
 			Slot->SetVerticalAlignment(VAlign_Center);
 			Slot->SetPadding(LineItemPadding);
+			// FSlateChildSize's default constructor is Fill, not Auto -- AddChildToHorizontalBox
+			// slots come out Fill by default. Left alone, each segment/blank on a line shares out
+			// the line's full width instead of hugging its own text width, spreading them apart --
+			// and since BuildRandomFadeCharacters (the Converge/Reveal character grid this hands
+			// off to) already forces Automatic on its own equivalent slots, leaving this one at
+			// Fill made the puzzle text visibly snap narrower the instant Converge rebuilds it.
+			Slot->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
 		}
 	};
 
