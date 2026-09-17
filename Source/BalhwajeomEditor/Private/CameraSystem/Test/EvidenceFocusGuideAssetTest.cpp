@@ -100,13 +100,27 @@ bool FEvidenceCaptureBlockedLabelsDataTest::RunTest(const FString& Parameters)
 		const TCHAR* StateID;
 		const TCHAR* Label;
 	};
-	static const FExpectedLabel ExpectedLabels[] =
+	// Mirrors Scripts/Investigation/ConfigureCaptureBlockedLabels.py. A focused state
+	// that cannot be captured either opens up after an F interaction or is never a
+	// photo target, and each group has its own authored line.
+	const TCHAR* const DustyPhoto = TEXT("먼지 때문에 사진이 제대로 보이지 않는다.");
+	const TCHAR* const BeforeCapture =
+		TEXT("촬영하기 전에 먼저 살펴볼 필요가 있을 것 같다.");
+	const TCHAR* const NeverCapturable =
+		TEXT("이건 굳이 사진으로 남기지 않아도 될 것 같다.");
+	const FExpectedLabel ExpectedLabels[] =
 	{
-		{ TEXT("STATE_01_001_DUST"), TEXT("사진을 찍기 전에 먼지부터 털어 보자.") },
-		{ TEXT("STATE_01_002_DUST"), TEXT("사진을 찍기 전에 먼지부터 털어 보자.") },
-		{ TEXT("STATE_01_003_DUST"), TEXT("사진을 찍기 전에 먼지부터 털어 보자.") },
-		{ TEXT("STATE_01_004_CLOSED"), TEXT("일기장을 먼저 펼쳐 보자.") },
-		{ TEXT("STATE_01_005_FRONT"), TEXT("고데기를 뒤집어 반대편을 확인해 보자.") }
+		{ TEXT("STATE_01_001_DUST"), DustyPhoto },
+		{ TEXT("STATE_01_002_DUST"), DustyPhoto },
+		{ TEXT("STATE_01_003_DUST"), DustyPhoto },
+		{ TEXT("STATE_01_004_CLOSED"), BeforeCapture },
+		{ TEXT("STATE_01_005_FRONT"), BeforeCapture },
+		{ TEXT("STATE_01_016_NORMAL"), BeforeCapture },
+		{ TEXT("STATE_01_020_NORMAL"), BeforeCapture },
+		{ TEXT("STATE_01_024_NORMAL"), BeforeCapture },
+		{ TEXT("STATE_01_025_NORMAL"), BeforeCapture },
+		{ TEXT("STATE_Obstacle_Phase01_NORMAL"), NeverCapturable },
+		{ TEXT("STATE_Obstacle_Phase02_NORMAL"), NeverCapturable }
 	};
 
 	for (const FExpectedLabel& Expected : ExpectedLabels)

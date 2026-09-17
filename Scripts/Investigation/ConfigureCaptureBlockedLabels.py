@@ -12,12 +12,29 @@ import unreal
 
 
 TABLE_PATH = "/Game/Balhwajeom/Data/Investigation/DT_EvidenceStates"
+# The sub label only appears on a focused state that cannot be captured, so every
+# row below is authored guidance for one of two situations: the state opens up to a
+# photo after an F interaction, or it is never a photo target at all. A row left out
+# of this table falls back to the shared line in BalhwajeomEvidenceFocusGuideLayout.
+DUSTY_PHOTO = "먼지 때문에 사진이 제대로 보이지 않는다."
+BEFORE_CAPTURE = "촬영하기 전에 먼저 살펴볼 필요가 있을 것 같다."
+NEVER_CAPTURABLE = "이건 굳이 사진으로 남기지 않아도 될 것 같다."
+
 LABELS = {
-    "STATE_01_001_DUST": "사진을 찍기 전에 먼지부터 털어 보자.",
-    "STATE_01_002_DUST": "사진을 찍기 전에 먼지부터 털어 보자.",
-    "STATE_01_003_DUST": "사진을 찍기 전에 먼지부터 털어 보자.",
-    "STATE_01_004_CLOSED": "일기장을 먼저 펼쳐 보자.",
-    "STATE_01_005_FRONT": "고데기를 뒤집어 반대편을 확인해 보자.",
+    # Tutorial frames: the photo itself is unreadable until the dust is off.
+    "STATE_01_001_DUST": DUSTY_PHOTO,
+    "STATE_01_002_DUST": DUSTY_PHOTO,
+    "STATE_01_003_DUST": DUSTY_PHOTO,
+    # One F interaction opens the capturable state on each of these.
+    "STATE_01_004_CLOSED": BEFORE_CAPTURE,
+    "STATE_01_005_FRONT": BEFORE_CAPTURE,
+    "STATE_01_016_NORMAL": BEFORE_CAPTURE,
+    "STATE_01_020_NORMAL": BEFORE_CAPTURE,
+    "STATE_01_024_NORMAL": BEFORE_CAPTURE,
+    "STATE_01_025_NORMAL": BEFORE_CAPTURE,
+    # Progression obstacles, which never become photo targets.
+    "STATE_Obstacle_Phase01_NORMAL": NEVER_CAPTURABLE,
+    "STATE_Obstacle_Phase02_NORMAL": NEVER_CAPTURABLE,
 }
 
 
