@@ -23,6 +23,7 @@
 #include "Components/WrapBox.h"
 #include "Components/WrapBoxSlot.h"
 #include "Components/WidgetSwitcher.h"
+#include "Blueprint/SlateBlueprintLibrary.h"
 #include "Blueprint/WidgetTree.h"
 #include "Animation/WidgetAnimation.h"
 #include "Fonts/FontMeasure.h"
@@ -30,6 +31,7 @@
 #include "ImageUtils.h"
 #include "Internationalization/BreakIterator.h"
 #include "Misc/Paths.h"
+#include "Tablet/BalhwajeomTabletKeywordFlight.h"
 #include "Tablet/BalhwajeomMessengerWidget.h"
 #include "Tablet/BalhwajeomInternetWidget.h"
 #include "Investigation/BalhwajeomInvestigationSubsystem.h"
@@ -1076,6 +1078,8 @@ void UBalhwajeomTabletWidget::HidePuzzleWordAndPhotoControls()
 
 void UBalhwajeomTabletWidget::ClearSentenceBuilder()
 {
+	// The puzzle is closing or switching sentences; the blanks being flown at are going away.
+	CancelKeywordFlights();
 	if (WB_SentenceBuilder)
 	{
 		WB_SentenceBuilder->ClearChildren();
@@ -1221,6 +1225,9 @@ void UBalhwajeomTabletWidget::BuildSentenceBuilder(const FSentenceDefinition& Se
 	{
 		return;
 	}
+	// Every blank is about to be replaced, so anything flying at one of them has lost its
+	// destination. Cancelling leaves no trace -- a flight never wrote to ActiveSubmission.
+	CancelKeywordFlights();
 	WB_SentenceBuilder->ClearChildren();
 	ActiveBlanksBySlot.Reset();
 	ActiveSentenceSegments.Reset();
@@ -1508,6 +1515,11 @@ void UBalhwajeomTabletWidget::HandleSentenceBlankDropped(
 		// Dropped back onto the same blank it came from -- nothing to do.
 		return;
 	}
+
+	// A drag reached this blank before the chip flying toward it did; that flight would
+	// otherwise land on top of the dropped word. A landing arrives here having already
+	// removed itself from the list, so this is a no-op for the flight's own commit.
+	CancelKeywordFlights(SlotIndex);
 	if (USoundBase* Sound = KeywordDropSound.LoadSynchronous())
 	{
 		UGameplayStatics::PlaySound2D(this, Sound);
@@ -1584,19 +1596,39 @@ void UBalhwajeomTabletWidget::HandleWordChipClicked(const FName WordID)
 		return;
 	}
 
-	// Same destination a drag would pick: the lowest-index blank that isn't already filled.
+	// Same destination a drag would pick: the lowest-index blank that isn't already filled --
+	// except a blank a chip is already flying toward counts as taken, so clicking two
+	// keywords in quick succession fills two different blanks instead of stacking on one.
 	TArray<int32> SlotIndices;
 	ActiveBlanksBySlot.GetKeys(SlotIndices);
-	SlotIndices.Sort();
-	for (const int32 SlotIndex : SlotIndices)
+
+	TArray<int32> FilledSlotIndices;
+	FilledSlotIndices.Reserve(ActiveSubmission.SubmittedWords.Num());
+	for (const FSubmittedWordSlot& Submitted : ActiveSubmission.SubmittedWords)
 	{
-		const bool bSlotFilled = ActiveSubmission.SubmittedWords.ContainsByPredicate(
-			[SlotIndex](const FSubmittedWordSlot& Candidate) { return Candidate.SlotIndex == SlotIndex; });
-		if (!bSlotFilled)
-		{
-			HandleSentenceBlankDropped(SlotIndex, WordID, INDEX_NONE);
-			return;
-		}
+		FilledSlotIndices.Add(Submitted.SlotIndex);
+	}
+
+	TArray<int32> PendingSlotIndices;
+	PendingSlotIndices.Reserve(KeywordFlights.Num());
+	for (const FKeywordFlight& Flight : KeywordFlights)
+	{
+		PendingSlotIndices.Add(Flight.TargetSlotIndex);
+	}
+
+	const int32 TargetSlotIndex = BalhwajeomTabletKeywordFlight::ResolveFirstOpenSlot(
+		SlotIndices, FilledSlotIndices, PendingSlotIndices);
+	if (TargetSlotIndex == INDEX_NONE)
+	{
+		return;
+	}
+
+	// The flight records the submission when it lands, which is what keeps the completion
+	// check behind the keyword rather than ahead of it. Only a flight that could not start
+	// at all falls back to the old instant fill.
+	if (!BeginKeywordFlight(WordID, TargetSlotIndex))
+	{
+		HandleSentenceBlankDropped(TargetSlotIndex, WordID, INDEX_NONE);
 	}
 }
 
@@ -1989,9 +2021,289 @@ void UBalhwajeomTabletWidget::ValidateActivePuzzle(const bool bExplicitStatement
 	}
 }
 
+void UBalhwajeomTabletKeywordFlightLayer::BuildLayer()
+{
+	if (!WidgetTree)
+	{
+		// Same guard the chips use: this is a native UUserWidget with no Widget Blueprint
+		// behind it, so nothing has handed it a tree.
+		WidgetTree = NewObject<UWidgetTree>(this, TEXT("WidgetTree"));
+	}
+	if (Canvas)
+	{
+		return;
+	}
+
+	Canvas = WidgetTree->ConstructWidget<UCanvasPanel>();
+	WidgetTree->RootWidget = Canvas;
+}
+
+/**
+ * Centre of a laid-out widget in the viewport space a CanvasPanelSlot position uses.
+ *
+ * Centres rather than corners so the flight needs no DPI conversion of its own: the slot
+ * is anchored at 0.5/0.5, so two centre points are the whole geometry it needs.
+ */
+static bool ResolveWidgetViewportCentre(
+	const UWidget* Widget,
+	UObject* WorldContextObject,
+	FVector2D& OutCentre)
+{
+	if (!Widget)
+	{
+		return false;
+	}
+
+	const FGeometry& Geometry = Widget->GetCachedGeometry();
+	const FVector2D LocalSize = FVector2D(Geometry.GetLocalSize());
+	if (LocalSize.IsNearlyZero())
+	{
+		// Never painted, so there is no position to fly from or to yet.
+		return false;
+	}
+
+	const FVector2D AbsoluteCentre = FVector2D(Geometry.LocalToAbsolute(LocalSize * 0.5f));
+	FVector2D PixelPosition = FVector2D::ZeroVector;
+	FVector2D ViewportPosition = FVector2D::ZeroVector;
+	USlateBlueprintLibrary::AbsoluteToViewport(
+		WorldContextObject, AbsoluteCentre, PixelPosition, ViewportPosition);
+	OutCentre = ViewportPosition;
+	return true;
+}
+
+UBalhwajeomTabletWordChip* UBalhwajeomTabletWidget::FindCandidateWordChip(const FName WordID) const
+{
+	if (!WB_PuzzleWords || WordID.IsNone())
+	{
+		return nullptr;
+	}
+
+	for (int32 Index = 0; Index < WB_PuzzleWords->GetChildrenCount(); ++Index)
+	{
+		UBalhwajeomTabletWordChip* Chip = Cast<UBalhwajeomTabletWordChip>(WB_PuzzleWords->GetChildAt(Index));
+		if (Chip && Chip->GetWordID() == WordID)
+		{
+			return Chip;
+		}
+	}
+
+	return nullptr;
+}
+
+UBalhwajeomTabletKeywordFlightLayer* UBalhwajeomTabletWidget::EnsureKeywordFlightLayer()
+{
+	if (KeywordFlightLayer)
+	{
+		return KeywordFlightLayer;
+	}
+
+	APlayerController* PlayerController = GetOwningPlayer();
+	if (!PlayerController)
+	{
+		return nullptr;
+	}
+
+	KeywordFlightLayer = CreateWidget<UBalhwajeomTabletKeywordFlightLayer>(
+		PlayerController, UBalhwajeomTabletKeywordFlightLayer::StaticClass());
+	if (!KeywordFlightLayer)
+	{
+		return nullptr;
+	}
+
+	// Built before it is shown, so the canvas exists by the time Slate asks for the tree.
+	KeywordFlightLayer->BuildLayer();
+	KeywordFlightLayer->SetVisibility(ESlateVisibility::HitTestInvisible);
+	KeywordFlightLayer->AddToPlayerScreen(KeywordFlightLayerZOrder);
+	return KeywordFlightLayer;
+}
+
+void UBalhwajeomTabletWidget::ReleaseKeywordFlightLayerIfIdle()
+{
+	if (!KeywordFlights.IsEmpty() || !KeywordFlightLayer)
+	{
+		return;
+	}
+
+	KeywordFlightLayer->RemoveFromParent();
+	KeywordFlightLayer = nullptr;
+}
+
+bool UBalhwajeomTabletWidget::IsSlotPendingKeywordFlight(const int32 SlotIndex) const
+{
+	return KeywordFlights.ContainsByPredicate(
+		[SlotIndex](const FKeywordFlight& Flight) { return Flight.TargetSlotIndex == SlotIndex; });
+}
+
+bool UBalhwajeomTabletWidget::BeginKeywordFlight(const FName WordID, const int32 TargetSlotIndex)
+{
+	UBalhwajeomInvestigationSubsystem* Investigation = GetInvestigationSubsystem();
+	FWordDefinition WordDefinition;
+	if (!Investigation || !Investigation->GetWordDefinition(WordID, WordDefinition))
+	{
+		return false;
+	}
+
+	FVector2D StartPosition = FVector2D::ZeroVector;
+	FVector2D EndPosition = FVector2D::ZeroVector;
+	if (!ResolveWidgetViewportCentre(FindCandidateWordChip(WordID), this, StartPosition) ||
+		!ResolveWidgetViewportCentre(ActiveBlanksBySlot.FindRef(TargetSlotIndex), this, EndPosition))
+	{
+		// Falling back to an instant fill is deliberate: a missing animation must never
+		// swallow the click itself.
+		return false;
+	}
+
+	UBalhwajeomTabletKeywordFlightLayer* Layer = EnsureKeywordFlightLayer();
+	UCanvasPanel* Canvas = Layer ? Layer->GetCanvas() : nullptr;
+	if (!Canvas)
+	{
+		ReleaseKeywordFlightLayerIfIdle();
+		return false;
+	}
+
+	// A copy, not the clicked chip: the candidate list keeps every acquired keyword on
+	// screen whether or not it has been used, and the wrap box it sits in would clip it.
+	UBalhwajeomTabletWordChip* FlightChip = Cast<UBalhwajeomTabletWordChip>(
+		UUserWidget::CreateWidgetInstance(*Layer, UBalhwajeomTabletWordChip::StaticClass(), NAME_None));
+	if (!FlightChip)
+	{
+		ReleaseKeywordFlightLayerIfIdle();
+		return false;
+	}
+
+	// The same arguments RefreshPuzzleControls builds the candidate chips with, so the one
+	// in flight is indistinguishable from the one the player clicked.
+	FlightChip->Configure(
+		WordID,
+		WordDefinition.DisplayWord,
+		true,
+		ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFont() : nullptr,
+		ActiveDetailWidget ? ActiveDetailWidget->GetKeywordFontSize() : 14);
+
+	// Without this the copy inherits the candidate list's until-hovered-transparent
+	// background and only the bare word travels.
+	FlightChip->ApplyFlightStyle();
+	FlightChip->SetVisibility(ESlateVisibility::HitTestInvisible);
+	FlightChip->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+
+	const float StartScale = BalhwajeomTabletKeywordFlight::ResolveFlightScale(
+		FMath::Max(KeywordFlightStartScale, 1.0f), 0.0f);
+	FlightChip->SetRenderScale(FVector2D(StartScale, StartScale));
+
+	if (UCanvasPanelSlot* CanvasSlot = Canvas->AddChildToCanvas(FlightChip))
+	{
+		CanvasSlot->SetAutoSize(true);
+		CanvasSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+		CanvasSlot->SetPosition(StartPosition);
+	}
+
+	FKeywordFlight Flight;
+	Flight.Chip = FlightChip;
+	Flight.WordID = WordID;
+	Flight.TargetSlotIndex = TargetSlotIndex;
+	Flight.StartPosition = StartPosition;
+	Flight.EndPosition = EndPosition;
+	KeywordFlights.Add(MoveTemp(Flight));
+	return true;
+}
+
+void UBalhwajeomTabletWidget::TickKeywordFlights(const float DeltaTime)
+{
+	if (KeywordFlights.IsEmpty())
+	{
+		return;
+	}
+
+	// Arrivals are collected first and committed afterwards. HandleSentenceBlankDropped can
+	// rebuild the puzzle (a wrong answer does), which cancels flights and so edits the very
+	// array being walked here.
+	struct FLandedKeyword
+	{
+		FName WordID = NAME_None;
+		int32 SlotIndex = INDEX_NONE;
+	};
+	TArray<FLandedKeyword> Landed;
+
+	for (int32 Index = 0; Index < KeywordFlights.Num(); )
+	{
+		FKeywordFlight& Flight = KeywordFlights[Index];
+		Flight.Elapsed += DeltaTime;
+
+		const float Alpha = BalhwajeomTabletKeywordFlight::ResolveEaseOutAlpha(
+			Flight.Elapsed, KeywordFlightDuration, KeywordFlightEaseExponent);
+
+		UBalhwajeomTabletWordChip* Chip = Flight.Chip.Get();
+		if (Chip)
+		{
+			if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Chip->Slot))
+			{
+				CanvasSlot->SetPosition(BalhwajeomTabletKeywordFlight::ResolveFlightPosition(
+					Flight.StartPosition, Flight.EndPosition, Alpha));
+			}
+			const float Scale = BalhwajeomTabletKeywordFlight::ResolveFlightScale(
+				FMath::Max(KeywordFlightStartScale, 1.0f), Alpha);
+			Chip->SetRenderScale(FVector2D(Scale, Scale));
+		}
+
+		if (Alpha < 1.0f)
+		{
+			++Index;
+			continue;
+		}
+
+		Landed.Add({Flight.WordID, Flight.TargetSlotIndex});
+		if (Chip)
+		{
+			Chip->RemoveFromParent();
+		}
+		// RemoveAt keeps the remaining order, so Landed stays in click order.
+		KeywordFlights.RemoveAt(Index);
+	}
+
+	// Only now does the keyword actually enter the sentence -- and only now can
+	// EvaluatePuzzleIfComplete see a full submission and judge it.
+	for (const FLandedKeyword& Arrival : Landed)
+	{
+		HandleSentenceBlankDropped(Arrival.SlotIndex, Arrival.WordID, INDEX_NONE);
+	}
+
+	ReleaseKeywordFlightLayerIfIdle();
+}
+
+void UBalhwajeomTabletWidget::CancelKeywordFlights(const int32 SlotIndex)
+{
+	for (int32 Index = KeywordFlights.Num() - 1; Index >= 0; --Index)
+	{
+		if (SlotIndex != INDEX_NONE && KeywordFlights[Index].TargetSlotIndex != SlotIndex)
+		{
+			continue;
+		}
+		if (UBalhwajeomTabletWordChip* Chip = KeywordFlights[Index].Chip.Get())
+		{
+			Chip->RemoveFromParent();
+		}
+		// Nothing to undo in ActiveSubmission: a flight only ever reserved its blank.
+		KeywordFlights.RemoveAt(Index);
+	}
+
+	ReleaseKeywordFlightLayerIfIdle();
+}
+
+void UBalhwajeomTabletWidget::NativeDestruct()
+{
+	CancelKeywordFlights();
+	ReleaseKeywordFlightLayerIfIdle();
+	Super::NativeDestruct();
+}
+
 void UBalhwajeomTabletWidget::NativeTick(const FGeometry& MyGeometry, const float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	// Ahead of the success-stage early-out: a keyword still in the air has to be able to
+	// land, and its landing is what can start that stage in the first place.
+	TickKeywordFlights(InDeltaTime);
+
 	if (PuzzleSuccessStage == EPuzzleSuccessStage::Inactive)
 	{
 		return;
@@ -3292,6 +3604,33 @@ void UBalhwajeomTabletWordChip::NativeOnMouseLeave(const FPointerEvent& InMouseE
 	{
 		Background->SetBrush(NormalBrush);
 		LabelText->SetColorAndOpacity(FSlateColor(FLinearColor(0.96f, 0.91f, 0.82f, 1.0f)));
+	}
+}
+
+void UBalhwajeomTabletWordChip::ApplyFlightStyle()
+{
+	if (!Background)
+	{
+		return;
+	}
+
+	// Deliberately the same values NativeOnDragDetected gives DefaultDragVisual. A statement
+	// chip's own background is transparent until hovered, which is fine in the candidate list
+	// but leaves a flying copy as floating text with nothing behind it.
+	if (bStatementStyle)
+	{
+		ApplyKeywordHoverBrush(Background);
+		Background->SetBrushColor(FLinearColor::FromSRGBColor(FColor(255, 237, 217, 255)));
+		Background->SetPadding(FMargin(6.0f, 9.0f, 5.0f, 3.0f));
+		if (LabelText)
+		{
+			// White-on-cream would be as invisible as no box at all.
+			LabelText->SetColorAndOpacity(FSlateColor(FLinearColor::Black));
+		}
+	}
+	else
+	{
+		Background->SetBrushColor(FLinearColor(0.30f, 0.24f, 0.16f, 0.9f));
 	}
 }
 

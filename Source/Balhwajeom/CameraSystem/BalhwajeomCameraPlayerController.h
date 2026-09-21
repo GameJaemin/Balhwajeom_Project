@@ -47,6 +47,15 @@ public:
 	/** Adds the tutorial overlay presenter on first run, for controllers that have none. */
 	void EnsureTutorialOverlayPresenter();
 
+	/** Adds the top-of-screen notification presenter on first run. */
+	void EnsureNotificationPresenter();
+
+	/** Adds the emergency escape presenter on first run. */
+	void EnsureEmergencyEscapePresenter();
+
+	/** Adds the watcher that announces when the statement is ready to be read. */
+	void EnsureInvestigationProgressNotifier();
+
 	UFUNCTION(BlueprintPure, Category = "UI")
 	UUserWidget* GetPlayerHUD() const { return PlayerHUDWidget; }
 
@@ -103,6 +112,9 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupInputComponent() override;
+
+	/** Ctrl+Alt+Backspace. Forwarded to the presenter, which owns the confirm-and-teleport flow. */
+	void HandleEmergencyEscapePressed();
 
 	/** UMG HUD selected by the PlayerController Blueprint. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")

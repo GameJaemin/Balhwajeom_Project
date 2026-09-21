@@ -10,6 +10,7 @@
 #include "BalhwajeomTabletWidget.generated.h"
 
 class UBorder;
+class UCanvasPanel;
 class UBalhwajeomInternetWidget;
 class UBalhwajeomMessengerWidget;
 class UButton;
@@ -409,6 +410,14 @@ public:
 		int32 InStatementFontSize = 14);
 	FName GetWordID() const { return WordID; }
 
+	/**
+	 * Gives the chip the box a drag already carries: the keyword brush, tinted, with dark
+	 * text on it. A statement-style candidate chip is transparent until hovered, so a plain
+	 * copy of one flies as bare text -- and a clicked keyword should read the same as a
+	 * dragged one anyway, since both are the word travelling to a blank.
+	 */
+	void ApplyFlightStyle();
+
 	/** Broadcast on a plain left-click (no drag detected), so a candidate keyword can be placed
 	 * into the puzzle's first empty blank with a single click instead of a drag. */
 	UPROPERTY()
@@ -495,6 +504,30 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UTextBlock> DisplayText;
+};
+
+/**
+ * Full-screen canvas the click path's flying keyword chips are drawn on, added above the
+ * tablet's own AddToPlayerScreen layer.
+ *
+ * A separate layer rather than a render transform on the chip already in WB_PuzzleWords:
+ * that chip stays in the candidate list after use, and a transformed widget would be cut
+ * off by the wrap box it lives in. Built entirely in C++ so no Widget Blueprint is needed.
+ */
+UCLASS()
+class BALHWAJEOM_API UBalhwajeomTabletKeywordFlightLayer : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	/** Builds the canvas. Called before the layer is shown, the way the chips build themselves in Configure. */
+	void BuildLayer();
+
+	UCanvasPanel* GetCanvas() const { return Canvas; }
+
+private:
+	UPROPERTY()
+	TObjectPtr<UCanvasPanel> Canvas;
 };
 
 /** Drag payload: which captured (and analysis-solved) photo is being dragged onto a photo evidence slot. */
@@ -596,6 +629,29 @@ public:
 	 * itself (see ABalhwajeomIntroFlowActor::HandleStatementSolved). */
 	FSimpleMulticastDelegate OnStatementSolved;
 
+	/**
+	 * How long a clicked keyword takes to reach its blank. The submission is recorded when
+	 * it lands, not when it is clicked, so this is also how long the sentence waits before
+	 * it can be judged complete.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Keyword Flight",
+		meta = (ClampMin = "0.0", ClampMax = "2.0", Units = "s"))
+	float KeywordFlightDuration = 0.45f;
+
+	/** Above 1 decelerates into the blank, which reads as the chip shooting out; 1.0 is constant speed. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Keyword Flight",
+		meta = (ClampMin = "1.0", ClampMax = "8.0"))
+	float KeywordFlightEaseExponent = 5.0f;
+
+	/** Size the chip leaves at, easing back to 1.0 as it lands. 1.0 turns the pop off. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Keyword Flight",
+		meta = (ClampMin = "1.0", ClampMax = "2.0"))
+	float KeywordFlightStartScale = 1.15f;
+
+	/** Above the tablet's own AddToPlayerScreen(100) and below the capture card's 250. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tablet|Keyword Flight")
+	int32 KeywordFlightLayerZOrder = 110;
+
 	/** Played whenever a keyword is dropped into a sentence blank (HandleSentenceBlankDropped) or
 	 * pulled back out of one (HandleSentenceBlankClicked). Shared by the statement and photo
 	 * analysis puzzles alike. */
@@ -658,6 +714,36 @@ protected:
 	virtual void OnAnimationFinished_Implementation(const UWidgetAnimation* Animation) override;
 	/** Advances the flash/hold/converge/reveal puzzle-success transition; no-ops while inactive. */
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual void NativeDestruct() override;
+
+	/**
+	 * Sends a copy of WordID's candidate chip flying toward TargetSlotIndex's blank. The
+	 * blank is only reserved here -- ActiveSubmission and the completion check both wait
+	 * for the landing in TickKeywordFlights.
+	 *
+	 * False when either widget has no laid-out geometry to fly between yet, which tells
+	 * the caller to fill the blank outright rather than skipping the keyword entirely.
+	 */
+	bool BeginKeywordFlight(FName WordID, int32 TargetSlotIndex);
+
+	/** Advances every chip in flight and commits the ones that have arrived. */
+	void TickKeywordFlights(float DeltaTime);
+
+	/**
+	 * Drops flights without committing them -- they never wrote to ActiveSubmission, so
+	 * there is nothing to undo. INDEX_NONE cancels all of them.
+	 */
+	void CancelKeywordFlights(int32 SlotIndex = INDEX_NONE);
+
+	bool IsSlotPendingKeywordFlight(int32 SlotIndex) const;
+
+	/** Finds WordID's chip in the candidate list, so the flight can start where the player clicked. */
+	UBalhwajeomTabletWordChip* FindCandidateWordChip(FName WordID) const;
+
+	UBalhwajeomTabletKeywordFlightLayer* EnsureKeywordFlightLayer();
+
+	/** Takes the layer back off the screen once nothing is flying on it. */
+	void ReleaseKeywordFlightLayerIfIdle();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tablet|Messenger", meta = (ClampMin = "0"))
 	int32 UnreadMessageCount = 0;
@@ -1081,6 +1167,26 @@ private:
 	 * ActiveSentenceSegments are still populated at that point. */
 	FText PendingSentenceTemplate;
 	bool bPendingApplyAnalysisResultStyle = false;
+
+	/**
+	 * One clicked keyword on its way to a blank. TargetSlotIndex is a reservation, not a
+	 * submission: nothing reaches ActiveSubmission until the chip lands, so a cancelled
+	 * flight leaves no trace and the sentence can not be judged complete early.
+	 */
+	struct FKeywordFlight
+	{
+		TWeakObjectPtr<UBalhwajeomTabletWordChip> Chip;
+		FName WordID = NAME_None;
+		int32 TargetSlotIndex = INDEX_NONE;
+		FVector2D StartPosition = FVector2D::ZeroVector;
+		FVector2D EndPosition = FVector2D::ZeroVector;
+		float Elapsed = 0.0f;
+	};
+	TArray<FKeywordFlight> KeywordFlights;
+
+	/** Owns the flying chips, so they stay referenced for as long as they are on screen. */
+	UPROPERTY(Transient)
+	TObjectPtr<UBalhwajeomTabletKeywordFlightLayer> KeywordFlightLayer;
 
 	/** One character mid-Converge/Reveal, and the random delay (within that stage's total duration)
 	 * before it starts its own PuzzleSuccessCharFadeDuration fade. Built by BuildRandomFadeCharacters,

@@ -15,6 +15,7 @@
 #include "Misc/PackageName.h"
 #include "Story/StoryStateSubsystem.h"
 #include "TimerManager.h"
+#include "UI/BalhwajeomNotificationPresenter.h"
 #include "UObject/ConstructorHelpers.h"
 #include "UObject/UObjectIterator.h"
 
@@ -53,6 +54,12 @@ ABalhwajeomGateDoorActor::ABalhwajeomGateDoorActor()
 	ObjectLabelWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	// The same label widget the evidence actors use, so a door reads identically in game.
+	// Defaulted here rather than left to be filled in per placed door: the property is new,
+	// so doors already saved in a level carry no value for it and inherit this one. That is
+	// what lets room3's GateDoor_Exit announce itself without the map being re-saved.
+	UnlockedNotificationText = NSLOCTEXT(
+		"Balhwajeom", "GateDoorUnlocked", "문이 열리는 소리가 난 것 같다.");
+
 	static ConstructorHelpers::FClassFinder<UUserWidget> ObjectLabelWidgetClass(
 		TEXT("/Game/Balhwajeom/UI/Inspection/WBP_ObjectLabel"));
 	if (ObjectLabelWidgetClass.Succeeded())
@@ -395,9 +402,19 @@ void ABalhwajeomGateDoorActor::RefreshLabelForLockState()
 		return;
 	}
 
+	// Only a false->true transition we actually watched happen, never the first poll: a door
+	// that starts unlocked would otherwise announce itself on the level's opening frame.
+	const bool bJustUnlocked = bHasLabelState && bUnlocked && !bLastKnownUnlocked;
+
 	bHasLabelState = true;
 	bLastKnownUnlocked = bUnlocked;
 	bLastKnownOpen = bOpen;
+
+	if (bJustUnlocked && !bHasAnnouncedUnlock && !UnlockedNotificationText.IsEmpty())
+	{
+		bHasAnnouncedUnlock = true;
+		BalhwajeomNotification::Show(this, UnlockedNotificationText);
+	}
 
 	// Only the close-range label changes; the door stays unremarkable from a distance.
 	InspectionComponent->NearLabel = ResolveCurrentLabel();

@@ -83,6 +83,8 @@ public:
 
     virtual void BeginDestroy() override;
 
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
     virtual void TickComponent(
         float DeltaTime,
         ELevelTick TickType,
@@ -205,6 +207,10 @@ protected:
     void ExitCameraMode();
     void SwitchCameraAtFadeOut();
     void FinishCameraTransition();
+    void RestoreExplorationMovementRotation();
+    void UpdateExplorationYawSettle(float DeltaTime);
+    void CancelExplorationYawSettle();
+    bool ResolveExplorationSettleTargetYaw(float& OutYaw) const;
     void ShowPhotoFeedback(const FString& Message, const FColor& Color) const;
     void TriggerPhotoFlash() const;
 	void SetCameraUIHiddenForScreenshot(bool bHidden) const;
@@ -401,6 +407,25 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera", meta = (ClampMin = "0.1"))
     float CameraTransitionDuration = 0.5f;
 
+    /**
+     * Carries the yaw the player looked around by in camera mode back into exploration,
+     * minus the alignment entry applied. Without it the walk direction changes at the
+     * same instant the character is handed back to orient-to-movement, so a player who
+     * lowers the camera while holding W is spun toward a direction they never chose.
+     * Turning this off restores the previous behaviour: the pre-entry yaw comes back and
+     * the settle below absorbs the resulting turn.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Exit")
+    bool bCarryCameraLookYawToExploration = true;
+
+    /**
+     * Shapes the exit yaw settle. Below 1 front-loads it into the darkest part of the
+     * fade-in, where a turn is hardest to notice; 1.0 is constant speed.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Exit",
+        meta = (ClampMin = "0.1", ClampMax = "1.0"))
+    float ExplorationYawSettleEaseExponent = 0.6f;
+
     /** Retained so existing assets deserialize cleanly; the first-person camera is no longer translated on entry. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Legacy",
         meta = (ClampMin = "0.0", Units = "cm", DeprecatedProperty,
@@ -462,6 +487,17 @@ protected:
     bool bSavedOrientRotationToMovement = true;
     bool bSavedUseControllerDesiredRotation = false;
     bool bHasSavedFirstPersonMovementMode = false;
+
+    /** Yaw the entry's center-target alignment added, so the exit can subtract exactly it. */
+    float EntryAlignmentYawDelta = 0.0f;
+
+    /**
+     * True between ExitCameraMode() and FinishCameraTransition(). For that span neither
+     * controller yaw nor orient-to-movement owns the character's facing, so the settle
+     * drives it directly and lands on the angle the movement component will take over at.
+     */
+    bool bIsSettlingExplorationYaw = false;
+    float ExplorationYawSettleRemaining = 0.0f;
 
     FPostProcessSettings SavedPhotoPostProcessSettings;
     float SavedPostProcessBlendWeight = 1.0f;

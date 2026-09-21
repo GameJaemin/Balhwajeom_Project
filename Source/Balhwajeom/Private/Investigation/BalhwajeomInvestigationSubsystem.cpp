@@ -893,6 +893,28 @@ bool UBalhwajeomInvestigationSubsystem::GetWordDefinition(
 	return true;
 }
 
+void UBalhwajeomInvestigationSubsystem::GetAllPhotoDefinitions(
+	TArray<FPhotoDefinition>& OutDefinitions) const
+{
+	OutDefinitions.Reset();
+	if (!IsValid(PhotosTable) || PhotosTable->GetRowStruct() != FPhotoDefinition::StaticStruct())
+	{
+		return;
+	}
+
+	const FString Context(TEXT("GetAllPhotoDefinitions"));
+	TArray<FName> OrderedRowNames = PhotosTable->GetRowNames();
+	OrderedRowNames.Sort(FNameLexicalLess());
+	for (const FName RowName : OrderedRowNames)
+	{
+		if (const FPhotoDefinition* Definition =
+			PhotosTable->FindRow<FPhotoDefinition>(RowName, Context, false))
+		{
+			OutDefinitions.Add(*Definition);
+		}
+	}
+}
+
 void UBalhwajeomInvestigationSubsystem::GetAllWordDefinitions(
 	TArray<FWordDefinition>& OutDefinitions) const
 {

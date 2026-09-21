@@ -75,6 +75,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
 	void GetAllWordDefinitions(TArray<FWordDefinition>& OutDefinitions) const;
 
+	/** Every DT_Photos row, ordered by row name. Lets progress be measured against the whole table. */
+	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
+	void GetAllPhotoDefinitions(TArray<FPhotoDefinition>& OutDefinitions) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Investigation|Definitions")
 	bool GetSentenceDefinition(FName SentenceID, FSentenceDefinition& OutDefinition) const;
 
